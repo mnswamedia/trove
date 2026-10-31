@@ -26,7 +26,7 @@ def check_proxy_health(proxy_url, timeout=3):
                 "-x", proxy_url,
                 "--connect-timeout", str(timeout),
                 "--max-time", str(timeout + 2),
-                "https://www.google.com/generate_204"
+                "http://api.iplocate.io/ip"
             ],
             capture_output=True,
             text=True,
@@ -56,7 +56,11 @@ def get_live_proxies(max_needed=5):
                 lines = [line.decode("utf-8", errors="ignore").strip() for line in r if line.strip()]
                 for line in lines:
                     if ":" in line and not line.startswith("#"):
-                        candidates.append(f"{proto}://{line}")
+                        # If line already contains protocol prefix (e.g. 'http://...', 'socks5://...'), use as-is
+                        if "://" in line:
+                            candidates.append(line)
+                        else:
+                            candidates.append(f"{proto}://{line}")
         except Exception as e:
             print(f"    Notice: could not load {proto} list: {e}")
 
@@ -64,20 +68,18 @@ def get_live_proxies(max_needed=5):
         print("    No proxies retrieved from Proxifly.")
         return []
 
-    # Deduplicate and randomly sample a test pool of 35 proxies
+    # Deduplicate and randomly sample a test pool of 60 candidate proxies
     candidates = list(dict.fromkeys(candidates))
     random.shuffle(candidates)
-    test_pool = candidates[:35]
-    print(f"    Testing pool of {len(test_pool)} candidate proxies for speed and reachability...")
+    test_pool = candidates[:60]
+    print(f"    Testing pool of {len(test_pool)} candidate proxies in parallel (total pool: {len(candidates)})...")
 
     live_proxies = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {executor.submit(check_proxy_health, p): p for p in test_pool}
-        for future in concurrent.futures.as_completed(futures):
-            res = future.result()
-            if res:
-                live_proxies.append(res)
-                print(f"    ✓ Verified live proxy: {res}")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=25) as executor:
+        for p in executor.map(check_proxy_health, test_pool):
+            if p:
+                live_proxies.append(p)
+                print(f"    ✓ Verified live proxy: {p}")
                 if len(live_proxies) >= max_needed:
                     break
 

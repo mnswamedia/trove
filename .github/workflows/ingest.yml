@@ -48,7 +48,7 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg jq curl
           python -m pip install --upgrade pip
-          pip install yt-dlp "huggingface_hub[cli]>=0.22.0" requests PySocks
+          pip install yt-dlp "huggingface_hub[cli]>=0.22.0" requests PySocks bgutil-ytdlp-pot-provider
 
       - name: Run Ingest Script
         env:
