@@ -8,6 +8,7 @@ and uploads directly to Hugging Face Storage Bucket.
 import os
 import sys
 import re
+import time
 import json
 import shutil
 import random
@@ -51,7 +52,6 @@ def get_live_proxies(max_needed=5):
     sources = [
         ("socks5", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt"),
         ("https", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/https/data.txt"),
-        ("socks4", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks4/data.txt"),
     ]
 
     candidates = []
@@ -154,7 +154,6 @@ def main():
 
     # Use dedicated working directory
     workdir = tempfile.mkdtemp(prefix="trove_ingest_")
-    cookies_dir = None
     metadata_dir = os.path.join(workdir, "metadata")
     os.makedirs(metadata_dir, exist_ok=True)
     archive_file = os.path.join(workdir, "all_songs.txt")
@@ -211,30 +210,6 @@ def main():
         out_template = os.path.join(workdir, "%(title)s.%(ext)s")
         meta_template = os.path.join(metadata_dir, "%(title)s.json")
 
-        # Check for cookies (stored in separate auth directory, never in workdir or bucket)
-        raw_cookies = os.environ.get("YOUTUBE_COOKIES", "").strip()
-        cookies_file = None
-        if raw_cookies:
-            cookies_dir = tempfile.mkdtemp(prefix="trove_auth_")
-            cookies_file = os.path.join(cookies_dir, "cookies.txt")
-            with open(cookies_file, "w", encoding="utf-8") as cf:
-                cf.write(raw_cookies)
-            cookie_lines = [l for l in raw_cookies.splitlines() if l.strip() and not l.startswith("#")]
-            domains = set()
-            for l in cookie_lines:
-                parts = l.split()
-                if parts:
-                    domains.add(parts[0])
-            print(f"    ✓ Loaded authenticated session from YOUTUBE_COOKIES secret:")
-            print(f"      - File size: {len(raw_cookies)} bytes")
-            print(f"      - Active cookie entries: {len(cookie_lines)}")
-            print(f"      - Target domains: {', '.join(sorted(list(domains))[:4])}")
-        elif os.path.exists("cookies.txt"):
-            cookies_file = os.path.abspath("cookies.txt")
-            print(f"    ✓ Loaded cookies from local cookies.txt file ({os.path.getsize(cookies_file)} bytes).")
-        else:
-            print("    ℹ No YOUTUBE_COOKIES secret or local cookies.txt found. Running unauthenticated.")
-
         base_cmd = [
             "yt-dlp",
             "--verbose",
@@ -246,18 +221,15 @@ def main():
             "%(.{title,artist,creator,channel,uploader,album,album_artist,release_date,upload_date,duration,track,track_number,genre,description,thumbnail,id,webpage_url,tags,filesize})j",
             meta_template,
             "-o", out_template,
-            "--sleep-requests", "1",
-            "--sleep-interval", "2",
-            "--max-sleep-interval", "5",
+            "--remote-components", "ejs:github",
+            # Fail fast: no repeated retries on a single failing connection (1/1 attempt)
+            "--retries", "0",
+            "--extractor-retries", "0",
+            "--fragment-retries", "0",
+            "--file-access-retries", "0",
             "--print", "before_dl:[%(epoch>%Y-%m-%d %H:%M:%S)s] Downloading: %(title)s.%(ext)s",
             "--print", "after_move:[%(epoch>%Y-%m-%d %H:%M:%S)s] Success: %(title)s.%(ext)s"
         ]
-
-        if cookies_file:
-            print(f"    ✓ yt-dlp flag attached: --cookies {cookies_file}")
-            base_cmd.extend(["--cookies", cookies_file])
-        else:
-            print("    ℹ Proceeding without --cookies flag.")
 
         if media_format == "mp4":
             base_cmd.extend(["-f", "bestvideo+bestaudio/best", "--merge-output-format", "mp4"])
@@ -265,38 +237,59 @@ def main():
             # ba/b ensures resilient fallback to standard stream if pure audio-only DASH is unavailable
             base_cmd.extend(["-f", "ba/b", "-x", "--audio-format", "m4a"])
 
-        download_success = False
+        total_targets = len(targets)
+        live_proxies = None  # Lazily fetch only if a target fails direct download
+        successful_targets = 0
 
-        # 1. Attempt Direct Download first (Fastest; leverages authenticated cookies + Deno)
-        print("\n--> [Attempt 1] Direct Download (Fastest, High-Speed Connection)...")
-        direct_cmd = list(base_cmd)
-        direct_cmd.extend(targets)
-        proc = subprocess.run(direct_cmd, text=True)
+        for target_idx, target in enumerate(targets, 1):
+            # No wait on the first song; sleep 10s only between subsequent songs in a batch
+            if target_idx > 1:
+                print(f"\n--> Pausing 10s before next item ({target_idx}/{total_targets})...")
+                time.sleep(10)
 
-        if proc.returncode == 0:
-            print("    ✓ Direct download succeeded!")
-            download_success = True
-        else:
-            print(f"    Note: Direct download completed with exit code {proc.returncode}.")
-            print("    Switching to rotating verified proxies from Proxifly...")
+            print(f"\n==================================================")
+            print(f" Ingesting Song [{target_idx}/{total_targets}]: {target}")
+            print(f"==================================================")
 
-            # 2. Proxy Fallback (Engages only if direct download fails or gets challenged)
-            live_proxies = get_live_proxies(max_needed=5)
-            if live_proxies:
-                for attempt_idx, proxy in enumerate(live_proxies, 1):
-                    print(f"\n--> [Proxy Download Attempt {attempt_idx}/{len(live_proxies)}] Testing with: {proxy}...")
-                    proxy_cmd = list(base_cmd)
-                    # Short timeout & 1 retry so dead/slow proxies fail fast without freezing the runner
-                    proxy_cmd.extend(["--socket-timeout", "8", "--retries", "1", "--proxy", proxy])
-                    proxy_cmd.extend(targets)
+            target_success = False
 
-                    proc_proxy = subprocess.run(proxy_cmd, text=True)
-                    if proc_proxy.returncode == 0:
-                        print(f"    ✓ Download succeeded using proxy: {proxy}!")
-                        download_success = True
-                        break
-                    else:
-                        print(f"    ✗ Proxy {proxy} exited with code {proc_proxy.returncode}. Trying next proxy...")
+            # 1. Attempt Direct Download first (Fastest; leverages Deno)
+            print(f"--> [Attempt 1] Direct Download (Fastest, High-Speed Connection)...")
+            direct_cmd = list(base_cmd)
+            direct_cmd.extend(["--socket-timeout", "10", target])
+            proc = subprocess.run(direct_cmd, text=True)
+
+            if proc.returncode == 0:
+                print(f"    ✓ Direct download succeeded for {target}!")
+                target_success = True
+            else:
+                print(f"    Note: Direct download completed with exit code {proc.returncode}.")
+                print("    Switching to rotating verified proxies from Proxifly...")
+
+                # 2. Proxy Fallback (Lazily fetched once)
+                if live_proxies is None:
+                    live_proxies = get_live_proxies(max_needed=5)
+
+                if live_proxies:
+                    for attempt_idx, proxy in enumerate(live_proxies, 1):
+                        print(f"\n--> [Proxy Attempt {attempt_idx}/{len(live_proxies)}] Testing with: {proxy}...")
+                        proxy_cmd = list(base_cmd)
+                        # Short timeout & 0 retries so dead/slow proxies fail immediately (1/1)
+                        proxy_cmd.extend(["--socket-timeout", "7", "--proxy", proxy, target])
+
+                        proc_proxy = subprocess.run(proxy_cmd, text=True)
+                        if proc_proxy.returncode == 0:
+                            print(f"    ✓ Download succeeded using proxy: {proxy}!")
+                            target_success = True
+                            break
+                        else:
+                            print(f"    ✗ Proxy {proxy} exited with code {proc_proxy.returncode}. Moving to next proxy...")
+
+                if not target_success:
+                    print(f"    ✗ All download attempts failed for {target}.")
+
+            if target_success:
+                successful_targets += 1
 
         # 3. Format metadata JSON files (indent=2)
         print("\n--> Formatting extracted metadata JSON files...")
@@ -386,8 +379,6 @@ def main():
 
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
-        if cookies_dir:
-            shutil.rmtree(cookies_dir, ignore_errors=True)
 
 if __name__ == "__main__":
     main()
