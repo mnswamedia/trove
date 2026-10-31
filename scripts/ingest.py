@@ -153,10 +153,10 @@ def main():
         cmd = [
             "yt-dlp",
             "--verbose",
+            "--force-ipv4",
             "--download-archive", archive_file,
             "--embed-thumbnail",
             "--add-metadata",
-            "--extractor-args", "youtube:player_client=ios,tv,web",
             "--print-to-file",
             "%(.{title,artist,creator,channel,uploader,album,album_artist,release_date,upload_date,duration,track,track_number,genre,description,thumbnail,id,webpage_url,tags,filesize})j",
             meta_template,
@@ -168,13 +168,18 @@ def main():
             "--print", "after_move:[%(epoch>%Y-%m-%d %H:%M:%S)s] Success: %(title)s.%(ext)s"
         ]
 
+        # Enable Node.js for solving YouTube JS challenge if available
+        if shutil.which("node"):
+            cmd.extend(["--js-runtimes", "node"])
+            print("    ✓ Active JS Challenge Solver: Node.js")
+
         if cookies_file:
             print(f"    ✓ yt-dlp flag attached: --cookies {cookies_file}")
             cmd.extend(["--cookies", cookies_file])
         else:
             print("    ℹ Proceeding without --cookies flag.")
 
-        print("    ✓ yt-dlp player client emulation active: ios,tv,web")
+        print("    ✓ Standard web player client with authenticated cookies active.")
 
         if media_format == "mp4":
             cmd.extend(["-f", "bestvideo+bestaudio/best", "--merge-output-format", "mp4"])
