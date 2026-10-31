@@ -69,6 +69,7 @@ def main():
 
     # Use dedicated working directory
     workdir = tempfile.mkdtemp(prefix="trove_ingest_")
+    cookies_dir = None
     metadata_dir = os.path.join(workdir, "metadata")
     os.makedirs(metadata_dir, exist_ok=True)
     archive_file = os.path.join(workdir, "all_songs.txt")
@@ -125,11 +126,12 @@ def main():
         out_template = os.path.join(workdir, "%(title)s.%(ext)s")
         meta_template = os.path.join(metadata_dir, "%(title)s.json")
 
-        # Check for cookies (from YOUTUBE_COOKIES secret or local cookies.txt file)
+        # Check for cookies (stored in separate auth directory, never in workdir or bucket)
         raw_cookies = os.environ.get("YOUTUBE_COOKIES", "").strip()
         cookies_file = None
         if raw_cookies:
-            cookies_file = os.path.join(workdir, "cookies.txt")
+            cookies_dir = tempfile.mkdtemp(prefix="trove_auth_")
+            cookies_file = os.path.join(cookies_dir, "cookies.txt")
             with open(cookies_file, "w", encoding="utf-8") as cf:
                 cf.write(raw_cookies)
             print("    ✓ Loaded authenticated session from YOUTUBE_COOKIES secret.")
@@ -181,10 +183,14 @@ def main():
                 print(f"    Warning formatting {jf.name}: {e}")
         print(f"    Formatted {len(json_files)} metadata files.")
 
-        # 4. Identify downloaded files
+        # 4. Identify downloaded media files (STRICTLY audio/video extensions only)
+        MEDIA_EXTENSIONS = {
+            "m4a", "mp3", "flac", "wav", "aac", "ogg", "opus", "wma", "alac", "aiff",
+            "mp4", "mkv", "webm", "avi", "mov", "flv", "wmv", "m4v", "ts"
+        }
         media_files = [
             p for p in Path(workdir).iterdir()
-            if p.is_file() and p.name != "all_songs.txt" and not p.name.endswith(".json")
+            if p.is_file() and p.suffix.lstrip(".").lower() in MEDIA_EXTENSIONS
         ]
 
         print(f"\n--> Download Summary:")
@@ -252,6 +258,8 @@ def main():
 
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
+        if cookies_dir:
+            shutil.rmtree(cookies_dir, ignore_errors=True)
 
 if __name__ == "__main__":
     main()
