@@ -289,8 +289,13 @@ def main():
         if media_format == "mp4":
             base_cmd.extend(["-f", "bestvideo+bestaudio/best", "--merge-output-format", "mp4"])
         else:
-            # ba/b ensures resilient fallback to standard stream if pure audio-only DASH is unavailable
-            base_cmd.extend(["-f", "ba/b", "-x", "--audio-format", "m4a"])
+            # Prioritize native AAC audio stream (m4a) directly; fallback to best audio or combined stream with ffmpeg extraction
+            base_cmd.extend(["-f", "ba[ext=m4a]/ba/b", "-x", "--audio-format", "m4a", "--audio-quality", "0"])
+
+        # Explicitly pass ffmpeg directory to yt-dlp if detected
+        ffmpeg_bin = shutil.which("ffmpeg")
+        if ffmpeg_bin:
+            base_cmd.extend(["--ffmpeg-location", os.path.dirname(ffmpeg_bin)])
 
         total_targets = len(targets)
         live_proxies = None  # Lazily fetch only if a target fails direct download
@@ -378,15 +383,24 @@ def main():
                 print(f"    Warning formatting {jf.name}: {e}")
         print(f"    Formatted {len(json_files)} metadata files.")
 
-        # 4. Identify downloaded media files (STRICTLY audio/video extensions only)
-        MEDIA_EXTENSIONS = {
-            "m4a", "mp3", "flac", "wav", "aac", "ogg", "opus", "wma", "alac", "aiff",
-            "mp4", "mkv", "webm", "avi", "mov", "flv", "wmv", "m4v", "ts"
-        }
+        # 4. Identify downloaded media files (STRICTLY enforce requested media format)
+        if media_format == "mp4":
+            allowed_exts = {"mp4", "mkv", "webm", "avi", "mov", "flv", "wmv", "m4v", "ts"}
+        else:
+            allowed_exts = {"m4a", "mp3", "flac", "wav", "aac", "ogg", "opus", "wma", "alac", "aiff"}
+
         media_files = [
             p for p in Path(workdir).iterdir()
-            if p.is_file() and p.suffix.lstrip(".").lower() in MEDIA_EXTENSIONS
+            if p.is_file() and p.suffix.lstrip(".").lower() in allowed_exts
         ]
+
+        if media_format != "mp4":
+            video_remnants = [
+                p for p in Path(workdir).iterdir()
+                if p.is_file() and p.suffix.lstrip(".").lower() in {"mp4", "mkv", "webm", "avi", "mov"}
+            ]
+            if video_remnants:
+                print(f"    Notice: Ignored {len(video_remnants)} unconverted video file(s) since audio ({media_format}) was requested: {[p.name for p in video_remnants]}")
 
         print(f"\n--> Download Summary:")
         print(f"    New media files downloaded: {len(media_files)}")

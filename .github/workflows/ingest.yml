@@ -44,38 +44,38 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Install dependencies
+      - name: Set up WARP & Environment
         run: |
-          pip install --no-cache-dir yt-dlp "huggingface_hub>=0.22.0" requests PySocks mutagen
+          # 1. Parallel background pip install while system packages configure
+          pip install --no-cache-dir yt-dlp "huggingface_hub>=0.22.0" requests PySocks mutagen &
+          PIP_PID=$!
 
-      - name: Set up Cloudflare WARP (High-Speed SOCKS5 Tunnel)
-        run: |
-          echo "--> Installing Cloudflare WARP client..."
+          # 2. Add Cloudflare WARP repository (fast)
           SUITE=$(lsb_release -cs 2>/dev/null || echo "noble")
-          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $SUITE main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
-          
-          # Fast update of only Cloudflare repo
-          sudo apt-get update -o Dir::Etc::sourcelist="sources.list.d/cloudflare-client.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0" || {
-            echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ jammy main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
-            sudo apt-get update -o Dir::Etc::sourcelist="sources.list.d/cloudflare-client.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"
-          }
-          sudo apt-get install -y --no-install-recommends cloudflare-warp
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-warp.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp.gpg] https://pkg.cloudflareclient.com/ $SUITE main" | sudo tee /etc/apt/sources.list.d/cloudflare-warp.list > /dev/null
 
-          # Start daemon
+          # 3. Fast update of only Cloudflare repo index & install ffmpeg + cloudflare-warp in single transaction
+          sudo apt-get update -qq -o Dir::Etc::sourcelist="sources.list.d/cloudflare-warp.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0" 2>/dev/null || true
+          sudo apt-get install -qq -y --no-install-recommends ffmpeg cloudflare-warp || (sudo apt-get update -qq && sudo apt-get install -qq -y --no-install-recommends ffmpeg cloudflare-warp)
+
+          # 4. Start daemon & wait for socket (sub-second)
           sudo systemctl start warp-svc 2>/dev/null || sudo warp-svc &
-          sleep 2
+          for i in {1..30}; do [ -S /run/cloudflare-warp/warp_service ] && break || sleep 0.1; done
 
-          # Configure local SOCKS5 proxy on port 40000
+          # 5. Fast configure SOCKS5 proxy on port 40000
           warp-cli --accept-tos registration new 2>/dev/null || warp-cli --accept-tos register 2>/dev/null || true
           warp-cli --accept-tos mode proxy 2>/dev/null || warp-cli --accept-tos set-mode proxy 2>/dev/null || true
           warp-cli --accept-tos proxy port 40000 2>/dev/null || warp-cli --accept-tos set-proxy-port 40000 2>/dev/null || true
           warp-cli --accept-tos connect 2>/dev/null || true
-          sleep 3
 
-          # Export proxy env var for runner script
+          # 6. Wait for SOCKS5 port to open (sub-second)
+          for i in {1..30}; do nc -z 127.0.0.1 40000 && break || sleep 0.1; done
+
           echo "WARP_PROXY=socks5://127.0.0.1:40000" >> $GITHUB_ENV
-          curl -s --socks5 127.0.0.1:40000 https://cloudflare.com/cdn-cgi/trace | head -n 6 || echo "WARP starting up..."
+
+          # 7. Synchronize background pip installation
+          wait $PIP_PID
 
       - name: Run Ingest Script
         env:
