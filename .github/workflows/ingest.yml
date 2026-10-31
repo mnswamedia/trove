@@ -44,31 +44,42 @@ jobs:
         with:
           deno-version: v2.x
 
+      - name: Cache APT archives
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-apt-warp-ffmpeg
+          restore-keys: |
+            ${{ runner.os }}-apt-warp-
+
+      - name: Cache Pip wheels
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-ingest
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Set up WARP & Environment
         run: |
-          # 1. Parallel background pip install (lightweight packages only, no heavy SDKs)
-          pip install --no-cache-dir yt-dlp requests PySocks mutagen &
+          # 1. Parallel background pip install (uses ~/.cache/pip)
+          pip install yt-dlp requests PySocks mutagen &
           PIP_PID=$!
 
-          # 2. Fast install ffmpeg (pure CLI, zero desktop/WebKit bloat)
-          sudo apt-get install -qq -y --no-install-recommends ffmpeg
-
-          # 3. Add official Cloudflare repository and fetch official package
-          echo "--> Fetching official Cloudflare WARP package..."
+          # 2. Add official Cloudflare repository
+          echo "--> Setting up official Cloudflare WARP repository..."
           SUITE=$(lsb_release -cs 2>/dev/null || echo "noble")
           curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-warp.gpg
           echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp.gpg] https://pkg.cloudflareclient.com/ $SUITE main" | sudo tee /etc/apt/sources.list.d/cloudflare-warp.list > /dev/null
 
           sudo apt-get update -qq -o Dir::Etc::sourcelist="sources.list.d/cloudflare-warp.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0" 2>/dev/null || true
 
-          # Extract official Cloudflare CLI daemon directly (bypassing 100MB of desktop WebKit GUI bloat)
-          mkdir -p /tmp/warp-pkg && cd /tmp/warp-pkg
-          apt-get download -qq cloudflare-warp
-          sudo dpkg-deb -x cloudflare-warp*.deb /
-          cd - > /dev/null
+          # 3. Fast install ffmpeg & cloudflare-warp (uses /var/cache/apt/archives cache)
+          export DEBIAN_FRONTEND=noninteractive
+          export NEEDRESTART_MODE=a
+          sudo -E apt-get install -qq -y --no-install-recommends ffmpeg cloudflare-warp
 
-          # 4. Initialize daemon directories and start official warp-svc
-          sudo mkdir -p /var/lib/cloudflare-warp /run/cloudflare-warp
+          # 4. Start official warp-svc daemon
           sudo systemctl start warp-svc 2>/dev/null || sudo warp-svc &
           for i in {1..30}; do [ -S /run/cloudflare-warp/warp_service ] && break || sleep 0.1; done
 
@@ -78,8 +89,10 @@ jobs:
           warp-cli --accept-tos proxy port 40000 2>/dev/null || warp-cli --accept-tos set-proxy-port 40000 2>/dev/null || true
           warp-cli --accept-tos connect 2>/dev/null || true
 
-          # 6. Wait for SOCKS5 port to open (sub-second)
-          for i in {1..30}; do nc -z 127.0.0.1 40000 && break || sleep 0.1; done
+          # 6. Wait for SOCKS5 port to open (pure bash /dev/tcp, no nc dependency)
+          for i in {1..40}; do
+            timeout 0.2 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/40000' 2>/dev/null && break || sleep 0.1
+          done
 
           echo "WARP_PROXY=socks5://127.0.0.1:40000" >> $GITHUB_ENV
 
