@@ -220,28 +220,41 @@ def main():
     env = {**os.environ, "HF_TOKEN": token}
 
     try:
-        # 1. Fetch existing ledger (all_songs.txt) from Hugging Face
-        print("\n--> Syncing all_songs.txt ledger from Hugging Face...")
+        # 1. Fetch existing ledger (all_songs.txt) from HF Storage Bucket
+        print("\n--> Syncing all_songs.txt ledger from bucket...")
         ledger_loaded = False
-        ledger_urls = [
-            f"https://huggingface.co/datasets/{bucket_id}/raw/main/all_songs.txt",
-            f"https://huggingface.co/datasets/{bucket_id}/resolve/main/all_songs.txt",
-            f"https://huggingface.co/api/buckets/{bucket_id}/raw/all_songs.txt",
-            f"https://huggingface.co/buckets/{bucket_id}/resolve/all_songs.txt"
-        ]
-        for url in ledger_urls:
-            try:
-                req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-                with urllib.request.urlopen(req, timeout=10) as response:
-                    if response.status == 200:
-                        content = response.read().decode('utf-8', errors='ignore')
-                        with open(archive_file, "w", encoding="utf-8") as f:
-                            f.write(content)
-                        print(f"    ✓ Loaded existing all_songs.txt from {url}")
-                        ledger_loaded = True
-                        break
-            except Exception:
-                pass
+        try:
+            res_cp = subprocess.run(
+                ["hf", "buckets", "cp", f"hf://buckets/{bucket_id}/all_songs.txt", archive_file],
+                env=env,
+                capture_output=True,
+                text=True
+            )
+            if res_cp.returncode == 0 and os.path.exists(archive_file) and os.path.getsize(archive_file) > 0:
+                print("    Loaded existing all_songs.txt via hf buckets cp.")
+                ledger_loaded = True
+        except Exception as e:
+            print(f"    CLI note: {e}")
+
+        if not ledger_loaded:
+            for url in [
+                f"https://huggingface.co/api/buckets/{bucket_id}/raw/all_songs.txt",
+                f"https://huggingface.co/buckets/{bucket_id}/resolve/all_songs.txt",
+                f"https://huggingface.co/datasets/{bucket_id}/raw/main/all_songs.txt",
+                f"https://huggingface.co/datasets/{bucket_id}/resolve/main/all_songs.txt"
+            ]:
+                try:
+                    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        if response.status == 200:
+                            content = response.read().decode('utf-8', errors='ignore')
+                            with open(archive_file, "w", encoding="utf-8") as f:
+                                f.write(content)
+                            print(f"    Loaded existing all_songs.txt from {url}")
+                            ledger_loaded = True
+                            break
+                except Exception:
+                    pass
 
         if not ledger_loaded:
             Path(archive_file).touch()
@@ -401,8 +414,8 @@ def main():
             print("\nNotice: No new media files were downloaded (items may already exist in all_songs.txt).")
             return
 
-        # 5. Upload files to Hugging Face Dataset Repository (Lightweight Commit API)
-        print(f"\n--> Uploading to Hugging Face Dataset: {bucket_id}...")
+        # 5. Upload files to Hugging Face Storage Bucket
+        print(f"\n--> Uploading to Hugging Face Storage Bucket: {bucket_id}...")
         files_to_upload = []
         for mf in media_files:
             files_to_upload.append((str(mf), mf.name))
@@ -412,39 +425,40 @@ def main():
             files_to_upload.append((archive_file, "all_songs.txt"))
 
         uploaded_count = 0
-        import base64
-        import requests
-
-        commit_url = f"https://huggingface.co/api/datasets/{bucket_id}/commit/main"
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
-        }
-
         for local_path, remote_path in files_to_upload:
             uploaded = False
+            # 1. Official CLI: hf buckets cp (High-Speed Xet S3 Storage)
             try:
-                with open(local_path, "rb") as f:
-                    content_b64 = base64.b64encode(f.read()).decode("utf-8")
-
-                payload = {
-                    "commit_message": f"Upload {remote_path} via Trove",
-                    "operations": [
-                        {
-                            "operation": "add",
-                            "path": remote_path,
-                            "content": content_b64
-                        }
-                    ]
-                }
-                res = requests.post(commit_url, json=payload, headers=headers, timeout=60)
-                if res.status_code in (200, 201):
+                cp_res = subprocess.run(
+                    ["hf", "buckets", "cp", local_path, f"hf://buckets/{bucket_id}/{remote_path}"],
+                    env=env,
+                    capture_output=True,
+                    text=True
+                )
+                if cp_res.returncode == 0:
                     uploaded = True
-                    print(f"    ✓ Uploaded {remote_path} via HF Commit API")
+                    print(f"    ✓ Uploaded {remote_path} via hf buckets cp")
                 else:
-                    print(f"    ✗ HF API error ({res.status_code}) for {remote_path}: {res.text[:200]}")
+                    err_msg = cp_res.stderr.strip() or cp_res.stdout.strip()
+                    print(f"    hf buckets cp notice ({remote_path}): {err_msg[:120]}")
             except Exception as e:
-                print(f"    ✗ HF API exception for {remote_path}: {e}")
+                print(f"    hf buckets cp error: {e}")
+
+            # 2. Fallback: HfApi upload_file
+            if not uploaded:
+                try:
+                    from huggingface_hub import HfApi
+                    api = HfApi(token=token)
+                    api.upload_file(
+                        path_or_fileobj=local_path,
+                        path_in_repo=remote_path,
+                        repo_id=bucket_id,
+                        repo_type="dataset"
+                    )
+                    uploaded = True
+                    print(f"    ✓ Uploaded {remote_path} via HfApi upload")
+                except Exception as api_err:
+                    print(f"    ✗ Failed to upload {remote_path}: {api_err}")
 
             if uploaded:
                 uploaded_count += 1

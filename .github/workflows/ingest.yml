@@ -63,7 +63,7 @@ jobs:
       - name: Set up WARP & Environment
         run: |
           # 1. Parallel background pip install (uses ~/.cache/pip)
-          pip install yt-dlp requests PySocks mutagen &
+          pip install yt-dlp "huggingface_hub>=0.22.0" requests PySocks mutagen &
           PIP_PID=$!
 
           # 2. Add official Cloudflare repository
