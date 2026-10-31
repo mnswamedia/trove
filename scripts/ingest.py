@@ -125,6 +125,18 @@ def main():
         out_template = os.path.join(workdir, "%(title)s.%(ext)s")
         meta_template = os.path.join(metadata_dir, "%(title)s.json")
 
+        # Check for cookies (from YOUTUBE_COOKIES secret or local cookies.txt file)
+        raw_cookies = os.environ.get("YOUTUBE_COOKIES", "").strip()
+        cookies_file = None
+        if raw_cookies:
+            cookies_file = os.path.join(workdir, "cookies.txt")
+            with open(cookies_file, "w", encoding="utf-8") as cf:
+                cf.write(raw_cookies)
+            print("    ✓ Loaded authenticated session from YOUTUBE_COOKIES secret.")
+        elif os.path.exists("cookies.txt"):
+            cookies_file = os.path.abspath("cookies.txt")
+            print("    ✓ Loaded cookies from local cookies.txt file.")
+
         cmd = [
             "yt-dlp",
             "--download-archive", archive_file,
@@ -141,6 +153,9 @@ def main():
             "--print", "before_dl:[%(epoch>%Y-%m-%d %H:%M:%S)s] Downloading: %(title)s.%(ext)s",
             "--print", "after_move:[%(epoch>%Y-%m-%d %H:%M:%S)s] Success: %(title)s.%(ext)s"
         ]
+
+        if cookies_file:
+            cmd.extend(["--cookies", cookies_file])
 
         if media_format == "mp4":
             cmd.extend(["-f", "bestvideo+bestaudio/best", "--merge-output-format", "mp4"])

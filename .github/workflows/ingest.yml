@@ -51,6 +51,7 @@ jobs:
           MEDIA_FORMAT: ${{ github.event.inputs.format }}
           BUCKET_ID: ${{ github.event.inputs.bucket_id != '' && github.event.inputs.bucket_id || 'mnswa/trove_dataset' }}
           HF_TOKEN: ${{ github.event.inputs.hf_token != '' && github.event.inputs.hf_token || secrets.HF_TOKEN }}
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: |
           python3 scripts/ingest.py
 
