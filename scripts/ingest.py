@@ -10,10 +10,79 @@ import sys
 import re
 import json
 import shutil
+import random
 import tempfile
 import subprocess
+import concurrent.futures
 from pathlib import Path
 import urllib.request
+
+def check_proxy_health(proxy_url, timeout=3):
+    """Test if a proxy can connect to Google/YouTube in under 3 seconds."""
+    try:
+        res = subprocess.run(
+            [
+                "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
+                "-x", proxy_url,
+                "--connect-timeout", str(timeout),
+                "--max-time", str(timeout + 2),
+                "https://www.google.com/generate_204"
+            ],
+            capture_output=True,
+            text=True,
+            timeout=timeout + 3
+        )
+        code = res.stdout.strip()
+        if code in ("200", "204", "301", "302"):
+            return proxy_url
+    except Exception:
+        pass
+    return None
+
+def get_live_proxies(max_needed=5):
+    """Fetch 5-minute fresh proxies from Proxifly and verify live ones."""
+    print("\n--> Fetching fresh proxies from Proxifly (updated every 5 mins)...")
+    sources = [
+        ("socks5", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt"),
+        ("https", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/https/data.txt"),
+        ("http", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/http/data.txt"),
+    ]
+
+    candidates = []
+    for proto, url in sources:
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=8) as r:
+                lines = [line.decode("utf-8", errors="ignore").strip() for line in r if line.strip()]
+                for line in lines:
+                    if ":" in line and not line.startswith("#"):
+                        candidates.append(f"{proto}://{line}")
+        except Exception as e:
+            print(f"    Notice: could not load {proto} list: {e}")
+
+    if not candidates:
+        print("    No proxies retrieved from Proxifly.")
+        return []
+
+    # Deduplicate and randomly sample a test pool of 35 proxies
+    candidates = list(dict.fromkeys(candidates))
+    random.shuffle(candidates)
+    test_pool = candidates[:35]
+    print(f"    Testing pool of {len(test_pool)} candidate proxies for speed and reachability...")
+
+    live_proxies = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {executor.submit(check_proxy_health, p): p for p in test_pool}
+        for future in concurrent.futures.as_completed(futures):
+            res = future.result()
+            if res:
+                live_proxies.append(res)
+                print(f"    ✓ Verified live proxy: {res}")
+                if len(live_proxies) >= max_needed:
+                    break
+
+    print(f"    Selected {len(live_proxies)} active proxy/proxies for download.")
+    return live_proxies
 
 def parse_targets(raw_text: str):
     targets = []
@@ -150,7 +219,7 @@ def main():
         else:
             print("    ℹ No YOUTUBE_COOKIES secret or local cookies.txt found. Running unauthenticated.")
 
-        cmd = [
+        base_cmd = [
             "yt-dlp",
             "--verbose",
             "--force-ipv4",
@@ -170,27 +239,49 @@ def main():
 
         # Enable Node.js for solving YouTube JS challenge if available
         if shutil.which("node"):
-            cmd.extend(["--js-runtimes", "node"])
+            base_cmd.extend(["--js-runtimes", "node"])
             print("    ✓ Active JS Challenge Solver: Node.js")
 
         if cookies_file:
             print(f"    ✓ yt-dlp flag attached: --cookies {cookies_file}")
-            cmd.extend(["--cookies", cookies_file])
+            base_cmd.extend(["--cookies", cookies_file])
         else:
             print("    ℹ Proceeding without --cookies flag.")
 
-        print("    ✓ Standard web player client with authenticated cookies active.")
-
         if media_format == "mp4":
-            cmd.extend(["-f", "bestvideo+bestaudio/best", "--merge-output-format", "mp4"])
+            base_cmd.extend(["-f", "bestvideo+bestaudio/best", "--merge-output-format", "mp4"])
         else:
-            cmd.extend(["-f", "bestaudio", "-x", "--audio-format", "m4a"])
+            base_cmd.extend(["-f", "bestaudio", "-x", "--audio-format", "m4a"])
 
-        cmd.extend(targets)
+        # Fetch and verify live Proxifly proxies
+        live_proxies = get_live_proxies(max_needed=5)
+        download_success = False
 
-        proc = subprocess.run(cmd, text=True)
-        if proc.returncode != 0:
-            print(f"Note: yt-dlp completed with exit code {proc.returncode}")
+        if live_proxies:
+            for attempt_idx, proxy in enumerate(live_proxies, 1):
+                print(f"\n--> [Proxy Download Attempt {attempt_idx}/{len(live_proxies)}] Testing with: {proxy}...")
+                current_cmd = list(base_cmd)
+                current_cmd.extend(["--proxy", proxy])
+                current_cmd.extend(targets)
+
+                proc = subprocess.run(current_cmd, text=True)
+                if proc.returncode == 0:
+                    print(f"    ✓ Download succeeded using proxy: {proxy}!")
+                    download_success = True
+                    break
+                else:
+                    print(f"    ✗ Proxy {proxy} exited with code {proc.returncode}. Trying next proxy...")
+
+        if not download_success:
+            print("\n--> Fallback: Attempting direct download (no proxy)...")
+            current_cmd = list(base_cmd)
+            current_cmd.extend(targets)
+            proc = subprocess.run(current_cmd, text=True)
+            if proc.returncode == 0:
+                print("    ✓ Direct download succeeded!")
+                download_success = True
+            else:
+                print(f"    Note: Direct download completed with exit code {proc.returncode}")
 
         # 3. Format metadata JSON files (indent=2)
         print("\n--> Formatting extracted metadata JSON files...")
