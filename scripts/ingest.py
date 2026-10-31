@@ -18,7 +18,12 @@ from pathlib import Path
 import urllib.request
 
 def check_proxy_health(proxy_url, timeout=3):
-    """Test if a proxy can connect to Google/YouTube in under 3 seconds."""
+    """
+    Test if a proxy can tunnel HTTPS to YouTube and return HTTP 204.
+    Strictly verifies:
+      1. HTTPS CONNECT tunneling works (prevents 'Tunnel connection failed: 400 Bad Request')
+      2. YouTube accepts the connection without IP blocks/captchas (204 No Content)
+    """
     try:
         res = subprocess.run(
             [
@@ -26,26 +31,27 @@ def check_proxy_health(proxy_url, timeout=3):
                 "-x", proxy_url,
                 "--connect-timeout", str(timeout),
                 "--max-time", str(timeout + 2),
-                "http://api.iplocate.io/ip"
+                "https://www.youtube.com/generate_204"
             ],
             capture_output=True,
             text=True,
-            timeout=timeout + 3
+            timeout=timeout + 4
         )
         code = res.stdout.strip()
-        if code in ("200", "204", "301", "302"):
+        if code == "204":
             return proxy_url
     except Exception:
         pass
     return None
 
 def get_live_proxies(max_needed=5):
-    """Fetch 5-minute fresh proxies from Proxifly and verify live ones."""
+    """Fetch fresh proxies from Proxifly and verify them directly against YouTube HTTPS."""
     print("\n--> Fetching fresh proxies from Proxifly (updated every 5 mins)...")
+    # Only use protocols that support HTTPS CONNECT tunneling / socket forwarding
     sources = [
         ("socks5", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt"),
         ("https", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/https/data.txt"),
-        ("http", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/http/data.txt"),
+        ("socks4", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks4/data.txt"),
     ]
 
     candidates = []
@@ -56,7 +62,6 @@ def get_live_proxies(max_needed=5):
                 lines = [line.decode("utf-8", errors="ignore").strip() for line in r if line.strip()]
                 for line in lines:
                     if ":" in line and not line.startswith("#"):
-                        # If line already contains protocol prefix (e.g. 'http://...', 'socks5://...'), use as-is
                         if "://" in line:
                             candidates.append(line)
                         else:
@@ -68,22 +73,31 @@ def get_live_proxies(max_needed=5):
         print("    No proxies retrieved from Proxifly.")
         return []
 
-    # Deduplicate and randomly sample a test pool of 60 candidate proxies
+    # Deduplicate and randomly sample
     candidates = list(dict.fromkeys(candidates))
     random.shuffle(candidates)
-    test_pool = candidates[:60]
-    print(f"    Testing pool of {len(test_pool)} candidate proxies in parallel (total pool: {len(candidates)})...")
+    pool_size = min(150, len(candidates))
+    test_pool = candidates[:pool_size]
+    print(f"    Testing pool of {len(test_pool)} candidates directly against YouTube HTTPS (total pool: {len(candidates)})...")
 
     live_proxies = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=25) as executor:
-        for p in executor.map(check_proxy_health, test_pool):
-            if p:
-                live_proxies.append(p)
-                print(f"    ✓ Verified live proxy: {p}")
-                if len(live_proxies) >= max_needed:
-                    break
+    with concurrent.futures.ThreadPoolExecutor(max_workers=35) as executor:
+        future_to_proxy = {executor.submit(check_proxy_health, p): p for p in test_pool}
+        for future in concurrent.futures.as_completed(future_to_proxy):
+            try:
+                verified_proxy = future.result()
+                if verified_proxy:
+                    live_proxies.append(verified_proxy)
+                    print(f"    ✓ Verified YouTube HTTPS proxy: {verified_proxy}")
+                    if len(live_proxies) >= max_needed:
+                        # Cancel remaining pending checks once we hit our quota
+                        for f in future_to_proxy:
+                            f.cancel()
+                        break
+            except Exception:
+                pass
 
-    print(f"    Selected {len(live_proxies)} active proxy/proxies for download.")
+    print(f"    Selected {len(live_proxies)} verified proxy/proxies for download.")
     return live_proxies
 
 def parse_targets(raw_text: str):
@@ -137,6 +151,9 @@ def main():
     print(f" Format:     {media_format.upper()}")
     print(f" HF Bucket:  {bucket_id}")
     print(f"==================================================")
+
+    # Ensure localhost requests (e.g. bgutil provider container) bypass proxy
+    os.environ["NO_PROXY"] = "localhost,127.0.0.1"
 
     # Use dedicated working directory
     workdir = tempfile.mkdtemp(prefix="trove_ingest_")
@@ -232,12 +249,25 @@ def main():
             "%(.{title,artist,creator,channel,uploader,album,album_artist,release_date,upload_date,duration,track,track_number,genre,description,thumbnail,id,webpage_url,tags,filesize})j",
             meta_template,
             "-o", out_template,
+            "--socket-timeout", "15",
+            "--retries", "3",
+            "--fragment-retries", "3",
             "--sleep-requests", "1",
             "--sleep-interval", "2",
             "--max-sleep-interval", "5",
             "--print", "before_dl:[%(epoch>%Y-%m-%d %H:%M:%S)s] Downloading: %(title)s.%(ext)s",
             "--print", "after_move:[%(epoch>%Y-%m-%d %H:%M:%S)s] Success: %(title)s.%(ext)s"
         ]
+
+        # Check for local bgutil Proof-of-Origin Token server
+        try:
+            req = urllib.request.Request("http://127.0.0.1:4416/ping")
+            with urllib.request.urlopen(req, timeout=2) as r:
+                if r.status == 200:
+                    base_cmd.extend(["--extractor-args", "youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416"])
+                    print("    ✓ Active PO Token Provider: http://127.0.0.1:4416 (bgutil)")
+        except Exception:
+            pass
 
         # Enable Node.js for solving YouTube JS challenge if available
         if shutil.which("node"):

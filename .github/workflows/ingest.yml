@@ -50,6 +50,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install yt-dlp "huggingface_hub[cli]>=0.22.0" requests PySocks bgutil-ytdlp-pot-provider
 
+      - name: Start bgutil PO Token Provider
+        run: |
+          echo "Starting bgutil Proof-of-Origin Token provider container..."
+          docker run --name bgutil-provider -d --init -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider || true
+          for i in {1..10}; do
+            if curl -s http://127.0.0.1:4416/ping > /dev/null; then
+              echo "✓ bgutil PO Token Provider is active on http://127.0.0.1:4416"
+              break
+            fi
+            sleep 1
+          done
+
       - name: Run Ingest Script
         env:
           TARGETS: ${{ github.event.inputs.targets }}
