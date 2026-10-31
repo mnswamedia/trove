@@ -11,7 +11,7 @@ window.APP_CONFIG = {
     isPrivate: true
   },
   github: {
-    owner: 'mnswa',
+    owner: 'mnswamedia',
     repo: 'trove',
     workflowFile: 'ingest.yml',
     ref: 'main'

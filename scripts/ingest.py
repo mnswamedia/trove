@@ -109,6 +109,26 @@ def parse_targets(raw_text: str):
         if not clean or clean.startswith("#"):
             continue
         if "youtube.com" in clean or "youtu.be" in clean:
+            # Strip query tracking parameters (?si=..., &feature=..., etc.)
+            try:
+                from urllib.parse import urlparse, parse_qs
+                u = urlparse(clean)
+                host = u.netloc.lower().replace("www.", "").replace("m.", "")
+                if host == "youtu.be":
+                    clean = f"https://youtu.be{u.path}"
+                elif "youtube.com" in host:
+                    if u.path.startswith("/shorts/"):
+                        clean = f"https://www.youtube.com{u.path}"
+                    elif u.path == "/watch":
+                        qs = parse_qs(u.query)
+                        if "v" in qs and qs["v"]:
+                            clean = f"https://www.youtube.com/watch?v={qs['v'][0]}"
+                        else:
+                            clean = f"https://www.youtube.com{u.path}"
+                    else:
+                        clean = f"https://www.youtube.com{u.path}"
+            except Exception:
+                pass
             targets.append(clean)
         elif re.match(r"^[a-zA-Z0-9_-]{11}$", clean):
             targets.append(f"https://www.youtube.com/watch?v={clean}")

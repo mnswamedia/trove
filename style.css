@@ -10,3 +10,44 @@ body {
 code, .font-mono {
   font-family: 'JetBrains Mono', monospace;
 }
+
+/* Custom sleek scrollbar for file list */
+#file-list {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(198, 172, 143, 0.5) transparent;
+}
+
+#file-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+#file-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#file-list::-webkit-scrollbar-thumb {
+  background: rgba(198, 172, 143, 0.45);
+  border-radius: 9999px;
+}
+
+#file-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(94, 80, 63, 0.65);
+}
+
+/* Floating Filter Dropdown Animation */
+#filter-dropdown-menu:not(.hidden) {
+  display: block;
+  animation: dropdownSlideIn 0.14s ease-out forwards;
+}
+
+@keyframes dropdownSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

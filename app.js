@@ -16,6 +16,17 @@
   const { repo, storage, api, extensions } = CONFIG;
   const MUSIC_EXTENSIONS = new Set((extensions.music || []).map(e => e.toLowerCase()));
   const VIDEO_EXTENSIONS = new Set((extensions.video || []).map(e => e.toLowerCase()));
+  const TEXT_EXTENSIONS = new Set(['txt', 'json', 'csv', 'md', 'xml', 'yaml', 'yml', 'log', 'tsv', 'pdf']);
+  const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'bmp', 'ico']);
+
+  const FILTER_CONFIG = {
+    all: { label: 'All', fullLabel: 'All Files', icon: 'layers' },
+    music: { label: 'Music', fullLabel: 'Music', icon: 'music' },
+    video: { label: 'Video', fullLabel: 'Video', icon: 'video' },
+    document: { label: 'Docs', fullLabel: 'Text / Docs', icon: 'file-text' },
+    image: { label: 'Images', fullLabel: 'Images', icon: 'image' },
+    other: { label: 'Other', fullLabel: 'Other Files', icon: 'file' }
+  };
 
   // Application State
   const state = {
@@ -23,7 +34,7 @@
     allItems: [],
     currentDirectory: '',
     viewMode: 'tree', // 'tree' | 'flat'
-    filterType: 'all', // 'all' | 'video' | 'music'
+    filterType: 'all', // 'all' | 'video' | 'music' | 'document' | 'image' | 'other'
     searchQuery: '',
     isLoading: false,
     error: null
@@ -40,9 +51,12 @@
     breadcrumbs: document.getElementById('breadcrumbs'),
     searchInput: document.getElementById('search-input'),
     clearSearchBtn: document.getElementById('clear-search-btn'),
-    filterPills: document.querySelectorAll('.filter-pill'),
-    viewTreeBtn: document.getElementById('view-tree-btn'),
-    viewFlatBtn: document.getElementById('view-flat-btn'),
+    viewToggleBtn: document.getElementById('view-toggle-btn'),
+    viewToggleIcon: document.getElementById('view-toggle-icon'),
+    filterDropdownBtn: document.getElementById('filter-dropdown-btn'),
+    filterDropdownMenu: document.getElementById('filter-dropdown-menu'),
+    filterActiveLabel: document.getElementById('filter-active-label'),
+    filterActiveIcon: document.getElementById('filter-active-icon'),
     refreshBtn: document.getElementById('refresh-btn'),
     importBtn: document.getElementById('import-btn'),
     authSettingsBtn: document.getElementById('auth-settings-btn'),
@@ -540,6 +554,12 @@
     if (VIDEO_EXTENSIONS.has(ext)) {
       return { category: 'video', label: ext.toUpperCase(), ext, icon: 'video' };
     }
+    if (TEXT_EXTENSIONS.has(ext)) {
+      return { category: 'document', label: ext.toUpperCase(), ext, icon: 'file-text' };
+    }
+    if (IMAGE_EXTENSIONS.has(ext)) {
+      return { category: 'image', label: ext.toUpperCase(), ext, icon: 'image' };
+    }
 
     return { category: 'other', label: ext ? ext.toUpperCase() : 'FILE', ext, icon: 'file' };
   }
@@ -808,10 +828,10 @@
     const videoFiles = filesOnly.filter(item => item.category === 'video');
     const totalBytes = filesOnly.reduce((acc, item) => acc + (item.size || 0), 0);
 
-    elements.statTotalFiles.innerText = filesOnly.length.toLocaleString();
-    elements.statMusicCount.innerText = musicFiles.length.toLocaleString();
-    elements.statVideoCount.innerText = videoFiles.length.toLocaleString();
-    elements.statTotalSize.innerText = formatBytes(totalBytes);
+    if (elements.statTotalFiles) elements.statTotalFiles.innerText = filesOnly.length.toLocaleString();
+    if (elements.statMusicCount) elements.statMusicCount.innerText = musicFiles.length.toLocaleString();
+    if (elements.statVideoCount) elements.statVideoCount.innerText = videoFiles.length.toLocaleString();
+    if (elements.statTotalSize) elements.statTotalSize.innerText = formatBytes(totalBytes);
   }
 
   // Filter Items based on View, Folder, Category, and Search
@@ -824,7 +844,7 @@
       items = items.filter(i => !i.isDir && i.path.toLowerCase().includes(q));
 
       if (state.filterType !== 'all') {
-        items = items.filter(i => i.category === state.filterType);
+        items = items.filter(i => i.category === state.filterType || (i.ext && i.ext.toLowerCase() === state.filterType));
       }
 
       return items.sort((a, b) => a.name.localeCompare(b.name));
@@ -835,7 +855,7 @@
       items = items.filter(i => !i.isDir && i.name !== '.gitattributes');
 
       if (state.filterType !== 'all') {
-        items = items.filter(i => i.category === state.filterType);
+        items = items.filter(i => i.category === state.filterType || (i.ext && i.ext.toLowerCase() === state.filterType));
       }
 
       return items.sort((a, b) => a.name.localeCompare(b.name));
@@ -847,7 +867,7 @@
 
     let filteredChildren = directChildren;
     if (state.filterType !== 'all') {
-      filteredChildren = directChildren.filter(i => i.isDir || i.category === state.filterType);
+      filteredChildren = directChildren.filter(i => i.isDir || i.category === state.filterType || (i.ext && i.ext.toLowerCase() === state.filterType));
     }
 
     return filteredChildren.sort((a, b) => {
@@ -884,10 +904,11 @@
 
     if (items.length === 0) {
       elements.fileList.innerHTML = '';
+      const filterLabel = FILTER_CONFIG[state.filterType]?.fullLabel || state.filterType;
       const message = state.searchQuery
         ? `No files matching "${state.searchQuery}"`
         : state.filterType !== 'all'
-        ? `No ${state.filterType} files found here.`
+        ? `No ${filterLabel} files found here.`
         : 'This folder is empty.';
       showState('inbox', 'No Files Found', message, false);
       return;
@@ -941,6 +962,12 @@
       } else if (item.category === 'folder') {
         badgeClasses = 'bg-almond-cream/60 text-stone-brown';
         iconColor = 'bg-almond-cream/60 text-stone-brown';
+      } else if (item.category === 'document') {
+        badgeClasses = 'bg-khaki-beige/35 text-jet-black font-semibold';
+        iconColor = 'bg-khaki-beige/25 text-stone-brown';
+      } else if (item.category === 'image') {
+        badgeClasses = 'bg-amber-100 text-amber-900 font-semibold';
+        iconColor = 'bg-amber-50 text-amber-800';
       }
 
       const activeRowClass = isCurrentActive 
@@ -966,12 +993,16 @@
         `;
       }
 
+      const statusText = isFolder 
+        ? 'Folder' 
+        : (isPlayable ? (isCurrentActive ? 'Playing Now' : 'Click to Play') : 'Click to Open ↗');
+
       html += `
-        <div class="file-row grid grid-cols-12 items-center px-4 py-3 transition text-sm cursor-pointer ${activeRowClass}" data-path="${escapeHtml(item.path)}" data-is-dir="${isFolder}">
-          <div class="col-span-7 md:col-span-6 flex items-center gap-3 min-w-0">
+        <div class="file-row grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 transition text-sm cursor-pointer ${activeRowClass}" data-path="${escapeHtml(item.path)}" data-is-dir="${isFolder}" title="${escapeHtml(item.name)} (${isFolder ? 'Folder' : (isPlayable ? 'Click to play' : 'Click to open in new tab')})">
+          <div class="col-span-7 md:col-span-6 flex items-center gap-2.5 sm:gap-3 min-w-0">
             ${thumbSlotHtml}
             <div class="flex flex-col min-w-0">
-              <span class="font-semibold text-black truncate ${isCurrentActive ? 'text-jet-black' : ''}" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
+              <span class="font-semibold text-black truncate ${isCurrentActive ? 'text-jet-black' : ''}">${escapeHtml(item.name)}</span>
               <span class="font-mono text-[11px] text-stone-brown/60 truncate">${escapeHtml(pathSub)}</span>
             </div>
           </div>
@@ -983,8 +1014,8 @@
           <div class="col-span-3 md:col-span-2 font-mono text-xs text-stone-brown text-right md:text-left">
             ${isFolder ? '--' : formatBytes(item.size)}
           </div>
-          <div class="hidden md:block col-span-2 text-xs text-stone-brown/70">
-            ${isFolder ? 'Folder' : (isPlayable ? (isCurrentActive ? 'Playing Now' : 'Click to Play') : 'Ready')}
+          <div class="hidden md:block col-span-2 text-xs ${isPlayable && isCurrentActive ? 'text-jet-black font-semibold' : 'text-stone-brown/70'}">
+            ${statusText}
           </div>
         </div>
       `;
@@ -1227,9 +1258,51 @@
   function hideImportModal() {
     elements.importModal.style.display = 'none';
     if (activeImportPollInterval) {
+      clearTimeout(activeImportPollInterval);
       clearInterval(activeImportPollInterval);
       activeImportPollInterval = null;
     }
+  }
+
+  // Strip tracking/share parameters from YouTube URLs (?si=..., &feature=..., etc.)
+  function cleanYouTubeUrl(urlStr) {
+    if (!urlStr || typeof urlStr !== 'string') return '';
+    const trimmed = urlStr.trim();
+    try {
+      if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+        return trimmed;
+      }
+      const u = new URL(trimmed);
+      const host = u.hostname.toLowerCase().replace(/^www\./, '').replace(/^m\./, '');
+
+      if (host === 'youtu.be') {
+        return `https://youtu.be${u.pathname}`;
+      }
+      if (host === 'youtube.com' || host === 'music.youtube.com') {
+        if (u.pathname.startsWith('/shorts/')) {
+          return `https://www.youtube.com${u.pathname}`;
+        }
+        if (u.pathname === '/watch' && u.searchParams.has('v')) {
+          return `https://www.youtube.com/watch?v=${u.searchParams.get('v')}`;
+        }
+        return `https://www.youtube.com${u.pathname}`;
+      }
+      return trimmed;
+    } catch (e) {
+      return trimmed;
+    }
+  }
+
+  function cleanAllInputUrls(text) {
+    if (!text) return '';
+    return text.split('\n').map(line => {
+      return line.split(/\s+/).map(token => {
+        if (token.includes('youtu.be') || token.includes('youtube.com')) {
+          return cleanYouTubeUrl(token);
+        }
+        return token;
+      }).join(' ');
+    }).join('\n');
   }
 
   function showImportError(msg) {
@@ -1246,7 +1319,8 @@
 
   async function handleImportSubmit(e) {
     e.preventDefault();
-    const urlsText = elements.importUrlsInput.value.trim();
+    const urlsText = cleanAllInputUrls(elements.importUrlsInput.value.trim());
+    elements.importUrlsInput.value = urlsText;
     const file = elements.importFileInput.files && elements.importFileInput.files[0];
 
     if (!urlsText && !file) {
@@ -1264,12 +1338,13 @@
 
     // Persist GitHub credentials in localStorage
     localStorage.setItem(storage.ghTokenKey, ghToken);
-    const rawRepo = (elements.importGhRepo.value || '').trim() || localStorage.getItem(storage.ghRepoKey) || 'mnswa/trove';
+    const defaultRepo = (CONFIG.github?.owner && CONFIG.github?.repo) ? `${CONFIG.github.owner}/${CONFIG.github.repo}` : 'mnswamedia/trove';
+    const rawRepo = (elements.importGhRepo.value || '').trim() || localStorage.getItem(storage.ghRepoKey) || defaultRepo;
     localStorage.setItem(storage.ghRepoKey, rawRepo);
 
     const repoParts = rawRepo.split('/').map(s => s.trim());
     if (repoParts.length !== 2 || !repoParts[0] || !repoParts[1]) {
-      showImportError('Please enter the GitHub repository in "owner/repo" format (e.g. mnswa/trove).');
+      showImportError('Please enter the GitHub repository in "owner/repo" format (e.g. mnswamedia/trove).');
       return;
     }
     const [owner, repoName] = repoParts;
@@ -1285,6 +1360,7 @@
         return;
       }
     }
+    combinedTargets = cleanAllInputUrls(combinedTargets);
 
     const selectedFormat = document.querySelector('input[name="import-format"]:checked')?.value || 'm4a';
     const workflowFile = CONFIG.github?.workflowFile || 'ingest.yml';
@@ -1347,12 +1423,17 @@
   }
 
   function pollGitHubWorkflow(owner, repoName, ghToken, workflowFile, triggerTime) {
-    if (activeImportPollInterval) clearInterval(activeImportPollInterval);
+    if (activeImportPollInterval) {
+      clearTimeout(activeImportPollInterval);
+      clearInterval(activeImportPollInterval);
+      activeImportPollInterval = null;
+    }
 
     let pollAttempts = 0;
     let targetRun = null;
+    const pollStartTime = Date.now();
 
-    activeImportPollInterval = setInterval(async () => {
+    async function checkWorkflow() {
       pollAttempts++;
       try {
         const runsUrl = `https://api.github.com/repos/${owner}/${repoName}/actions/workflows/${workflowFile}/runs?per_page=5`;
@@ -1365,61 +1446,70 @@
         });
 
         if (!res.ok) {
-          if (pollAttempts > 30) {
-            clearInterval(activeImportPollInterval);
+          if (pollAttempts > 40) {
             activeImportPollInterval = null;
             showImportError('Could not fetch workflow runs from GitHub. Please check GitHub Actions in your repository.');
+            return;
           }
-          return;
-        }
+        } else {
+          const data = await res.json();
+          const runs = data.workflow_runs || [];
 
-        const data = await res.json();
-        const runs = data.workflow_runs || [];
+          // Match run created at or near triggerTime
+          if (!targetRun && runs.length > 0) {
+            const matched = runs.find(r => {
+              const runCreated = new Date(r.created_at).getTime();
+              return runCreated >= (triggerTime - 60000);
+            }) || runs[0];
+            targetRun = matched;
+          }
 
-        // Match run created at or near triggerTime
-        if (!targetRun && runs.length > 0) {
-          const matched = runs.find(r => {
-            const runCreated = new Date(r.created_at).getTime();
-            return runCreated >= (triggerTime - 60000);
-          }) || runs[0];
-          targetRun = matched;
-        }
+          if (targetRun) {
+            const current = runs.find(r => r.id === targetRun.id) || targetRun;
+            const status = current.status; // 'queued', 'in_progress', 'completed'
+            const conclusion = current.conclusion; // 'success', 'failure', etc.
 
-        if (targetRun) {
-          const current = runs.find(r => r.id === targetRun.id) || targetRun;
-          const status = current.status; // 'queued', 'in_progress', 'completed'
-          const conclusion = current.conclusion; // 'success', 'failure', etc.
+            if (status === 'queued') {
+              elements.importStatusText.innerText = 'Runner queued in GitHub Actions...';
+              elements.importStatusSubtext.innerText = 'Spinning up Ubuntu runner with yt-dlp...';
+            } else if (status === 'in_progress') {
+              elements.importStatusText.innerText = 'Downloading & uploading to HF bucket...';
+              elements.importStatusSubtext.innerHTML = `<a href="${current.html_url}" target="_blank" rel="noopener noreferrer" class="text-accent-brown underline font-semibold flex items-center gap-1"><span>View live runner terminal logs</span> &rarr;</a>`;
+            } else if (status === 'completed') {
+              activeImportPollInterval = null;
 
-          if (status === 'queued') {
-            elements.importStatusText.innerText = 'Runner queued in GitHub Actions...';
-            elements.importStatusSubtext.innerText = 'Spinning up Ubuntu runner with yt-dlp...';
-          } else if (status === 'in_progress') {
-            elements.importStatusText.innerText = 'Downloading & uploading to HF bucket...';
-            elements.importStatusSubtext.innerHTML = `<a href="${current.html_url}" target="_blank" rel="noopener noreferrer" class="text-accent-brown underline font-semibold flex items-center gap-1"><span>View live runner terminal logs</span> &rarr;</a>`;
-          } else if (status === 'completed') {
-            clearInterval(activeImportPollInterval);
-            activeImportPollInterval = null;
-
-            if (conclusion === 'success') {
-              elements.importStatusText.innerText = 'Successfully ingested & uploaded to bucket!';
-              elements.importStatusSubtext.innerText = 'Refreshing vault...';
-              setTimeout(() => {
-                hideImportModal();
-                elements.importUrlsInput.value = '';
-                clearSelectedImportFile();
-                loadRepository(true); // Force refetch from HF storage bucket
-              }, 1800);
-            } else {
-              showImportError(`Workflow completed with status: ${conclusion || 'failed'}. Check run logs on GitHub.`);
-              elements.startImportBtn.disabled = false;
-              elements.startImportBtn.classList.remove('opacity-50', 'pointer-events-none');
+              if (conclusion === 'success') {
+                elements.importStatusText.innerText = 'Successfully ingested & uploaded to bucket!';
+                elements.importStatusSubtext.innerText = 'Refreshing vault...';
+                setTimeout(() => {
+                  hideImportModal();
+                  elements.importUrlsInput.value = '';
+                  clearSelectedImportFile();
+                  loadRepository(true); // Force refetch from HF storage bucket
+                }, 1800);
+              } else {
+                showImportError(`Workflow completed with status: ${conclusion || 'failed'}. Check run logs on GitHub.`);
+                elements.startImportBtn.disabled = false;
+                elements.startImportBtn.classList.remove('opacity-50', 'pointer-events-none');
+              }
+              return;
             }
           }
         }
       } catch (err) {
         console.warn('Error polling GitHub Actions workflow:', err);
       }
-    }, 3000);
+
+      // Dynamic polling schedule:
+      // First 30s: poll every 10 seconds (gives runner time to boot without spamming API).
+      // After 30s: poll every 3 seconds for fast real-time status updates.
+      const elapsed = Date.now() - pollStartTime;
+      const nextDelay = elapsed < 30000 ? 10000 : 3000;
+      activeImportPollInterval = setTimeout(checkWorkflow, nextDelay);
+    }
+
+    // First check after 10 seconds
+    activeImportPollInterval = setTimeout(checkWorkflow, 10000);
   }
 
   // ==========================================
@@ -1593,13 +1683,18 @@
       }
 
       // 3. Network fetch from Hugging Face Storage Bucket
+      // Encode path segments properly: converts spaces (%20), emojis, fullwidth chars, and especially '#' to '%23'
+      // so browser does not truncate the URL at '#' (hash fragment)
+      const encodedPath = item.path.split('/').map(seg => encodeURIComponent(seg)).join('/');
       const candidateUrls = [
-        `${api.bucketsBase}/${repo.id}/raw/${encodeURIComponent(item.path)}`,
-        `${api.bucketsBase}/${repo.id}/raw/${item.path}`,
-        `https://huggingface.co/buckets/${repo.id}/resolve/${item.path}`,
-        `${api.bucketsBase}/${repo.id}/resolve/${item.path}`,
-        `https://huggingface.co/api/buckets/${repo.id}/raw/${item.path}`,
-        `${api.datasetsBase}/${repo.id}/resolve/main/${item.path}`
+        `https://huggingface.co/buckets/${repo.id}/resolve/${encodedPath}`,
+        `https://huggingface.co/buckets/${repo.id}/raw/${encodedPath}`,
+        `${api.bucketsBase}/${repo.id}/raw/${encodedPath}`,
+        `${api.bucketsBase}/${repo.id}/resolve/${encodedPath}`,
+        `https://huggingface.co/api/buckets/${repo.id}/raw/${encodedPath}`,
+        `https://huggingface.co/datasets/${repo.id}/resolve/main/${encodedPath}`,
+        `https://huggingface.co/datasets/${repo.id}/raw/main/${encodedPath}`,
+        `${api.datasetsBase}/${repo.id}/resolve/main/${encodedPath}`
       ];
 
       let lastErr = null;
@@ -2051,6 +2146,44 @@
   setupMediaElementEvents(elements.playerAudio);
   setupMediaElementEvents(elements.playerVideo);
 
+  // Update Single View Toggle Button UI
+  function updateViewToggleUI() {
+    if (!elements.viewToggleBtn) return;
+    const isTree = state.viewMode === 'tree';
+    elements.viewToggleBtn.title = isTree 
+      ? 'Current: Tree View. Click to switch to Flat View.' 
+      : 'Current: Flat View. Click to switch to Tree View.';
+    elements.viewToggleBtn.innerHTML = `<i data-lucide="${isTree ? 'folder-tree' : 'list'}" class="w-4 h-4"></i>`;
+    if (window.lucide) window.lucide.createIcons();
+  }
+
+  // Update Filter Dropdown UI
+  function updateFilterDropdownUI() {
+    const config = FILTER_CONFIG[state.filterType] || { label: state.filterType, fullLabel: state.filterType, icon: 'filter' };
+    if (elements.filterActiveLabel) {
+      elements.filterActiveLabel.innerText = config.label;
+    }
+    if (elements.filterActiveIcon) {
+      elements.filterActiveIcon.setAttribute('data-lucide', config.icon);
+    }
+    if (elements.filterDropdownMenu) {
+      elements.filterDropdownMenu.querySelectorAll('.filter-option').forEach(opt => {
+        const checkIcon = opt.querySelector('.filter-check-icon');
+        const isActive = opt.dataset.filter === state.filterType;
+        if (checkIcon) {
+          if (isActive) checkIcon.classList.remove('hidden');
+          else checkIcon.classList.add('hidden');
+        }
+        if (isActive) {
+          opt.classList.add('bg-almond-cream/50', 'font-semibold');
+        } else {
+          opt.classList.remove('bg-almond-cream/50', 'font-semibold');
+        }
+      });
+    }
+    if (window.lucide) window.lucide.createIcons();
+  }
+
   // Setup Event Handlers
   function setupEventListeners() {
     // Auth Form Submit
@@ -2062,7 +2195,8 @@
       state.token = inputVal;
       localStorage.setItem(storage.tokenKey, inputVal);
       hideAuthModal();
-      elements.authBtnLabel.innerText = 'Connected';
+      if (elements.authBtnLabel) elements.authBtnLabel.innerText = 'Connected';
+      if (elements.authSettingsBtn) elements.authSettingsBtn.title = 'Hugging Face Access Token (Connected)';
       loadRepository(true);
     });
 
@@ -2108,41 +2242,42 @@
       render();
     });
 
-    // Filter Pills
-    elements.filterPills.forEach(pill => {
-      pill.addEventListener('click', () => {
-        elements.filterPills.forEach(p => {
-          p.classList.remove('active', 'bg-white', 'text-jet-black', 'shadow-sm');
-          p.classList.add('text-stone-brown');
-        });
-        pill.classList.add('active', 'bg-white', 'text-jet-black', 'shadow-sm');
-        pill.classList.remove('text-stone-brown');
-        state.filterType = pill.dataset.filter;
+    // View Toggle Button (Tree <-> Flat Single Icon Button)
+    if (elements.viewToggleBtn) {
+      elements.viewToggleBtn.addEventListener('click', () => {
+        state.viewMode = state.viewMode === 'tree' ? 'flat' : 'tree';
+        updateViewToggleUI();
         saveViewSettings();
         render();
       });
-    });
+    }
 
-    // View Toggles
-    elements.viewTreeBtn.addEventListener('click', () => {
-      elements.viewTreeBtn.classList.add('active', 'bg-white', 'text-jet-black', 'shadow-sm');
-      elements.viewTreeBtn.classList.remove('text-stone-brown');
-      elements.viewFlatBtn.classList.remove('active', 'bg-white', 'text-jet-black', 'shadow-sm');
-      elements.viewFlatBtn.classList.add('text-stone-brown');
-      state.viewMode = 'tree';
-      saveViewSettings();
-      render();
-    });
+    // Filter Dropdown Interactions
+    if (elements.filterDropdownBtn && elements.filterDropdownMenu) {
+      elements.filterDropdownBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        elements.filterDropdownMenu.classList.toggle('hidden');
+      });
 
-    elements.viewFlatBtn.addEventListener('click', () => {
-      elements.viewFlatBtn.classList.add('active', 'bg-white', 'text-jet-black', 'shadow-sm');
-      elements.viewFlatBtn.classList.remove('text-stone-brown');
-      elements.viewTreeBtn.classList.remove('active', 'bg-white', 'text-jet-black', 'shadow-sm');
-      elements.viewTreeBtn.classList.add('text-stone-brown');
-      state.viewMode = 'flat';
-      saveViewSettings();
-      render();
-    });
+      elements.filterDropdownMenu.addEventListener('click', (e) => {
+        const option = e.target.closest('.filter-option');
+        if (!option) return;
+        state.filterType = option.dataset.filter || 'all';
+        updateFilterDropdownUI();
+        elements.filterDropdownMenu.classList.add('hidden');
+        saveViewSettings();
+        render();
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!elements.filterDropdownMenu.classList.contains('hidden')) {
+          const container = document.getElementById('filter-dropdown-container');
+          if (container && !container.contains(e.target)) {
+            elements.filterDropdownMenu.classList.add('hidden');
+          }
+        }
+      });
+    }
 
     // Breadcrumb clicks
     elements.breadcrumbs.addEventListener('click', (e) => {
@@ -2154,7 +2289,7 @@
       }
     });
 
-    // File list delegation (Folder navigation or Media playback)
+    // File list delegation (Folder navigation, Media playback, or Native Browser New Tab)
     elements.fileList.addEventListener('click', (e) => {
       const parentRow = e.target.closest('[data-action="go-parent"]');
       if (parentRow) {
@@ -2178,8 +2313,14 @@
         render();
       } else {
         const item = state.allItems.find(i => i.path === path);
-        if (item && (item.category === 'music' || item.category === 'video')) {
+        if (!item) return;
+        if (item.category === 'music' || item.category === 'video') {
           player.playTrack(item);
+        } else {
+          // Open other files (txt, json, doc, etc.) in a new tab for native browser handling
+          const encodedPath = item.path.split('/').map(seg => encodeURIComponent(seg)).join('/');
+          const fileUrl = `https://huggingface.co/buckets/${repo.id}/resolve/${encodedPath}`;
+          window.open(fileUrl, '_blank', 'noopener,noreferrer');
         }
       }
     });
@@ -2316,6 +2457,16 @@
     if (elements.importForm) {
       elements.importForm.addEventListener('submit', handleImportSubmit);
     }
+    if (elements.importUrlsInput) {
+      elements.importUrlsInput.addEventListener('paste', () => {
+        setTimeout(() => {
+          elements.importUrlsInput.value = cleanAllInputUrls(elements.importUrlsInput.value);
+        }, 0);
+      });
+      elements.importUrlsInput.addEventListener('change', () => {
+        elements.importUrlsInput.value = cleanAllInputUrls(elements.importUrlsInput.value);
+      });
+    }
     if (elements.importFileDropzone && elements.importFileInput) {
       elements.importFileDropzone.addEventListener('click', (e) => {
         if (e.target !== elements.importClearFileBtn) {
@@ -2447,23 +2598,8 @@
     setupEventListeners();
 
     // Sync restored view mode & filters with UI
-    if (state.viewMode === 'flat') {
-      elements.viewFlatBtn.classList.add('active', 'bg-white', 'text-jet-black', 'shadow-sm');
-      elements.viewFlatBtn.classList.remove('text-stone-brown');
-      elements.viewTreeBtn.classList.remove('active', 'bg-white', 'text-jet-black', 'shadow-sm');
-      elements.viewTreeBtn.classList.add('text-stone-brown');
-    }
-    if (state.filterType !== 'all') {
-      elements.filterPills.forEach(pill => {
-        if (pill.dataset.filter === state.filterType) {
-          pill.classList.add('active', 'bg-white', 'text-jet-black', 'shadow-sm');
-          pill.classList.remove('text-stone-brown');
-        } else {
-          pill.classList.remove('active', 'bg-white', 'text-jet-black', 'shadow-sm');
-          pill.classList.add('text-stone-brown');
-        }
-      });
-    }
+    updateViewToggleUI();
+    updateFilterDropdownUI();
 
     // Restore playbar and playback progress
     restorePlaybackState();
@@ -2473,10 +2609,12 @@
     }
 
     if (state.token) {
-      elements.authBtnLabel.innerText = 'Connected';
+      if (elements.authBtnLabel) elements.authBtnLabel.innerText = 'Connected';
+      if (elements.authSettingsBtn) elements.authSettingsBtn.title = 'Hugging Face Access Token (Connected)';
       loadRepository(false); // Uses 1-hour cache if valid
     } else {
-      elements.authBtnLabel.innerText = 'Token';
+      if (elements.authBtnLabel) elements.authBtnLabel.innerText = 'Token';
+      if (elements.authSettingsBtn) elements.authSettingsBtn.title = 'Configure Hugging Face Token';
       showAuthModal();
     }
   }
