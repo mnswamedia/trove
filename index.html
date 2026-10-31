@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trove · Media Vault</title>
+  <link rel="icon" type="image/png" href="./assets/favicon.png">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'black': '#0a0908',
+            'jet-black': '#22333b',
+            'almond-cream': '#eae0d5',
+            'khaki-beige': '#c6ac8f',
+            'stone-brown': '#5e503f',
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- jsmediatags for Embedded ID3 Album Art extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+
+  <!-- Minimal Style Overrides -->
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body class="min-h-screen text-black antialiased bg-[#fbf9f6]">
+  <div class="max-w-6xl mx-auto p-4 md:p-6 flex flex-col min-h-screen gap-4">
+    
+    <!-- Compact Top Bar Header (Height reduced ~25%, Integrated Metrics) -->
+    <header class="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-white border border-almond-cream rounded-xl shadow-sm">
+      <!-- Left: Logo & Repository Details -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-jet-black text-almond-cream flex items-center justify-center shadow-sm shrink-0">
+          <i data-lucide="archive" class="w-4 h-4"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base font-bold tracking-tight text-black leading-none">Trove</h1>
+            <span id="repo-badge" class="px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-almond-cream text-stone-brown border border-khaki-beige/40 leading-none">Private</span>
+          </div>
+          <p id="repo-id-display" class="font-mono text-[11px] text-stone-brown mt-0.5 leading-none hidden sm:block">--</p>
+        </div>
+      </div>
+
+      <!-- Center: Consolidated Metrics in Top Bar -->
+      <div class="flex items-center gap-2 md:gap-3 px-3 py-1 bg-almond-cream/25 border border-almond-cream/70 rounded-lg text-xs font-mono text-stone-brown">
+        <div class="flex items-center gap-1">
+          <span class="text-stone-brown/60">Files:</span>
+          <strong id="stat-total-files" class="text-jet-black font-semibold">--</strong>
+        </div>
+        <span class="text-khaki-beige select-none">•</span>
+        <div class="flex items-center gap-1">
+          <span class="text-stone-brown/60">Music:</span>
+          <strong id="stat-music-count" class="text-jet-black font-semibold">--</strong>
+        </div>
+        <span class="text-khaki-beige select-none">•</span>
+        <div class="flex items-center gap-1">
+          <span class="text-stone-brown/60">Videos:</span>
+          <strong id="stat-video-count" class="text-jet-black font-semibold">--</strong>
+        </div>
+        <span class="text-khaki-beige select-none hidden sm:inline">•</span>
+        <div class="items-center gap-1 hidden sm:flex">
+          <span class="text-stone-brown/60">Size:</span>
+          <strong id="stat-total-size" class="text-jet-black font-semibold">--</strong>
+        </div>
+      </div>
+
+      <!-- Right: Action Buttons -->
+      <div class="flex items-center gap-2">
+        <button id="import-btn" class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-jet-black text-white hover:bg-black transition shadow-sm" title="Import from YouTube">
+          <i data-lucide="download" class="w-3.5 h-3.5"></i>
+          <span>Import</span>
+        </button>
+        <button id="refresh-btn" class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-white border border-khaki-beige text-jet-black hover:bg-almond-cream/40 transition">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+          <span>Refresh</span>
+        </button>
+        <button id="auth-settings-btn" class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-white border border-khaki-beige text-jet-black hover:bg-almond-cream/40 transition">
+          <i data-lucide="key-round" class="w-3.5 h-3.5"></i>
+          <span id="auth-btn-label">Token</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Explorer Workspace -->
+    <main class="flex flex-col gap-3">
+      <!-- Toolbar: Search on left with reduced width, filters & view on right -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <!-- Search with reduced width -->
+        <div class="relative w-56 md:w-72 shrink-0">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-brown/60 pointer-events-none"></i>
+          <input 
+            type="text" 
+            id="search-input" 
+            placeholder="Search files in vault..." 
+            class="w-full pl-9 pr-8 py-2 text-sm bg-white border border-khaki-beige rounded-lg text-black placeholder-stone-brown/50 focus:outline-none focus:ring-2 focus:ring-jet-black/20 focus:border-jet-black transition"
+            autocomplete="off"
+          >
+          <button id="clear-search-btn" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-brown/60 hover:text-black hidden" title="Clear">
+            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+
+        <!-- Right Side: Filters and View Mode together -->
+        <div class="flex flex-wrap items-center gap-2.5">
+          <!-- Filter Pills -->
+          <div class="flex items-center bg-almond-cream/40 p-1 rounded-lg border border-almond-cream gap-1">
+            <button class="filter-pill active px-3 py-1 text-xs font-semibold rounded-md transition text-jet-black bg-white shadow-sm" data-filter="all">All</button>
+            <button class="filter-pill inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition text-stone-brown hover:text-black" data-filter="video">
+              <i data-lucide="video" class="w-3.5 h-3.5"></i>
+              <span>Video</span>
+            </button>
+            <button class="filter-pill inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition text-stone-brown hover:text-black" data-filter="music">
+              <i data-lucide="music" class="w-3.5 h-3.5"></i>
+              <span>Music</span>
+            </button>
+          </div>
+
+          <!-- View Mode (Tree vs Flat) -->
+          <div class="flex items-center bg-almond-cream/40 p-1 rounded-lg border border-almond-cream gap-1">
+            <button id="view-tree-btn" class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition text-jet-black bg-white shadow-sm" title="Folder View">
+              <i data-lucide="folder-tree" class="w-3.5 h-3.5"></i>
+              <span>Tree</span>
+            </button>
+            <button id="view-flat-btn" class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition text-stone-brown hover:text-black" title="Flat List">
+              <i data-lucide="list" class="w-3.5 h-3.5"></i>
+              <span>Flat</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Breadcrumbs -->
+      <nav id="breadcrumbs" class="flex items-center flex-wrap gap-1 px-3.5 py-2 bg-almond-cream/30 border border-almond-cream rounded-lg text-xs font-medium text-stone-brown" aria-label="Breadcrumb">
+        <!-- Rendered dynamically -->
+      </nav>
+
+      <!-- File List Card -->
+      <div class="bg-white border border-almond-cream rounded-xl shadow-sm overflow-hidden flex flex-col">
+        <!-- Table Header -->
+        <div class="grid grid-cols-12 px-4 py-3 bg-almond-cream/25 border-b border-almond-cream text-[11px] font-bold uppercase tracking-wider text-stone-brown/70">
+          <span class="col-span-7 md:col-span-6">Name</span>
+          <span class="col-span-2 md:col-span-2">Type</span>
+          <span class="col-span-3 md:col-span-2 text-right md:text-left">Size</span>
+          <span class="hidden md:block col-span-2">Status</span>
+        </div>
+
+        <!-- Files Container -->
+        <div id="file-list" class="divide-y divide-almond-cream/60">
+          <!-- Dynamically populated rows -->
+        </div>
+
+        <!-- Explorer State (Loading / Empty / Error) -->
+        <div id="explorer-state" class="flex flex-col items-center justify-center p-12 text-center gap-3" style="display: none;">
+          <div id="state-icon" class="text-khaki-beige"></div>
+          <h3 id="state-title" class="text-base font-bold text-jet-black">Loading Vault</h3>
+          <p id="state-desc" class="text-xs text-stone-brown max-w-md">Fetching dataset files from Hugging Face...</p>
+          <button id="state-action-btn" class="mt-2 inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-jet-black text-white hover:bg-black transition hidden">Retry</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer id="app-footer" class="mt-auto py-4 flex items-center justify-center gap-2 text-xs text-stone-brown/70 transition-all duration-300">
+      <span>Trove · Hugging Face Dataset Explorer</span>
+      <span>•</span>
+      <span id="footer-status">Ready</span>
+    </footer>
+  </div>
+
+  <!-- Global Audio Element (for background playback & MediaSession) -->
+  <audio id="player-audio" preload="metadata" playsinline class="hidden"></audio>
+
+  <!-- Persistent Floating Bottom Play Bar (Floating Island with bottom gap) -->
+  <aside id="bottom-play-bar" class="fixed bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-4xl bg-white/95 backdrop-blur-md border border-almond-cream rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] z-40 px-3.5 md:px-6 py-3 transition-all duration-300 translate-y-28 opacity-0 pointer-events-none" style="display: none;">
+    <div class="flex items-center justify-between gap-3 md:gap-5">
+      
+      <!-- Track & Mini Scrubber (Clicking expands the player) -->
+      <div id="bar-expand-trigger" class="flex items-center gap-3 min-w-0 flex-1 cursor-pointer select-none group" title="Click to expand player">
+        <!-- Thumbnail on the edge (Extracts embedded ID3 album art) -->
+        <div id="bar-thumbnail" class="w-11 h-11 rounded-lg bg-jet-black text-almond-cream flex items-center justify-center shrink-0 shadow-sm relative overflow-hidden group-hover:scale-105 transition">
+          <img id="bar-thumb-img" class="w-full h-full object-contain hidden" alt="Album Art">
+          <i data-lucide="music" id="bar-type-icon" class="w-5 h-5"></i>
+          <!-- Mini Equalizer Wave Bars -->
+          <div id="bar-playing-indicator" class="absolute inset-0 bg-jet-black/60 flex items-center justify-center gap-0.5 hidden">
+            <span class="w-1 h-3 bg-almond-cream rounded-full animate-pulse"></span>
+            <span class="w-1 h-4 bg-almond-cream rounded-full animate-pulse delay-75"></span>
+            <span class="w-1 h-2 bg-almond-cream rounded-full animate-pulse delay-150"></span>
+          </div>
+        </div>
+
+        <!-- Track metadata & scrubber -->
+        <div class="flex flex-col min-w-0 flex-1">
+          <div class="flex items-center gap-2">
+            <span id="bar-track-title" class="text-sm font-semibold text-black truncate group-hover:text-jet-black">No media playing</span>
+            <span id="bar-track-ext" class="px-1.5 py-0.2 rounded text-[10px] font-bold font-mono uppercase bg-almond-cream text-stone-brown hidden sm:inline-block">--</span>
+            <!-- Loading indicator in play bar -->
+            <span id="bar-loading-badge" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-khaki-beige/30 text-stone-brown animate-pulse hidden">
+              <i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i>
+              <span>Loading...</span>
+            </span>
+          </div>
+          
+          <!-- Scrubber and timestamps -->
+          <div class="flex items-center gap-2 mt-0.5">
+            <span id="bar-time-current" class="text-[11px] font-mono text-stone-brown/70 shrink-0">0:00</span>
+            <div class="relative flex-1 flex items-center" onclick="event.stopPropagation();">
+              <input 
+                type="range" 
+                id="bar-progress-slider" 
+                min="0" 
+                max="100" 
+                value="0" 
+                class="w-full h-1.5 bg-almond-cream rounded-lg appearance-none cursor-pointer accent-jet-black focus:outline-none"
+              >
+            </div>
+            <span id="bar-time-duration" class="text-[11px] font-mono text-stone-brown/70 shrink-0">0:00</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Playback Controls -->
+      <div class="flex items-center gap-1 md:gap-2 shrink-0">
+        <button id="btn-prev" class="p-2 text-stone-brown hover:text-black transition rounded-full hover:bg-almond-cream/40" title="Previous Track (P)">
+          <i data-lucide="skip-back" class="w-4 h-4"></i>
+        </button>
+        
+        <button id="btn-play-pause" class="w-10 h-10 rounded-full bg-jet-black text-white flex items-center justify-center hover:bg-black transition shadow-sm" title="Play/Pause (Space)">
+          <i data-lucide="play" id="play-pause-icon" class="w-4 h-4 ml-0.5"></i>
+        </button>
+        
+        <button id="btn-next" class="p-2 text-stone-brown hover:text-black transition rounded-full hover:bg-almond-cream/40" title="Next Track (N)">
+          <i data-lucide="skip-forward" class="w-4 h-4"></i>
+        </button>
+
+        <button id="btn-expand-player" class="p-2 text-stone-brown hover:text-black transition rounded-full hover:bg-almond-cream/40 ml-1" title="Expand Player">
+          <i data-lucide="chevron-up" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+    </div>
+  </aside>
+
+  <!-- Fullscreen / Expanded Player Sheet -->
+  <div id="expanded-player" class="fixed inset-0 z-50 bg-[#fbf9f6] flex flex-col transition-transform duration-300 ease-out translate-y-full" style="display: none;">
+    <!-- Top Header: Title on Left, Minimize on Right -->
+    <div class="max-w-4xl w-full mx-auto p-4 md:p-6 flex items-center justify-between">
+      <div class="flex flex-col min-w-0 pr-4">
+        <span class="text-[11px] font-bold uppercase tracking-wider text-stone-brown/60">Now Playing</span>
+        <p id="expanded-subtitle" class="text-xs font-mono text-stone-brown truncate max-w-xs md:max-w-md">Trove Media Vault</p>
+      </div>
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button id="btn-pip-toggle" class="p-2.5 rounded-full hover:bg-almond-cream/50 text-stone-brown hover:text-black transition hidden" title="Picture-in-Picture">
+          <i data-lucide="picture-in-picture" class="w-5 h-5"></i>
+        </button>
+        <button id="btn-speed" class="px-2.5 py-1 rounded-md bg-almond-cream/40 font-mono text-xs hover:bg-almond-cream transition font-semibold text-stone-brown" title="Playback Speed">1.0x</button>
+        <button id="btn-minimize-player" class="p-2.5 rounded-full hover:bg-almond-cream/50 text-stone-brown hover:text-black transition ml-1" title="Minimize Player">
+          <i data-lucide="chevron-down" class="w-6 h-6"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Center Stage: Music Vinyl Visualizer OR Video Screen -->
+    <div class="flex-1 max-w-4xl w-full mx-auto px-4 md:px-6 flex flex-col items-center justify-center min-h-0 overflow-hidden">
+      
+      <!-- Music Stage (When playing audio) - Direct Album Cover Card with Dynamic Fitting -->
+      <div id="stage-music" class="flex flex-col items-center justify-center text-center gap-5 max-w-xl w-full my-auto px-4">
+        <div class="relative group flex items-center justify-center w-full">
+          <div id="expanded-cover-art" class="max-w-full max-h-[46vh] rounded-2xl shadow-2xl overflow-hidden border border-almond-cream bg-almond-cream/20 flex items-center justify-center transition-all duration-300">
+            <img id="expanded-cover-img" class="max-w-full max-h-[46vh] w-auto h-auto object-contain rounded-2xl hidden" alt="Album Art">
+            <div id="expanded-cover-fallback" class="w-60 h-60 flex flex-col items-center justify-center text-stone-brown/60 gap-3 p-6">
+              <i data-lucide="music" id="expanded-cover-icon" class="w-16 h-16"></i>
+              <span class="text-xs font-mono font-medium">Audio Track</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="w-full px-4">
+          <h2 id="expanded-track-title" class="text-xl md:text-2xl font-bold text-black truncate">--</h2>
+          <p id="expanded-track-meta" class="text-xs font-mono text-stone-brown/70 mt-1">--</p>
+        </div>
+      </div>
+
+      <!-- Video Stage (When playing video) -->
+      <div id="stage-video" class="w-full h-full max-h-[70vh] flex flex-col items-center justify-center bg-black rounded-2xl overflow-hidden shadow-2xl relative hidden">
+        <video id="player-video" class="w-full h-full object-contain" playsinline preload="metadata"></video>
+        <div id="video-loading-overlay" class="absolute inset-0 bg-black/60 flex items-center justify-center hidden">
+          <i data-lucide="loader-2" class="w-10 h-10 text-white animate-spin"></i>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Bottom Controls Area -->
+    <div class="max-w-2xl w-full mx-auto p-4 md:p-8 flex flex-col gap-4">
+      <!-- Scrubber -->
+      <div class="flex flex-col gap-1.5">
+        <input 
+          type="range" 
+          id="expanded-progress-slider" 
+          min="0" 
+          max="100" 
+          value="0" 
+          class="w-full h-2 bg-almond-cream rounded-lg appearance-none cursor-pointer accent-jet-black focus:outline-none"
+        >
+        <div class="flex justify-between text-xs font-mono text-stone-brown/70">
+          <span id="expanded-time-current">0:00</span>
+          <span id="expanded-time-duration">0:00</span>
+        </div>
+      </div>
+
+      <!-- Controls Buttons Row -->
+      <div class="flex items-center justify-between gap-2 px-2">
+        <!-- Shuffle -->
+        <button id="btn-shuffle" class="p-2.5 rounded-full text-stone-brown/50 hover:text-black transition" title="Shuffle Off">
+          <i data-lucide="shuffle" class="w-5 h-5"></i>
+        </button>
+
+        <!-- Previous Track -->
+        <button id="btn-expanded-prev" class="p-3 rounded-full text-stone-brown hover:text-black transition hover:bg-almond-cream/40" title="Previous (P)">
+          <i data-lucide="skip-back" class="w-6 h-6"></i>
+        </button>
+
+        <!-- Master Play / Pause Button -->
+        <button id="btn-expanded-play" class="w-16 h-16 rounded-full bg-jet-black text-white flex items-center justify-center hover:bg-black transition shadow-lg" title="Play/Pause (Space)">
+          <i data-lucide="play" id="expanded-play-icon" class="w-7 h-7 ml-0.5"></i>
+        </button>
+
+        <!-- Next Track -->
+        <button id="btn-expanded-next" class="p-3 rounded-full text-stone-brown hover:text-black transition hover:bg-almond-cream/40" title="Next (N)">
+          <i data-lucide="skip-forward" class="w-6 h-6"></i>
+        </button>
+
+        <!-- Repeat Mode -->
+        <button id="btn-repeat" class="p-2.5 rounded-full text-stone-brown/50 hover:text-black transition" title="Repeat Mode: Off">
+          <i data-lucide="repeat" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Bottom Audio Volume Utility -->
+      <div class="flex items-center justify-between text-xs text-stone-brown pt-2 border-t border-almond-cream/60">
+        <span id="active-queue-counter" class="font-mono text-stone-brown/60">1 / 1 in queue</span>
+        <div class="flex items-center gap-2">
+          <button id="btn-mute" class="hover:text-black text-stone-brown">
+            <i data-lucide="volume-2" id="volume-icon" class="w-4 h-4"></i>
+          </button>
+          <input 
+            type="range" 
+            id="volume-slider" 
+            min="0" 
+            max="1" 
+            step="0.05" 
+            value="1" 
+            class="w-20 md:w-28 h-1.5 bg-almond-cream rounded-lg appearance-none cursor-pointer accent-jet-black"
+          >
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- YouTube Import Modal (yt-dlp Downloader) -->
+  <div id="import-modal" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+    <div class="bg-white border border-almond-cream rounded-2xl shadow-2xl w-full max-w-lg p-6 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+      
+      <!-- Modal Header -->
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-jet-black text-white flex items-center justify-center shrink-0 shadow-sm">
+            <i data-lucide="download-cloud" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h2 class="text-base font-bold text-black">Import Music / Videos</h2>
+            <p class="text-xs text-stone-brown mt-0.5">Downloads from YouTube with yt-dlp &amp; adds to your vault</p>
+          </div>
+        </div>
+        <button id="close-import-modal-btn" class="p-1 rounded-lg text-stone-brown hover:text-black hover:bg-almond-cream/40 transition" title="Close">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Import Form -->
+      <form id="import-form" class="flex flex-col gap-4">
+        
+        <!-- URLs Textarea -->
+        <div class="flex flex-col gap-1.5">
+          <label for="import-urls-input" class="text-xs font-semibold text-black flex items-center justify-between">
+            <span>YouTube Links or Video IDs</span>
+            <span class="text-[11px] font-normal text-stone-brown/70">One per line</span>
+          </label>
+          <textarea 
+            id="import-urls-input" 
+            rows="3" 
+            placeholder="https://www.youtube.com/watch?v=...&#10;or video ID: dQw4w9WgXcQ"
+            class="w-full px-3 py-2 font-mono text-xs bg-white border border-khaki-beige rounded-lg focus:outline-none focus:ring-2 focus:ring-jet-black/20 focus:border-jet-black transition"
+          ></textarea>
+        </div>
+
+        <!-- OR File Upload for .txt -->
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-semibold text-black">Or Batch .txt File</label>
+          <input type="file" id="import-file-input" accept=".txt" class="hidden">
+          <div id="import-file-dropzone" class="flex items-center justify-between px-3.5 py-2.5 bg-almond-cream/30 border border-dashed border-khaki-beige rounded-xl cursor-pointer hover:bg-almond-cream/50 transition">
+            <div class="flex items-center gap-2.5">
+              <i data-lucide="file-text" class="w-4 h-4 text-stone-brown"></i>
+              <span id="import-filename-display" class="text-xs text-stone-brown font-mono truncate max-w-xs">Select a .txt file (one link per line)</span>
+            </div>
+            <button type="button" id="import-clear-file-btn" class="text-xs text-stone-brown hover:text-black font-semibold hidden">Remove</button>
+          </div>
+        </div>
+
+        <!-- Format Selector -->
+        <div class="flex items-center justify-between pt-1">
+          <span class="text-xs font-semibold text-black">Format</span>
+          <div class="flex items-center bg-almond-cream/40 p-1 rounded-lg border border-almond-cream gap-1">
+            <label class="cursor-pointer">
+              <input type="radio" name="import-format" value="m4a" checked class="sr-only import-format-radio">
+              <span class="import-format-pill active px-3 py-1 text-xs font-semibold rounded-md transition text-jet-black bg-white shadow-sm inline-block">Audio (.m4a)</span>
+            </label>
+            <label class="cursor-pointer">
+              <input type="radio" name="import-format" value="mp4" class="sr-only import-format-radio">
+              <span class="import-format-pill px-3 py-1 text-xs font-semibold rounded-md transition text-stone-brown hover:text-black inline-block">Video (.mp4)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- GitHub Runner Configuration -->
+        <div class="border-t border-almond-cream/60 pt-3 flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-black flex items-center gap-1.5">
+              <i data-lucide="github" class="w-3.5 h-3.5"></i>
+              <span>GitHub Actions Runner</span>
+            </span>
+            <button type="button" id="toggle-gh-config-btn" class="text-[11px] text-stone-brown hover:text-black font-semibold">
+              Settings &darr;
+            </button>
+          </div>
+          <div id="gh-config-fields" class="flex flex-col gap-2.5">
+            <div class="flex flex-col gap-1">
+              <label for="import-gh-token" class="text-[11px] font-semibold text-stone-brown flex items-center justify-between">
+                <span>GitHub Personal Access Token</span>
+                <a href="https://github.com/settings/tokens/new?scopes=repo,workflow&amp;description=Trove+Runner" target="_blank" rel="noopener noreferrer" class="text-accent-brown hover:underline text-[10px]">Create Token (workflow scope) &nearr;</a>
+              </label>
+              <input 
+                type="password" 
+                id="import-gh-token" 
+                placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                autocomplete="off"
+                class="w-full px-3 py-1.5 text-xs font-mono bg-white border border-khaki-beige rounded-lg focus:outline-none focus:ring-2 focus:ring-jet-black/20 focus:border-jet-black transition"
+              >
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="import-gh-repo" class="text-[11px] font-semibold text-stone-brown">Repository (owner/repo)</label>
+              <input 
+                type="text" 
+                id="import-gh-repo" 
+                value="mnswa/trove"
+                placeholder="mnswa/trove"
+                class="w-full px-3 py-1.5 text-xs font-mono bg-white border border-khaki-beige rounded-lg focus:outline-none focus:ring-2 focus:ring-jet-black/20 focus:border-jet-black transition"
+              >
+            </div>
+          </div>
+        </div>
+
+        <!-- Progress / Status Box -->
+        <div id="import-progress-box" class="p-3.5 rounded-xl bg-almond-cream/30 border border-almond-cream flex flex-col gap-2 hidden">
+          <div class="flex items-center gap-2">
+            <div id="import-spinner">
+              <i data-lucide="loader-2" class="w-4 h-4 text-jet-black animate-spin"></i>
+            </div>
+            <span id="import-status-text" class="text-xs font-bold text-jet-black">Processing import...</span>
+          </div>
+          <p id="import-status-subtext" class="text-[11px] font-mono text-stone-brown truncate">Initializing...</p>
+        </div>
+
+        <!-- Error Banner -->
+        <div id="import-error-msg" class="p-3 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs hidden"></div>
+
+        <!-- Modal Actions -->
+        <div class="flex items-center justify-end gap-2.5 pt-2">
+          <button type="button" id="cancel-import-btn" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-white border border-khaki-beige text-stone-brown hover:bg-almond-cream/30 transition">Cancel</button>
+          <button type="submit" id="start-import-btn" class="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg bg-jet-black text-white hover:bg-black transition shadow-sm">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span>Start Download</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Authentication Modal (Password Manager Compliant) -->
+  <div id="auth-modal" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+    <div class="bg-white border border-almond-cream rounded-xl shadow-xl w-full max-w-md p-6 flex flex-col gap-5">
+      <div class="flex items-start gap-3.5">
+        <div class="w-10 h-10 rounded-lg bg-almond-cream text-stone-brown flex items-center justify-center shrink-0">
+          <i data-lucide="lock" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h2 class="text-lg font-bold text-black">Authentication Required</h2>
+          <p class="text-xs text-stone-brown mt-0.5">Connect to dataset <code id="modal-repo-id" class="px-1.5 py-0.5 bg-almond-cream/50 rounded font-mono text-jet-black">--</code></p>
+        </div>
+      </div>
+
+      <form id="auth-form" class="flex flex-col gap-4" autocomplete="on">
+        <!-- Hidden username input for password manager matching -->
+        <input type="text" name="username" id="auth-username" autocomplete="username" class="sr-only" tabindex="-1">
+
+        <div class="flex flex-col gap-1.5">
+          <label for="hf-token-input" class="text-xs font-semibold text-black">Hugging Face Read Token</label>
+          <div class="relative flex items-center">
+            <input 
+              type="password" 
+              id="hf-token-input" 
+              name="password" 
+              autocomplete="current-password" 
+              placeholder="hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
+              required
+              class="w-full px-3 py-2 pr-10 font-mono text-xs bg-white border border-khaki-beige rounded-lg focus:outline-none focus:ring-2 focus:ring-jet-black/20 focus:border-jet-black transition"
+            >
+            <button type="button" id="toggle-token-visibility" class="absolute right-2.5 text-stone-brown hover:text-black p-1" title="Toggle visibility">
+              <i data-lucide="eye" id="eye-icon" class="w-4 h-4"></i>
+            </button>
+          </div>
+          <span class="text-[11px] text-stone-brown/80 leading-relaxed mt-0.5">
+            Token will be stored in your browser's local cache. Requires <strong>Read</strong> access to the dataset.
+          </span>
+        </div>
+
+        <div id="auth-error-msg" class="p-2.5 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs hidden"></div>
+
+        <div class="flex items-center justify-end gap-2.5 pt-2">
+          <button type="button" id="close-modal-btn" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-white border border-khaki-beige text-stone-brown hover:bg-almond-cream/30 transition">Cancel</button>
+          <button type="submit" id="save-token-btn" class="px-4 py-1.5 text-xs font-semibold rounded-lg bg-jet-black text-white hover:bg-black transition">Connect Vault</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Application Configuration & Logic -->
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

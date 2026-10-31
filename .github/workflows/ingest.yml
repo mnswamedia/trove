@@ -1,0 +1,56 @@
+name: Trove Media Ingestion
+
+on:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: 'YouTube video URLs or IDs (space or line separated)'
+        required: true
+        type: string
+      format:
+        description: 'Output format (m4a or mp4)'
+        required: true
+        default: 'm4a'
+        type: choice
+        options:
+          - m4a
+          - mp4
+      bucket_id:
+        description: 'Target Hugging Face Bucket ID'
+        required: false
+        default: 'mnswa/trove_dataset'
+        type: string
+      hf_token:
+        description: 'Optional Hugging Face Token (if not using repository secret)'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  ingest:
+    name: Download & Ingest Media
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg jq curl
+          python -m pip install --upgrade pip
+          pip install yt-dlp "huggingface_hub[cli]>=0.22.0" requests
+
+      - name: Run Ingest Script
+        env:
+          TARGETS: ${{ github.event.inputs.targets }}
+          MEDIA_FORMAT: ${{ github.event.inputs.format }}
+          BUCKET_ID: ${{ github.event.inputs.bucket_id != '' && github.event.inputs.bucket_id || 'mnswa/trove_dataset' }}
+          HF_TOKEN: ${{ github.event.inputs.hf_token != '' && github.event.inputs.hf_token || secrets.HF_TOKEN }}
+        run: |
+          python3 scripts/ingest.py
+
