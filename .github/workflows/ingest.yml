@@ -46,24 +46,33 @@ jobs:
 
       - name: Set up WARP & Environment
         run: |
-          # 1. Parallel background pip install while system packages configure
-          pip install --no-cache-dir yt-dlp "huggingface_hub>=0.22.0" requests PySocks mutagen &
+          # 1. Parallel background pip install (lightweight packages only, no heavy SDKs)
+          pip install --no-cache-dir yt-dlp requests PySocks mutagen &
           PIP_PID=$!
 
-          # 2. Add Cloudflare WARP repository (fast)
+          # 2. Fast install ffmpeg (pure CLI, zero desktop/WebKit bloat)
+          sudo apt-get install -qq -y --no-install-recommends ffmpeg
+
+          # 3. Add official Cloudflare repository and fetch official package
+          echo "--> Fetching official Cloudflare WARP package..."
           SUITE=$(lsb_release -cs 2>/dev/null || echo "noble")
           curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-warp.gpg
           echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp.gpg] https://pkg.cloudflareclient.com/ $SUITE main" | sudo tee /etc/apt/sources.list.d/cloudflare-warp.list > /dev/null
 
-          # 3. Fast update of only Cloudflare repo index & install ffmpeg + cloudflare-warp in single transaction
           sudo apt-get update -qq -o Dir::Etc::sourcelist="sources.list.d/cloudflare-warp.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0" 2>/dev/null || true
-          sudo apt-get install -qq -y --no-install-recommends ffmpeg cloudflare-warp || (sudo apt-get update -qq && sudo apt-get install -qq -y --no-install-recommends ffmpeg cloudflare-warp)
 
-          # 4. Start daemon & wait for socket (sub-second)
+          # Extract official Cloudflare CLI daemon directly (bypassing 100MB of desktop WebKit GUI bloat)
+          mkdir -p /tmp/warp-pkg && cd /tmp/warp-pkg
+          apt-get download -qq cloudflare-warp
+          sudo dpkg-deb -x cloudflare-warp*.deb /
+          cd - > /dev/null
+
+          # 4. Initialize daemon directories and start official warp-svc
+          sudo mkdir -p /var/lib/cloudflare-warp /run/cloudflare-warp
           sudo systemctl start warp-svc 2>/dev/null || sudo warp-svc &
           for i in {1..30}; do [ -S /run/cloudflare-warp/warp_service ] && break || sleep 0.1; done
 
-          # 5. Fast configure SOCKS5 proxy on port 40000
+          # 5. Configure official SOCKS5 proxy on port 40000
           warp-cli --accept-tos registration new 2>/dev/null || warp-cli --accept-tos register 2>/dev/null || true
           warp-cli --accept-tos mode proxy 2>/dev/null || warp-cli --accept-tos set-mode proxy 2>/dev/null || true
           warp-cli --accept-tos proxy port 40000 2>/dev/null || warp-cli --accept-tos set-proxy-port 40000 2>/dev/null || true
@@ -74,8 +83,9 @@ jobs:
 
           echo "WARP_PROXY=socks5://127.0.0.1:40000" >> $GITHUB_ENV
 
-          # 7. Synchronize background pip installation
+          # 7. Wait for background pip install to finish
           wait $PIP_PID
+          echo "--> Environment ready!"
 
       - name: Run Ingest Script
         env:
