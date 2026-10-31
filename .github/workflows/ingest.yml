@@ -48,6 +48,35 @@ jobs:
         run: |
           pip install --no-cache-dir yt-dlp "huggingface_hub>=0.22.0" requests PySocks mutagen
 
+      - name: Set up Cloudflare WARP (High-Speed SOCKS5 Tunnel)
+        run: |
+          echo "--> Installing Cloudflare WARP client..."
+          SUITE=$(lsb_release -cs 2>/dev/null || echo "noble")
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $SUITE main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          
+          # Fast update of only Cloudflare repo
+          sudo apt-get update -o Dir::Etc::sourcelist="sources.list.d/cloudflare-client.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0" || {
+            echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ jammy main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+            sudo apt-get update -o Dir::Etc::sourcelist="sources.list.d/cloudflare-client.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"
+          }
+          sudo apt-get install -y --no-install-recommends cloudflare-warp
+
+          # Start daemon
+          sudo systemctl start warp-svc 2>/dev/null || sudo warp-svc &
+          sleep 2
+
+          # Configure local SOCKS5 proxy on port 40000
+          warp-cli --accept-tos registration new 2>/dev/null || warp-cli --accept-tos register 2>/dev/null || true
+          warp-cli --accept-tos mode proxy 2>/dev/null || warp-cli --accept-tos set-mode proxy 2>/dev/null || true
+          warp-cli --accept-tos proxy port 40000 2>/dev/null || warp-cli --accept-tos set-proxy-port 40000 2>/dev/null || true
+          warp-cli --accept-tos connect 2>/dev/null || true
+          sleep 3
+
+          # Export proxy env var for runner script
+          echo "WARP_PROXY=socks5://127.0.0.1:40000" >> $GITHUB_ENV
+          curl -s --socks5 127.0.0.1:40000 https://cloudflare.com/cdn-cgi/trace | head -n 6 || echo "WARP starting up..."
+
       - name: Run Ingest Script
         env:
           TARGETS: ${{ github.event.inputs.targets }}

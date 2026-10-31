@@ -21,8 +21,8 @@ import urllib.request
 # ==============================================================================
 # Ingestion Configuration Toggles
 # ==============================================================================
-# Prioritize TV & embedded clients which bypass datacenter IP botwalls (LOGIN_REQUIRED)
-YOUTUBE_PLAYER_CLIENTS = os.getenv("YOUTUBE_PLAYER_CLIENTS", "tv_embedded,tv,mweb,web_embedded,android")
+# Client prioritization for yt-dlp
+YOUTUBE_PLAYER_CLIENTS = os.getenv("YOUTUBE_PLAYER_CLIENTS", "android,ios,mweb,tv,web")
 
 # Toggle whether to fall back to rotating proxies when direct download fails (Default: False)
 ENABLE_PROXY_FALLBACK = os.getenv("ENABLE_PROXY_FALLBACK", "false").lower() in ("true", "1", "yes")
@@ -30,6 +30,31 @@ ENABLE_PROXY_FALLBACK = os.getenv("ENABLE_PROXY_FALLBACK", "false").lower() in (
 # Maximum proxy attempts per song if proxy fallback is enabled
 MAX_PROXY_ATTEMPTS = int(os.getenv("MAX_PROXY_ATTEMPTS", "5"))
 # ==============================================================================
+
+def get_warp_proxy():
+    """Check if Cloudflare WARP SOCKS5 proxy is active and reachable."""
+    warp_url = os.getenv("WARP_PROXY", "socks5://127.0.0.1:40000")
+    if not warp_url:
+        return None
+    try:
+        res = subprocess.run(
+            [
+                "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
+                "-x", warp_url,
+                "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "--connect-timeout", "4",
+                "--max-time", "6",
+                "https://www.youtube.com/generate_204"
+            ],
+            capture_output=True,
+            text=True,
+            timeout=7
+        )
+        if res.stdout.strip() in ("204", "200"):
+            return warp_url
+    except Exception:
+        pass
+    return None
 
 def check_proxy_health(proxy_url, timeout=6):
     """
@@ -270,6 +295,15 @@ def main():
         total_targets = len(targets)
         live_proxies = None  # Lazily fetch only if a target fails direct download
         successful_targets = 0
+
+        # Detect Cloudflare WARP SOCKS5 tunnel
+        warp_proxy = get_warp_proxy()
+        if warp_proxy:
+            print(f"\n--> [Network] Cloudflare WARP SOCKS5 tunnel active on {warp_proxy}.")
+            print("    Routing YouTube downloads through Cloudflare's global edge network.")
+            base_cmd.extend(["--proxy", warp_proxy])
+        else:
+            print("\n--> [Network] Direct connection (Cloudflare WARP not detected).")
 
         for target_idx, target in enumerate(targets, 1):
             # No wait on the first song; sleep 10s only between subsequent songs in a batch
