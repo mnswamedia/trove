@@ -18,40 +18,42 @@ import concurrent.futures
 from pathlib import Path
 import urllib.request
 
-def check_proxy_health(proxy_url, timeout=3):
+def check_proxy_health(proxy_url, timeout=6):
     """
-    Test if a proxy can connect to YouTube over HTTPS and fetch real data.
-    Strictly verifies:
-      1. HTTPS CONNECT tunneling works (prevents 'Tunnel connection failed: 400 Bad Request')
-      2. YouTube accepts the connection and returns real data (robots.txt, HTTP 200)
+    Test if a proxy can connect to YouTube over HTTPS and receive a valid response.
+    Tests against YouTube's lightweight connectivity ping endpoint (generate_204)
+    using a realistic browser User-Agent so Google/YouTube does not reject curl.
     """
     try:
         res = subprocess.run(
             [
                 "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
                 "-x", proxy_url,
+                "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
                 "--connect-timeout", str(timeout),
-                "--max-time", str(timeout + 2),
-                "https://www.youtube.com/robots.txt"
+                "--max-time", str(timeout + 3),
+                "https://www.youtube.com/generate_204"
             ],
             capture_output=True,
             text=True,
-            timeout=timeout + 3
+            timeout=timeout + 4
         )
         code = res.stdout.strip()
-        if code == "200":
+        if code in ("204", "200"):
             return proxy_url
     except Exception:
         pass
     return None
 
-def get_live_proxies(max_needed=5):
+def get_live_proxies(max_needed=6):
     """Fetch fresh proxies from Proxifly and verify them directly against YouTube HTTPS."""
     print("\n--> Fetching fresh proxies from Proxifly (updated every 5 mins)...")
-    # Only use protocols that support HTTPS CONNECT tunneling / socket forwarding
+    # Open proxies that support CONNECT tunneling must use http:// or socks5h:// prefixes.
+    # Note: 'https://' prefix in curl/yt-dlp expects TLS to the proxy itself (which public proxies don't support).
     sources = [
-        ("socks5", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt"),
-        ("https", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/https/data.txt"),
+        ("socks5h", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt"),
+        ("http", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/https/data.txt"),
+        ("http", "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/http/data.txt"),
     ]
 
     candidates = []
@@ -62,10 +64,9 @@ def get_live_proxies(max_needed=5):
                 lines = [line.decode("utf-8", errors="ignore").strip() for line in r if line.strip()]
                 for line in lines:
                     if ":" in line and not line.startswith("#"):
-                        if "://" in line:
-                            candidates.append(line)
-                        else:
-                            candidates.append(f"{proto}://{line}")
+                        # Normalize to http:// or socks5h://
+                        clean_line = re.sub(r"^[a-zA-Z0-9]+://", "", line)
+                        candidates.append(f"{proto}://{clean_line}")
         except Exception as e:
             print(f"    Notice: could not load {proto} list: {e}")
 
@@ -76,12 +77,12 @@ def get_live_proxies(max_needed=5):
     # Deduplicate and randomly sample
     candidates = list(dict.fromkeys(candidates))
     random.shuffle(candidates)
-    pool_size = min(150, len(candidates))
+    pool_size = min(350, len(candidates))
     test_pool = candidates[:pool_size]
     print(f"    Testing pool of {len(test_pool)} candidates directly against YouTube HTTPS (total pool: {len(candidates)})...")
 
     live_proxies = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=35) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=45) as executor:
         future_to_proxy = {executor.submit(check_proxy_health, p): p for p in test_pool}
         for future in concurrent.futures.as_completed(future_to_proxy):
             try:
@@ -242,11 +243,7 @@ def main():
             meta_template,
             "-o", out_template,
             "--remote-components", "ejs:github",
-            # Fail fast: no repeated retries on a single failing connection (1/1 attempt)
-            "--retries", "0",
-            "--extractor-retries", "0",
-            "--fragment-retries", "0",
-            "--file-access-retries", "0",
+            "--extractor-args", "youtube:player_client=android,ios,web",
             "--print", "before_dl:[%(epoch>%Y-%m-%d %H:%M:%S)s] Downloading: %(title)s.%(ext)s",
             "--print", "after_move:[%(epoch>%Y-%m-%d %H:%M:%S)s] Success: %(title)s.%(ext)s"
         ]
@@ -273,10 +270,10 @@ def main():
 
             target_success = False
 
-            # 1. Attempt Direct Download first (Fastest; leverages Deno)
+            # 1. Attempt Direct Download first (Fastest; Android/iOS clients + Deno)
             print(f"--> [Attempt 1] Direct Download (Fastest, High-Speed Connection)...")
             direct_cmd = list(base_cmd)
-            direct_cmd.extend(["--socket-timeout", "10", target])
+            direct_cmd.extend(["--socket-timeout", "15", "--retries", "1", "--extractor-retries", "1", target])
             proc = subprocess.run(direct_cmd, text=True)
 
             if proc.returncode == 0:
@@ -288,14 +285,21 @@ def main():
 
                 # 2. Proxy Fallback (Lazily fetched once)
                 if live_proxies is None:
-                    live_proxies = get_live_proxies(max_needed=5)
+                    live_proxies = get_live_proxies(max_needed=6)
 
                 if live_proxies:
                     for attempt_idx, proxy in enumerate(live_proxies, 1):
                         print(f"\n--> [Proxy Attempt {attempt_idx}/{len(live_proxies)}] Testing with: {proxy}...")
                         proxy_cmd = list(base_cmd)
-                        # Short timeout & 0 retries so dead/slow proxies fail immediately (1/1)
-                        proxy_cmd.extend(["--socket-timeout", "7", "--proxy", proxy, target])
+                        # Resilient timeout (15s) and 2 retries to absorb network proxy latency
+                        proxy_cmd.extend([
+                            "--socket-timeout", "15",
+                            "--retries", "2",
+                            "--extractor-retries", "2",
+                            "--fragment-retries", "2",
+                            "--proxy", proxy,
+                            target
+                        ])
 
                         proc_proxy = subprocess.run(proxy_cmd, text=True)
                         if proc_proxy.returncode == 0:
