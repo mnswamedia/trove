@@ -134,17 +134,29 @@ def main():
             cookies_file = os.path.join(cookies_dir, "cookies.txt")
             with open(cookies_file, "w", encoding="utf-8") as cf:
                 cf.write(raw_cookies)
-            print("    ✓ Loaded authenticated session from YOUTUBE_COOKIES secret.")
+            cookie_lines = [l for l in raw_cookies.splitlines() if l.strip() and not l.startswith("#")]
+            domains = set()
+            for l in cookie_lines:
+                parts = l.split()
+                if parts:
+                    domains.add(parts[0])
+            print(f"    ✓ Loaded authenticated session from YOUTUBE_COOKIES secret:")
+            print(f"      - File size: {len(raw_cookies)} bytes")
+            print(f"      - Active cookie entries: {len(cookie_lines)}")
+            print(f"      - Target domains: {', '.join(sorted(list(domains))[:4])}")
         elif os.path.exists("cookies.txt"):
             cookies_file = os.path.abspath("cookies.txt")
-            print("    ✓ Loaded cookies from local cookies.txt file.")
+            print(f"    ✓ Loaded cookies from local cookies.txt file ({os.path.getsize(cookies_file)} bytes).")
+        else:
+            print("    ℹ No YOUTUBE_COOKIES secret or local cookies.txt found. Running unauthenticated.")
 
         cmd = [
             "yt-dlp",
+            "--verbose",
             "--download-archive", archive_file,
             "--embed-thumbnail",
             "--add-metadata",
-            "--no-warnings",
+            "--extractor-args", "youtube:player_client=ios,tv,web",
             "--print-to-file",
             "%(.{title,artist,creator,channel,uploader,album,album_artist,release_date,upload_date,duration,track,track_number,genre,description,thumbnail,id,webpage_url,tags,filesize})j",
             meta_template,
@@ -157,7 +169,12 @@ def main():
         ]
 
         if cookies_file:
+            print(f"    ✓ yt-dlp flag attached: --cookies {cookies_file}")
             cmd.extend(["--cookies", cookies_file])
+        else:
+            print("    ℹ Proceeding without --cookies flag.")
+
+        print("    ✓ yt-dlp player client emulation active: ios,tv,web")
 
         if media_format == "mp4":
             cmd.extend(["-f", "bestvideo+bestaudio/best", "--merge-output-format", "mp4"])
