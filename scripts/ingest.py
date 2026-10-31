@@ -19,10 +19,10 @@ import urllib.request
 
 def check_proxy_health(proxy_url, timeout=3):
     """
-    Test if a proxy can tunnel HTTPS to YouTube and return HTTP 204.
+    Test if a proxy can connect to YouTube over HTTPS and fetch real data.
     Strictly verifies:
       1. HTTPS CONNECT tunneling works (prevents 'Tunnel connection failed: 400 Bad Request')
-      2. YouTube accepts the connection without IP blocks/captchas (204 No Content)
+      2. YouTube accepts the connection and returns real data (robots.txt, HTTP 200)
     """
     try:
         res = subprocess.run(
@@ -31,14 +31,14 @@ def check_proxy_health(proxy_url, timeout=3):
                 "-x", proxy_url,
                 "--connect-timeout", str(timeout),
                 "--max-time", str(timeout + 2),
-                "https://www.youtube.com/generate_204"
+                "https://www.youtube.com/robots.txt"
             ],
             capture_output=True,
             text=True,
-            timeout=timeout + 4
+            timeout=timeout + 3
         )
         code = res.stdout.strip()
-        if code == "204":
+        if code == "200":
             return proxy_url
     except Exception:
         pass
@@ -152,9 +152,6 @@ def main():
     print(f" HF Bucket:  {bucket_id}")
     print(f"==================================================")
 
-    # Ensure localhost requests (e.g. bgutil provider container) bypass proxy
-    os.environ["NO_PROXY"] = "localhost,127.0.0.1"
-
     # Use dedicated working directory
     workdir = tempfile.mkdtemp(prefix="trove_ingest_")
     cookies_dir = None
@@ -249,30 +246,12 @@ def main():
             "%(.{title,artist,creator,channel,uploader,album,album_artist,release_date,upload_date,duration,track,track_number,genre,description,thumbnail,id,webpage_url,tags,filesize})j",
             meta_template,
             "-o", out_template,
-            "--socket-timeout", "15",
-            "--retries", "3",
-            "--fragment-retries", "3",
             "--sleep-requests", "1",
             "--sleep-interval", "2",
             "--max-sleep-interval", "5",
             "--print", "before_dl:[%(epoch>%Y-%m-%d %H:%M:%S)s] Downloading: %(title)s.%(ext)s",
             "--print", "after_move:[%(epoch>%Y-%m-%d %H:%M:%S)s] Success: %(title)s.%(ext)s"
         ]
-
-        # Check for local bgutil Proof-of-Origin Token server
-        try:
-            req = urllib.request.Request("http://127.0.0.1:4416/ping")
-            with urllib.request.urlopen(req, timeout=2) as r:
-                if r.status == 200:
-                    base_cmd.extend(["--extractor-args", "youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416"])
-                    print("    ✓ Active PO Token Provider: http://127.0.0.1:4416 (bgutil)")
-        except Exception:
-            pass
-
-        # Enable Node.js for solving YouTube JS challenge if available
-        if shutil.which("node"):
-            base_cmd.extend(["--js-runtimes", "node"])
-            print("    ✓ Active JS Challenge Solver: Node.js")
 
         if cookies_file:
             print(f"    ✓ yt-dlp flag attached: --cookies {cookies_file}")
@@ -283,37 +262,41 @@ def main():
         if media_format == "mp4":
             base_cmd.extend(["-f", "bestvideo+bestaudio/best", "--merge-output-format", "mp4"])
         else:
-            base_cmd.extend(["-f", "bestaudio", "-x", "--audio-format", "m4a"])
+            # ba/b ensures resilient fallback to standard stream if pure audio-only DASH is unavailable
+            base_cmd.extend(["-f", "ba/b", "-x", "--audio-format", "m4a"])
 
-        # Fetch and verify live Proxifly proxies
-        live_proxies = get_live_proxies(max_needed=5)
         download_success = False
 
-        if live_proxies:
-            for attempt_idx, proxy in enumerate(live_proxies, 1):
-                print(f"\n--> [Proxy Download Attempt {attempt_idx}/{len(live_proxies)}] Testing with: {proxy}...")
-                current_cmd = list(base_cmd)
-                current_cmd.extend(["--proxy", proxy])
-                current_cmd.extend(targets)
+        # 1. Attempt Direct Download first (Fastest; leverages authenticated cookies + Deno)
+        print("\n--> [Attempt 1] Direct Download (Fastest, High-Speed Connection)...")
+        direct_cmd = list(base_cmd)
+        direct_cmd.extend(targets)
+        proc = subprocess.run(direct_cmd, text=True)
 
-                proc = subprocess.run(current_cmd, text=True)
-                if proc.returncode == 0:
-                    print(f"    ✓ Download succeeded using proxy: {proxy}!")
-                    download_success = True
-                    break
-                else:
-                    print(f"    ✗ Proxy {proxy} exited with code {proc.returncode}. Trying next proxy...")
+        if proc.returncode == 0:
+            print("    ✓ Direct download succeeded!")
+            download_success = True
+        else:
+            print(f"    Note: Direct download completed with exit code {proc.returncode}.")
+            print("    Switching to rotating verified proxies from Proxifly...")
 
-        if not download_success:
-            print("\n--> Fallback: Attempting direct download (no proxy)...")
-            current_cmd = list(base_cmd)
-            current_cmd.extend(targets)
-            proc = subprocess.run(current_cmd, text=True)
-            if proc.returncode == 0:
-                print("    ✓ Direct download succeeded!")
-                download_success = True
-            else:
-                print(f"    Note: Direct download completed with exit code {proc.returncode}")
+            # 2. Proxy Fallback (Engages only if direct download fails or gets challenged)
+            live_proxies = get_live_proxies(max_needed=5)
+            if live_proxies:
+                for attempt_idx, proxy in enumerate(live_proxies, 1):
+                    print(f"\n--> [Proxy Download Attempt {attempt_idx}/{len(live_proxies)}] Testing with: {proxy}...")
+                    proxy_cmd = list(base_cmd)
+                    # Short timeout & 1 retry so dead/slow proxies fail fast without freezing the runner
+                    proxy_cmd.extend(["--socket-timeout", "8", "--retries", "1", "--proxy", proxy])
+                    proxy_cmd.extend(targets)
+
+                    proc_proxy = subprocess.run(proxy_cmd, text=True)
+                    if proc_proxy.returncode == 0:
+                        print(f"    ✓ Download succeeded using proxy: {proxy}!")
+                        download_success = True
+                        break
+                    else:
+                        print(f"    ✗ Proxy {proxy} exited with code {proc_proxy.returncode}. Trying next proxy...")
 
         # 3. Format metadata JSON files (indent=2)
         print("\n--> Formatting extracted metadata JSON files...")
