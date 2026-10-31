@@ -77,6 +77,11 @@
 
       <!-- Right: Action Buttons (Clean Icons Only) -->
       <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        <!-- Live Ingestion Activity Button (Beside Import Button) -->
+        <button id="activity-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white border border-khaki-beige text-jet-black hover:bg-almond-cream/40 transition shadow-sm select-none" title="Ingestion Activity">
+          <i data-lucide="activity" class="w-4 h-4 text-stone-brown" id="activity-btn-icon"></i>
+          <span id="activity-btn-label" class="sr-only">Activity</span>
+        </button>
         <button id="import-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-jet-black text-white hover:bg-black transition shadow-sm" title="Import from YouTube">
           <i data-lucide="download" class="w-4 h-4"></i>
         </button>
@@ -398,6 +403,66 @@
           >
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Live Ingestion Activity Modal -->
+  <div id="activity-modal" class="fixed inset-0 bg-jet-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4" style="display: none;">
+    <div class="bg-white border border-almond-cream rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
+      
+      <!-- Modal Header -->
+      <div class="px-4 py-3 border-b border-almond-cream flex items-center justify-between bg-almond-cream/20">
+        <div class="flex items-center gap-2">
+          <div class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" id="activity-pulse-dot"></div>
+          <h2 class="text-sm font-bold text-jet-black">Ingestion Activity</h2>
+          <span id="activity-status-pill" class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800">In Progress</span>
+        </div>
+        <button id="close-activity-modal-btn" class="p-1 rounded-lg text-stone-brown hover:text-black hover:bg-almond-cream/50 transition" title="Close">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-4 overflow-y-auto flex-1 flex flex-col gap-3 min-h-0">
+        <!-- Overview Card -->
+        <div class="bg-almond-cream/25 border border-almond-cream rounded-xl p-3 flex flex-col gap-2">
+          <div class="flex items-center justify-between text-xs font-mono">
+            <span class="text-stone-brown font-medium truncate max-w-[280px]" id="activity-step-info">Connecting to runner...</span>
+            <span class="text-jet-black font-semibold shrink-0" id="activity-time-elapsed">00:00</span>
+          </div>
+          <!-- Progress Bar -->
+          <div class="w-full bg-almond-cream/60 rounded-full h-1.5 overflow-hidden">
+            <div id="activity-progress-bar" class="bg-jet-black h-full rounded-full transition-all duration-300" style="width: 0%;"></div>
+          </div>
+          <div class="flex items-center justify-between text-[11px] text-stone-brown/70 pt-0.5">
+            <span id="activity-counts">0 of 0 completed</span>
+            <a id="activity-github-link" href="#" target="_blank" rel="noopener noreferrer" class="text-stone-brown hover:text-black underline font-medium inline-flex items-center gap-1">
+              <span>View Terminal</span>
+              <i data-lucide="external-link" class="w-3 h-3"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- Runner Steps List -->
+        <div class="flex flex-col gap-1.5">
+          <div class="text-[10px] font-bold uppercase tracking-wider text-stone-brown/60 px-1 select-none">Workflow Steps</div>
+          <div id="activity-items-list" class="flex flex-col gap-1.5 max-h-60 overflow-y-auto pr-1">
+            <div class="p-3 text-center text-xs text-stone-brown bg-almond-cream/15 rounded-xl border border-dashed border-almond-cream">
+              Connecting to runner...
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-4 py-2.5 border-t border-almond-cream bg-almond-cream/10 flex items-center justify-between text-xs text-stone-brown">
+        <div class="flex items-center gap-1.5">
+          <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+          <span class="text-[11px]">Live updates every 3s</span>
+        </div>
+        <button id="dismiss-activity-btn" class="px-3.5 py-1 font-semibold text-xs rounded-lg bg-white border border-khaki-beige text-jet-black hover:bg-almond-cream/40 transition">Close</button>
+      </div>
+
     </div>
   </div>
 
