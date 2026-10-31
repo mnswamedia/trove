@@ -18,6 +18,19 @@ import concurrent.futures
 from pathlib import Path
 import urllib.request
 
+# ==============================================================================
+# Ingestion Configuration Toggles
+# ==============================================================================
+# Prioritize TV & embedded clients which bypass datacenter IP botwalls (LOGIN_REQUIRED)
+YOUTUBE_PLAYER_CLIENTS = os.getenv("YOUTUBE_PLAYER_CLIENTS", "tv_embedded,tv,mweb,web_embedded,android")
+
+# Toggle whether to fall back to rotating proxies when direct download fails (Default: False)
+ENABLE_PROXY_FALLBACK = os.getenv("ENABLE_PROXY_FALLBACK", "false").lower() in ("true", "1", "yes")
+
+# Maximum proxy attempts per song if proxy fallback is enabled
+MAX_PROXY_ATTEMPTS = int(os.getenv("MAX_PROXY_ATTEMPTS", "5"))
+# ==============================================================================
+
 def check_proxy_health(proxy_url, timeout=6):
     """
     Test if a proxy can connect to YouTube over HTTPS and receive a valid response.
@@ -243,7 +256,7 @@ def main():
             meta_template,
             "-o", out_template,
             "--remote-components", "ejs:github",
-            "--extractor-args", "youtube:player_client=android,ios,web",
+            "--extractor-args", f"youtube:player_client={YOUTUBE_PLAYER_CLIENTS}",
             "--print", "before_dl:[%(epoch>%Y-%m-%d %H:%M:%S)s] Downloading: %(title)s.%(ext)s",
             "--print", "after_move:[%(epoch>%Y-%m-%d %H:%M:%S)s] Success: %(title)s.%(ext)s"
         ]
@@ -281,33 +294,36 @@ def main():
                 target_success = True
             else:
                 print(f"    Note: Direct download completed with exit code {proc.returncode}.")
-                print("    Switching to rotating verified proxies from Proxifly...")
 
-                # 2. Proxy Fallback (Lazily fetched once)
-                if live_proxies is None:
-                    live_proxies = get_live_proxies(max_needed=6)
+                if ENABLE_PROXY_FALLBACK:
+                    print("    Switching to rotating verified proxies from Proxifly...")
+                    # 2. Proxy Fallback (Lazily fetched once)
+                    if live_proxies is None:
+                        live_proxies = get_live_proxies(max_needed=MAX_PROXY_ATTEMPTS)
 
-                if live_proxies:
-                    for attempt_idx, proxy in enumerate(live_proxies, 1):
-                        print(f"\n--> [Proxy Attempt {attempt_idx}/{len(live_proxies)}] Testing with: {proxy}...")
-                        proxy_cmd = list(base_cmd)
-                        # Resilient timeout (15s) and 2 retries to absorb network proxy latency
-                        proxy_cmd.extend([
-                            "--socket-timeout", "15",
-                            "--retries", "2",
-                            "--extractor-retries", "2",
-                            "--fragment-retries", "2",
-                            "--proxy", proxy,
-                            target
-                        ])
+                    if live_proxies:
+                        for attempt_idx, proxy in enumerate(live_proxies, 1):
+                            print(f"\n--> [Proxy Attempt {attempt_idx}/{len(live_proxies)}] Testing with: {proxy}...")
+                            proxy_cmd = list(base_cmd)
+                            # Resilient timeout (15s) and 2 retries to absorb network proxy latency
+                            proxy_cmd.extend([
+                                "--socket-timeout", "15",
+                                "--retries", "2",
+                                "--extractor-retries", "2",
+                                "--fragment-retries", "2",
+                                "--proxy", proxy,
+                                target
+                            ])
 
-                        proc_proxy = subprocess.run(proxy_cmd, text=True)
-                        if proc_proxy.returncode == 0:
-                            print(f"    ✓ Download succeeded using proxy: {proxy}!")
-                            target_success = True
-                            break
-                        else:
-                            print(f"    ✗ Proxy {proxy} exited with code {proc_proxy.returncode}. Moving to next proxy...")
+                            proc_proxy = subprocess.run(proxy_cmd, text=True)
+                            if proc_proxy.returncode == 0:
+                                print(f"    ✓ Download succeeded using proxy: {proxy}!")
+                                target_success = True
+                                break
+                            else:
+                                print(f"    ✗ Proxy {proxy} exited with code {proc_proxy.returncode}. Moving to next proxy...")
+                else:
+                    print("    Proxy fallback is disabled (ENABLE_PROXY_FALLBACK = False). Skipping proxies.")
 
                 if not target_success:
                     print(f"    ✗ All download attempts failed for {target}.")
