@@ -95,45 +95,49 @@ def format_duration_py(seconds_val):
         return f"{h}:{m:02d}:{s:02d}"
     return f"{m}:{s:02d}"
 
+def fetch_file_from_hf(remote_path: str, local_path: str, bucket_id: str, token: str, env: dict) -> bool:
+    """Fast-fetch a remote file from Hugging Face bucket via direct HTTP GET, falling back to hf buckets cp."""
+    # 1. Direct HTTP GET (fastest, ~150ms, avoids subprocess startup overhead)
+    urls = [
+        f"https://huggingface.co/api/buckets/{bucket_id}/raw/{remote_path}",
+        f"https://huggingface.co/buckets/{bucket_id}/resolve/{remote_path}",
+        f"https://huggingface.co/datasets/{bucket_id}/raw/main/{remote_path}",
+        f"https://huggingface.co/datasets/{bucket_id}/resolve/main/{remote_path}"
+    ]
+    for url in urls:
+        try:
+            req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status == 200:
+                    with open(local_path, "wb") as f:
+                        f.write(resp.read())
+                    return True
+        except urllib.error.HTTPError as he:
+            if he.code == 404:
+                return False
+        except Exception:
+            pass
+
+    # 2. Fallback to hf buckets cp CLI
+    try:
+        res = subprocess.run(
+            ["hf", "buckets", "cp", f"hf://buckets/{bucket_id}/{remote_path}", local_path],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if res.returncode == 0 and os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+            return True
+    except Exception:
+        pass
+
+    return False
+
 def fetch_existing_downloads(bucket_id, env, token, workdir):
     """Fetch and parse existing downloads.json manifest from HF Storage Bucket."""
     downloads_file = os.path.join(workdir, "downloads.json")
-    loaded = False
-
-    # 1. Try hf buckets cp
-    try:
-        res = subprocess.run(
-            ["hf", "buckets", "cp", f"hf://buckets/{bucket_id}/downloads.json", downloads_file],
-            env=env,
-            capture_output=True,
-            text=True
-        )
-        if res.returncode == 0 and os.path.exists(downloads_file) and os.path.getsize(downloads_file) > 0:
-            print("    Loaded existing downloads.json via hf buckets cp.")
-            loaded = True
-    except Exception as e:
-        print(f"    CLI note for downloads.json: {e}")
-
-    # 2. Try HTTP raw / resolve endpoints
-    if not loaded:
-        for url in [
-            f"https://huggingface.co/api/buckets/{bucket_id}/raw/downloads.json",
-            f"https://huggingface.co/buckets/{bucket_id}/resolve/downloads.json",
-            f"https://huggingface.co/datasets/{bucket_id}/raw/main/downloads.json",
-            f"https://huggingface.co/datasets/{bucket_id}/resolve/main/downloads.json"
-        ]:
-            try:
-                req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-                with urllib.request.urlopen(req, timeout=10) as response:
-                    if response.status == 200:
-                        content = response.read().decode('utf-8', errors='ignore')
-                        with open(downloads_file, "w", encoding="utf-8") as f:
-                            f.write(content)
-                        print(f"    Loaded existing downloads.json from {url}")
-                        loaded = True
-                        break
-            except Exception:
-                pass
+    loaded = fetch_file_from_hf("downloads.json", downloads_file, bucket_id, token, env)
 
     if loaded and os.path.exists(downloads_file):
         try:
@@ -150,22 +154,26 @@ def fetch_existing_downloads(bucket_id, env, token, workdir):
 
 def get_warp_proxy():
     """Check if Cloudflare WARP SOCKS5 proxy is active and reachable."""
-    warp_url = os.getenv("WARP_PROXY", "socks5://127.0.0.1:40000")
-    if not warp_url:
-        return None
+    env_proxy = os.getenv("WARP_PROXY")
+    # If run-with-warp already tested and exported WARP_PROXY, trust it directly (saves ~1.5s)
+    if env_proxy is not None:
+        return env_proxy if env_proxy.strip() else None
+
+    # Fallback check for local development or manual runs
+    warp_url = "socks5://127.0.0.1:40000"
     try:
         res = subprocess.run(
             [
                 "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
                 "-x", warp_url,
                 "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                "--connect-timeout", "4",
-                "--max-time", "6",
+                "--connect-timeout", "2",
+                "--max-time", "3",
                 "https://www.youtube.com/generate_204"
             ],
             capture_output=True,
             text=True,
-            timeout=7
+            timeout=4
         )
         if res.stdout.strip() in ("204", "200"):
             return warp_url
@@ -427,34 +435,7 @@ def backfill_manifest(bucket_id: str, token: str):
         print(f"    Built downloads.json with {len(existing_downloads)} entries ({backfilled_count} scanned).")
         print(f"--> Uploading downloads.json to {bucket_id}...")
 
-        uploaded = False
-        try:
-            cp_res = subprocess.run(
-                ["hf", "buckets", "cp", downloads_file, f"hf://buckets/{bucket_id}/downloads.json"],
-                env=env,
-                capture_output=True,
-                text=True
-            )
-            if cp_res.returncode == 0:
-                uploaded = True
-                print("    ✓ Uploaded downloads.json via hf buckets cp")
-        except Exception as e:
-            print(f"    hf buckets cp error: {e}")
-
-        if not uploaded:
-            try:
-                from huggingface_hub import HfApi
-                api = HfApi(token=token)
-                api.upload_file(
-                    path_or_fileobj=downloads_file,
-                    path_in_repo="downloads.json",
-                    repo_id=bucket_id,
-                    repo_type="dataset"
-                )
-                uploaded = True
-                print("    ✓ Uploaded downloads.json via HfApi")
-            except Exception as e:
-                print(f"    ✗ Failed to upload downloads.json: {e}")
+        uploaded = upload_file_to_hf(downloads_file, "downloads.json", bucket_id, env, token)
 
         print("==================================================")
         print(" Backfill Complete!")
@@ -506,41 +487,10 @@ def main():
     try:
         # 1. Fetch existing ledger (all_songs.txt) from HF Storage Bucket
         print("\n--> Syncing all_songs.txt ledger from bucket...")
-        ledger_loaded = False
-        try:
-            res_cp = subprocess.run(
-                ["hf", "buckets", "cp", f"hf://buckets/{bucket_id}/all_songs.txt", archive_file],
-                env=env,
-                capture_output=True,
-                text=True
-            )
-            if res_cp.returncode == 0 and os.path.exists(archive_file) and os.path.getsize(archive_file) > 0:
-                print("    Loaded existing all_songs.txt via hf buckets cp.")
-                ledger_loaded = True
-        except Exception as e:
-            print(f"    CLI note: {e}")
-
-        if not ledger_loaded:
-            for url in [
-                f"https://huggingface.co/api/buckets/{bucket_id}/raw/all_songs.txt",
-                f"https://huggingface.co/buckets/{bucket_id}/resolve/all_songs.txt",
-                f"https://huggingface.co/datasets/{bucket_id}/raw/main/all_songs.txt",
-                f"https://huggingface.co/datasets/{bucket_id}/resolve/main/all_songs.txt"
-            ]:
-                try:
-                    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-                    with urllib.request.urlopen(req, timeout=10) as response:
-                        if response.status == 200:
-                            content = response.read().decode('utf-8', errors='ignore')
-                            with open(archive_file, "w", encoding="utf-8") as f:
-                                f.write(content)
-                            print(f"    Loaded existing all_songs.txt from {url}")
-                            ledger_loaded = True
-                            break
-                except Exception:
-                    pass
-
-        if not ledger_loaded:
+        ledger_loaded = fetch_file_from_hf("all_songs.txt", archive_file, bucket_id, token, env)
+        if ledger_loaded:
+            print("    ✓ Loaded existing all_songs.txt from bucket.")
+        else:
             Path(archive_file).touch()
             print("    No existing ledger found. Created empty all_songs.txt.")
 
@@ -726,18 +676,27 @@ def main():
                 files_to_push.append((archive_file, "all_songs.txt", "ledger"))
 
             chunk_uploaded = 0
-            for local_path, remote_path, ftype in files_to_push:
-                if upload_file_to_hf(local_path, remote_path, bucket_id, env, token):
-                    if ftype == "media":
-                        uploaded_media_paths.add(local_path)
-                        chunk_uploaded += 1
-                        # Clean up local media file to conserve runner disk space
-                        try:
-                            os.remove(local_path)
-                        except Exception:
-                            pass
-                    elif ftype == "meta":
-                        uploaded_meta_paths.add(local_path)
+
+            def _push_worker(item):
+                l_path, r_path, ftype = item
+                ok = upload_file_to_hf(l_path, r_path, bucket_id, env, token)
+                return item, ok
+
+            # Upload media, metadata, manifest, and ledger concurrently (saves ~4-8s)
+            max_workers = min(4, len(files_to_push))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                for (local_path, remote_path, ftype), success in executor.map(_push_worker, files_to_push):
+                    if success:
+                        if ftype == "media":
+                            uploaded_media_paths.add(local_path)
+                            chunk_uploaded += 1
+                            # Clean up local media file to conserve runner disk space
+                            try:
+                                os.remove(local_path)
+                            except Exception:
+                                pass
+                        elif ftype == "meta":
+                            uploaded_meta_paths.add(local_path)
 
             total_uploaded += chunk_uploaded
             print(f"    ✓ Chunk #{chunk_number} complete: {chunk_uploaded} media file(s) uploaded. (Total library entries: {len(existing_downloads)})")
