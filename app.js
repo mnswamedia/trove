@@ -1232,11 +1232,17 @@
     if (window.lucide) {
       window.lucide.createIcons();
     }
+    if (window.location.hash !== '#modal') {
+      history.pushState({ trove: 'modal' }, '', '#modal');
+    }
   }
 
-  function hideAuthModal() {
+  function hideAuthModal(fromHistory = false) {
     elements.authModal.style.display = 'none';
     elements.authErrorMsg.classList.add('hidden');
+    if (!fromHistory && window.location.hash === '#modal') {
+      history.replaceState({ trove: 'app' }, '', '#app');
+    }
   }
 
   // ==========================================
@@ -1255,10 +1261,13 @@
       if (window.lucide) window.lucide.createIcons();
       // Instantly poll GitHub API with fresh no-cache request on modal open!
       pollActiveIngestion(true);
+      if (window.location.hash !== '#modal') {
+        history.pushState({ trove: 'modal' }, '', '#modal');
+      }
     }
   }
 
-  function hideActivityModal() {
+  function hideActivityModal(fromHistory = false) {
     if (elements.activityModal) {
       elements.activityModal.style.display = 'none';
       // Stop polling when modal is closed
@@ -1266,6 +1275,9 @@
         clearTimeout(activeIngestionPollTimer);
         activeIngestionPollTimer = null;
       }
+    }
+    if (!fromHistory && window.location.hash === '#modal') {
+      history.replaceState({ trove: 'app' }, '', '#app');
     }
   }
 
@@ -1636,10 +1648,16 @@
     elements.startImportBtn.classList.remove('opacity-50', 'pointer-events-none');
     setTimeout(() => elements.importUrlsInput.focus(), 50);
     if (window.lucide) window.lucide.createIcons();
+    if (window.location.hash !== '#modal') {
+      history.pushState({ trove: 'modal' }, '', '#modal');
+    }
   }
 
-  function hideImportModal() {
+  function hideImportModal(fromHistory = false) {
     elements.importModal.style.display = 'none';
+    if (!fromHistory && window.location.hash === '#modal') {
+      history.replaceState({ trove: 'app' }, '', '#app');
+    }
   }
 
   // Strip tracking/share parameters from YouTube URLs (?si=..., &feature=..., etc.)
@@ -2359,9 +2377,12 @@
         elements.expandedPlayer.classList.add('translate-y-0');
       }, 10);
       savePlaybackState();
+      if (window.location.hash !== '#player') {
+        history.pushState({ trove: 'player' }, '', '#player');
+      }
     },
 
-    minimize() {
+    minimize(fromHistory = false) {
       this.isExpanded = false;
       elements.expandedPlayer.classList.remove('translate-y-0');
       elements.expandedPlayer.classList.add('translate-y-full');
@@ -2369,6 +2390,9 @@
         if (!this.isExpanded) elements.expandedPlayer.style.display = 'none';
       }, 300);
       savePlaybackState();
+      if (!fromHistory && window.location.hash === '#player') {
+        history.replaceState({ trove: 'app' }, '', '#app');
+      }
     },
 
     toggleShuffle() {
@@ -2721,6 +2745,8 @@
         state.currentDirectory = item.dataset.dir;
         saveViewSettings();
         render();
+        const targetHash = state.currentDirectory ? ('#dir=' + encodeURIComponent(state.currentDirectory)) : '#app';
+        history.pushState({ trove: 'dir', dir: state.currentDirectory }, '', targetHash);
       }
     });
 
@@ -2728,11 +2754,13 @@
     elements.fileList.addEventListener('click', (e) => {
       const parentRow = e.target.closest('[data-action="go-parent"]');
       if (parentRow) {
-        const parts = state.currentDirectory.split('/');
+        const parts = state.currentDirectory.split('/').filter(Boolean);
         parts.pop();
         state.currentDirectory = parts.join('/');
         saveViewSettings();
         render();
+        const targetHash = state.currentDirectory ? ('#dir=' + encodeURIComponent(state.currentDirectory)) : '#app';
+        history.replaceState({ trove: 'dir', dir: state.currentDirectory }, '', targetHash);
         return;
       }
 
@@ -2746,6 +2774,7 @@
         state.currentDirectory = path;
         saveViewSettings();
         render();
+        history.pushState({ trove: 'dir', dir: path }, '', '#dir=' + encodeURIComponent(path));
       } else {
         const item = state.allItems.find(i => i.path === path);
         if (!item) return;
@@ -3086,68 +3115,106 @@
     }, 2000);
   }
 
-  // PWA & Browser History / Back Gesture Trapping
+  // PWA & Browser History / Back Gesture Trapping (Hardware Back Button & System Edge Swipes)
   let lastBackPressTime = 0;
   let isExiting = false;
+
+  function isAnyModalOpen() {
+    if (elements.importModal && elements.importModal.style.display === 'flex') return true;
+    if (elements.activityModal && elements.activityModal.style.display === 'flex') return true;
+    if (elements.authModal && elements.authModal.style.display === 'flex') return true;
+    return false;
+  }
+
+  function closeAllModals() {
+    if (elements.importModal && elements.importModal.style.display === 'flex') hideImportModal(true);
+    if (elements.activityModal && elements.activityModal.style.display === 'flex') hideActivityModal(true);
+    if (elements.authModal && elements.authModal.style.display === 'flex') hideAuthModal(true);
+  }
+
+  function handleBackNavigation() {
+    if (isExiting) return;
+
+    const now = Date.now();
+    // Debounce rapid duplicate events (e.g. popstate + hashchange firing for same gesture within 250ms)
+    if (now - lastBackPressTime < 250) {
+      return;
+    }
+
+    // 1. If play bar expanded full-screen player is open, close it (do not exit or go back)
+    if (player.isExpanded) {
+      player.minimize(true);
+      if (window.location.hash !== '#app') {
+        history.replaceState({ trove: 'app' }, '', '#app');
+      }
+      return;
+    }
+
+    // 2. If any modal is open, close the modal
+    if (isAnyModalOpen()) {
+      closeAllModals();
+      if (window.location.hash !== '#app') {
+        history.replaceState({ trove: 'app' }, '', '#app');
+      }
+      return;
+    }
+
+    // 3. If in subdirectory, navigate up to parent directory
+    if (state.currentDirectory !== '') {
+      const parts = state.currentDirectory.split('/').filter(Boolean);
+      parts.pop();
+      state.currentDirectory = parts.join('/');
+      saveViewSettings();
+      render();
+      const targetHash = state.currentDirectory ? ('#dir=' + encodeURIComponent(state.currentDirectory)) : '#app';
+      history.replaceState({ trove: 'dir', dir: state.currentDirectory }, '', targetHash);
+      return;
+    }
+
+    // 4. On Home/Root screen:
+    // If user pressed back from #app, browser landed on base URL without #app.
+    if (now - lastBackPressTime < 2000) {
+      // Second back action within 2 seconds: ALLOW EXIT
+      isExiting = true;
+      try {
+        window.close();
+      } catch (_) {}
+      window.removeEventListener('popstate', handleBackNavigation);
+      window.removeEventListener('hashchange', handleBackNavigation);
+      history.back();
+    } else {
+      // First back action: warn user and immediately re-inject the buffer
+      lastBackPressTime = now;
+      showExitToast('Press back again to exit');
+      history.pushState({ trove: 'app' }, '', '#app');
+    }
+  }
+
+  // Auto-arm history buffer on genuine user interaction so Chrome never ignores back gesture
+  function ensureHistoryBuffer() {
+    if (isExiting) return;
+    if (!player.isExpanded && !isAnyModalOpen() && state.currentDirectory === '') {
+      if (!window.location.hash || window.location.hash === '#' || window.location.hash === '') {
+        history.pushState({ trove: 'app' }, '', '#app');
+      }
+    }
+  }
 
   function initHistoryNavigation() {
     if (!window.history || !window.history.pushState) return;
 
-    // Establish baseline state and active state
-    window.history.replaceState({ trove: 'root' }, '');
-    window.history.pushState({ trove: 'active' }, '');
+    // Establish baseline state and active #app state
+    if (window.location.hash !== '#app') {
+      history.replaceState({ trove: 'root' }, '', window.location.pathname + window.location.search);
+      history.pushState({ trove: 'app' }, '', window.location.pathname + window.location.search + '#app');
+    }
 
-    window.addEventListener('popstate', () => {
-      if (isExiting) return;
+    window.addEventListener('popstate', handleBackNavigation);
+    window.addEventListener('hashchange', handleBackNavigation);
 
-      // 1. If play bar expanded full-screen player is open, close it (do not exit or go back)
-      if (player.isExpanded) {
-        player.minimize();
-        window.history.pushState({ trove: 'active' }, '');
-        return;
-      }
-
-      // 2. If any modal is open, close the modal
-      if (elements.importModal && elements.importModal.style.display === 'flex') {
-        hideImportModal();
-        window.history.pushState({ trove: 'active' }, '');
-        return;
-      }
-      if (elements.activityModal && elements.activityModal.style.display === 'flex') {
-        hideActivityModal();
-        window.history.pushState({ trove: 'active' }, '');
-        return;
-      }
-      if (elements.authModal && elements.authModal.style.display === 'flex') {
-        hideAuthModal();
-        window.history.pushState({ trove: 'active' }, '');
-        return;
-      }
-
-      // 3. If in subdirectory, navigate up to parent directory
-      if (state.currentDirectory !== '') {
-        const parts = state.currentDirectory.split('/').filter(Boolean);
-        parts.pop();
-        state.currentDirectory = parts.join('/');
-        saveViewSettings();
-        render();
-        window.history.pushState({ trove: 'active' }, '');
-        return;
-      }
-
-      // 4. On Home/Root screen: Require double back action within 2 seconds to exit
-      const now = Date.now();
-      if (now - lastBackPressTime < 2000) {
-        isExiting = true;
-        try {
-          window.close();
-        } catch (_) {}
-        window.history.back();
-      } else {
-        lastBackPressTime = now;
-        showExitToast('Press back again to exit');
-        window.history.pushState({ trove: 'active' }, '');
-      }
+    // Keep history buffer armed on any genuine user touch or click
+    ['pointerdown', 'touchstart', 'click'].forEach(evt => {
+      window.addEventListener(evt, ensureHistoryBuffer, { passive: true, capture: true });
     });
   }
 
