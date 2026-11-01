@@ -59,7 +59,19 @@
     filterActiveIcon: document.getElementById('filter-active-icon'),
     refreshBtn: document.getElementById('refresh-btn'),
     importBtn: document.getElementById('import-btn'),
-    pwaInstallBtn: document.getElementById('pwa-install-btn'),
+    themeToggleBtn: document.getElementById('theme-toggle-btn'),
+    themeToggleIcon: document.getElementById('theme-toggle-icon'),
+    mobileMenuBtn: document.getElementById('mobile-menu-btn'),
+    mobileNavMenu: document.getElementById('mobile-nav-menu'),
+    mobileThemeBtn: document.getElementById('mobile-theme-btn'),
+    mobileThemeIcon: document.getElementById('mobile-theme-icon'),
+    mobileThemeLabel: document.getElementById('mobile-theme-label'),
+    mobileThemeBadge: document.getElementById('mobile-theme-badge'),
+    mobileActivityBtn: document.getElementById('mobile-activity-btn'),
+    mobileActivityDot: document.getElementById('mobile-activity-dot'),
+    mobileRefreshBtn: document.getElementById('mobile-refresh-btn'),
+    mobileAuthBtn: document.getElementById('mobile-auth-btn'),
+    mobileAuthBadge: document.getElementById('mobile-auth-badge'),
     activityBtn: document.getElementById('activity-btn'),
     activityBtnIcon: document.getElementById('activity-btn-icon'),
     activityBtnLabel: document.getElementById('activity-btn-label'),
@@ -163,6 +175,175 @@
     btnMute: document.getElementById('btn-mute'),
     volumeIcon: document.getElementById('volume-icon'),
     volumeSlider: document.getElementById('volume-slider')
+  };
+
+  // =========================================================================
+  // MOTION ANIMATION SUITE (Cubic-Bezier Springs & Micro-Interactions)
+  // =========================================================================
+  const MotionAnim = {
+    isAvailable() {
+      return typeof window.Motion !== 'undefined' && typeof window.Motion.animate === 'function';
+    },
+
+    // 1. App Launch Intro: Header glide, stats badge spring, and content container
+    playAppIntro() {
+      if (!this.isAvailable()) return;
+      try {
+        const { animate } = window.Motion;
+
+        const header = document.querySelector('header');
+        if (header) {
+          animate(header, { transform: ['translateY(-16px)', 'translateY(0px)'], opacity: [0, 1] }, { duration: 0.38, easing: [0.22, 1, 0.36, 1] });
+        }
+
+        const controls = document.querySelector('main > div:first-child');
+        if (controls) {
+          animate(controls, { transform: ['translateY(-8px)', 'translateY(0px)'], opacity: [0, 1] }, { duration: 0.35, delay: 0.08, easing: 'ease-out' });
+        }
+
+        const fileContainer = document.getElementById('file-list')?.parentElement;
+        if (fileContainer) {
+          animate(fileContainer, { transform: ['translateY(12px)', 'translateY(0px)'], opacity: [0, 1] }, { duration: 0.4, delay: 0.12, easing: [0.22, 1, 0.36, 1] });
+        }
+      } catch (err) {
+        console.warn('App intro animation warning:', err);
+      }
+    },
+
+    // 2. File list rows subtle stagger entrance on render / filter change
+    animateFileList() {
+      if (!this.isAvailable() || !elements.fileList) return;
+      try {
+        const { animate } = window.Motion;
+        const stagger = window.Motion.stagger || ((val) => (i) => i * val);
+        const rows = elements.fileList.querySelectorAll('.file-row');
+        if (!rows || rows.length === 0) return;
+
+        const visibleSlice = Array.from(rows).slice(0, 30);
+        animate(
+          visibleSlice,
+          { transform: ['translateY(8px)', 'translateY(0px)'], opacity: [0, 1] },
+          { delay: stagger(0.016), duration: 0.22, easing: 'ease-out' }
+        );
+      } catch (err) {
+        console.warn('File list animation warning:', err);
+      }
+    },
+
+    // 3. Play / Pause tactile micro-pop
+    pulseButton(btn) {
+      if (!this.isAvailable() || !btn) return;
+      try {
+        const { animate } = window.Motion;
+        animate(btn, { transform: ['scale(0.88)', 'scale(1.08)', 'scale(1)'] }, { duration: 0.24, easing: 'ease-out' });
+      } catch (_) {}
+    },
+
+    // 4. Bottom Play Bar Spring Slide-In
+    animateBottomBar() {
+      if (!this.isAvailable() || !elements.bottomPlayBar) return;
+      try {
+        const { animate } = window.Motion;
+        animate(
+          elements.bottomPlayBar,
+          { transform: ['translateY(60px)', 'translateY(0px)'], opacity: [0, 1] },
+          { duration: 0.38, easing: [0.32, 0.72, 0, 1] }
+        );
+      } catch (_) {}
+    },
+
+    // 5. Fullscreen / Expanded Player Sheet Opening
+    animateExpandedOpen() {
+      if (!this.isAvailable() || !elements.expandedPlayer) return;
+      try {
+        const { animate } = window.Motion;
+        animate(
+          elements.expandedPlayer,
+          { transform: ['translateY(100%)', 'translateY(0%)'] },
+          { duration: 0.36, easing: [0.32, 0.72, 0, 1] }
+        );
+        if (elements.expandedCoverArt) {
+          animate(
+            elements.expandedCoverArt,
+            { transform: ['scale(0.93)', 'scale(1)'], opacity: [0.7, 1] },
+            { duration: 0.35, delay: 0.08, easing: 'ease-out' }
+          );
+        }
+      } catch (_) {}
+    },
+
+    // 6. Fullscreen / Expanded Player Sheet Closing
+    animateExpandedClose(onDone) {
+      if (!this.isAvailable() || !elements.expandedPlayer) {
+        if (onDone) onDone();
+        return;
+      }
+      try {
+        const { animate } = window.Motion;
+        const anim = animate(
+          elements.expandedPlayer,
+          { transform: ['translateY(0%)', 'translateY(100%)'] },
+          { duration: 0.24, easing: [0.32, 0.72, 0, 1] }
+        );
+        if (anim && anim.finished) {
+          anim.finished.then(() => { if (onDone) onDone(); }).catch(() => { if (onDone) onDone(); });
+        } else {
+          setTimeout(() => { if (onDone) onDone(); }, 250);
+        }
+      } catch (_) {
+        if (onDone) onDone();
+      }
+    },
+
+    // 7. Track Artwork crossfade & gentle pop
+    animateTrackArt() {
+      if (!this.isAvailable()) return;
+      try {
+        const { animate } = window.Motion;
+        if (elements.expandedCoverImg && !elements.expandedCoverImg.classList.contains('hidden')) {
+          animate(elements.expandedCoverImg, { transform: ['scale(0.95)', 'scale(1)'], opacity: [0.7, 1] }, { duration: 0.28, easing: 'ease-out' });
+        }
+        if (elements.barThumbImg && !elements.barThumbImg.classList.contains('hidden')) {
+          animate(elements.barThumbImg, { transform: ['scale(0.9)', 'scale(1)'], opacity: [0.7, 1] }, { duration: 0.22, easing: 'ease-out' });
+        }
+      } catch (_) {}
+    },
+
+    // 8. Modal Entrance (Fade + Spring scale)
+    animateModalIn(modalEl) {
+      if (!this.isAvailable() || !modalEl) return;
+      try {
+        const { animate } = window.Motion;
+        const card = modalEl.firstElementChild;
+        animate(modalEl, { opacity: [0, 1] }, { duration: 0.18, easing: 'ease-out' });
+        if (card) {
+          animate(card, { transform: ['scale(0.94) translateY(12px)', 'scale(1) translateY(0px)'] }, { duration: 0.26, easing: [0.22, 1, 0.36, 1] });
+        }
+      } catch (_) {}
+    },
+
+    // 9. Modal Exit
+    animateModalOut(modalEl, onDone) {
+      if (!this.isAvailable() || !modalEl) {
+        if (onDone) onDone();
+        return;
+      }
+      try {
+        const { animate } = window.Motion;
+        const card = modalEl.firstElementChild;
+        if (card) {
+          animate(card, { transform: ['scale(1) translateY(0px)', 'scale(0.95) translateY(8px)'] }, { duration: 0.14, easing: 'ease-in' });
+        }
+        const anim = animate(modalEl, { opacity: [1, 0] }, { duration: 0.15, easing: 'ease-in' });
+        if (anim && anim.finished) {
+          anim.finished.then(() => { if (onDone) onDone(); }).catch(() => { if (onDone) onDone(); });
+        } else {
+          setTimeout(() => { if (onDone) onDone(); }, 160);
+        }
+      } catch (_) {
+        if (onDone) onDone();
+      }
+    }
   };
 
   // =========================================================================
@@ -940,21 +1121,21 @@
     // Show ".." parent folder row if inside a subfolder in tree view
     if (state.viewMode === 'tree' && state.currentDirectory !== '' && !state.searchQuery) {
       html += `
-        <div class="grid grid-cols-12 items-center px-4 py-2.5 hover:bg-almond-cream/20 cursor-pointer transition text-sm" data-action="go-parent">
+        <div class="grid grid-cols-12 items-center px-4 py-2.5 hover:bg-almond-cream/20 dark:hover:bg-[#1a1f28] cursor-pointer transition text-sm" data-action="go-parent">
           <div class="col-span-7 md:col-span-6 flex items-center gap-3 min-w-0">
-            <div class="w-8 h-8 rounded-lg bg-almond-cream/60 text-stone-brown flex items-center justify-center shrink-0">
+            <div class="w-8 h-8 rounded-lg bg-almond-cream/60 dark:bg-[#202532] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0">
               <i data-lucide="corner-left-up" class="w-4 h-4"></i>
             </div>
             <div class="flex flex-col min-w-0">
-              <span class="font-semibold text-black truncate">..</span>
-              <span class="font-mono text-[11px] text-stone-brown/60 truncate">Parent Directory</span>
+              <span class="font-semibold text-black dark:text-[#f3f4f6] truncate">..</span>
+              <span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">Parent Directory</span>
             </div>
           </div>
           <div class="col-span-2 md:col-span-2">
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-almond-cream/60 text-stone-brown">UP</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">UP</span>
           </div>
-          <div class="col-span-3 md:col-span-2 font-mono text-xs text-stone-brown/60 text-right md:text-left">--</div>
-          <div class="hidden md:block col-span-2 text-xs text-stone-brown/60">Directory</div>
+          <div class="col-span-3 md:col-span-2 font-mono text-xs text-stone-brown/60 dark:text-[#758092] text-right md:text-left">--</div>
+          <div class="hidden md:block col-span-2 text-xs text-stone-brown/60 dark:text-[#758092]">Directory</div>
         </div>
       `;
     }
@@ -969,29 +1150,31 @@
         : (item.isDir ? 'Folder' : (item.ext ? `.${item.ext}` : ''));
 
       // Category badge styling
-      let badgeClasses = 'bg-gray-100 text-stone-brown';
-      let iconColor = 'bg-almond-cream/40 text-stone-brown';
+      let badgeClasses = 'bg-gray-100 text-stone-brown dark:bg-[#242a38] dark:text-[#9aa4b2]';
+      let iconColor = 'bg-almond-cream/40 text-stone-brown dark:bg-[#202532] dark:text-[#c6ac8f]';
 
       if (item.category === 'music') {
-        badgeClasses = 'bg-almond-cream text-stone-brown';
-        iconColor = isCurrentActive ? 'bg-jet-black text-almond-cream' : 'bg-almond-cream text-stone-brown';
+        badgeClasses = 'bg-almond-cream text-stone-brown dark:bg-[#242a38] dark:text-[#c6ac8f]';
+        iconColor = isCurrentActive 
+          ? 'bg-jet-black text-almond-cream dark:bg-[#c6ac8f] dark:text-[#0e1116]' 
+          : 'bg-almond-cream text-stone-brown dark:bg-[#202532] dark:text-[#c6ac8f]';
       } else if (item.category === 'video') {
-        badgeClasses = 'bg-jet-black text-almond-cream';
-        iconColor = 'bg-jet-black text-almond-cream';
+        badgeClasses = 'bg-jet-black text-almond-cream dark:bg-[#323846] dark:text-[#f3f4f6]';
+        iconColor = 'bg-jet-black text-almond-cream dark:bg-[#323846] dark:text-[#f3f4f6]';
       } else if (item.category === 'folder') {
-        badgeClasses = 'bg-almond-cream/60 text-stone-brown';
-        iconColor = 'bg-almond-cream/60 text-stone-brown';
+        badgeClasses = 'bg-almond-cream/60 text-stone-brown dark:bg-[#202532] dark:text-[#9aa4b2]';
+        iconColor = 'bg-almond-cream/60 text-stone-brown dark:bg-[#202532] dark:text-[#c6ac8f]';
       } else if (item.category === 'document') {
-        badgeClasses = 'bg-khaki-beige/35 text-jet-black font-semibold';
-        iconColor = 'bg-khaki-beige/25 text-stone-brown';
+        badgeClasses = 'bg-khaki-beige/35 text-jet-black font-semibold dark:bg-[#2a303e] dark:text-[#d4bfa6]';
+        iconColor = 'bg-khaki-beige/25 text-stone-brown dark:bg-[#242a38] dark:text-[#c6ac8f]';
       } else if (item.category === 'image') {
-        badgeClasses = 'bg-amber-100 text-amber-900 font-semibold';
-        iconColor = 'bg-amber-50 text-amber-800';
+        badgeClasses = 'bg-amber-100 text-amber-900 font-semibold dark:bg-[#382d1c] dark:text-[#fbbf24]';
+        iconColor = 'bg-amber-50 text-amber-800 dark:bg-[#2d2516] dark:text-[#fbbf24]';
       }
 
       const activeRowClass = isCurrentActive 
-        ? 'bg-almond-cream/30 border-l-4 border-l-jet-black font-medium' 
-        : 'hover:bg-almond-cream/15';
+        ? 'bg-almond-cream/30 dark:bg-[#202736] border-l-4 border-l-jet-black dark:border-l-[#c6ac8f] font-medium' 
+        : 'hover:bg-almond-cream/15 dark:hover:bg-[#1a1f28]';
 
       let thumbSlotHtml = '';
       if (isPlayable) {
@@ -1021,8 +1204,8 @@
           <div class="col-span-7 md:col-span-6 flex items-center gap-2.5 sm:gap-3 min-w-0">
             ${thumbSlotHtml}
             <div class="flex flex-col min-w-0">
-              <span class="font-semibold text-black truncate ${isCurrentActive ? 'text-jet-black' : ''}">${escapeHtml(item.name)}</span>
-              <span class="font-mono text-[11px] text-stone-brown/60 truncate">${escapeHtml(pathSub)}</span>
+              <span class="font-semibold text-black dark:text-[#f3f4f6] truncate ${isCurrentActive ? 'text-jet-black dark:text-white' : ''}">${escapeHtml(item.name)}</span>
+              <span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">${escapeHtml(pathSub)}</span>
             </div>
           </div>
           <div class="col-span-2 md:col-span-2">
@@ -1030,10 +1213,10 @@
               ${escapeHtml(item.label)}
             </span>
           </div>
-          <div class="col-span-3 md:col-span-2 font-mono text-xs text-stone-brown text-right md:text-left">
+          <div class="col-span-3 md:col-span-2 font-mono text-xs text-stone-brown dark:text-[#9aa4b2] text-right md:text-left">
             ${isFolder ? '--' : formatBytes(item.size)}
           </div>
-          <div class="hidden md:block col-span-2 text-xs ${isPlayable && isCurrentActive ? 'text-jet-black font-semibold' : 'text-stone-brown/70'}">
+          <div class="hidden md:block col-span-2 text-xs ${isPlayable && isCurrentActive ? 'text-jet-black dark:text-[#c6ac8f] font-semibold' : 'text-stone-brown/70 dark:text-[#758092]'}">
             ${statusText}
           </div>
         </div>
@@ -1046,6 +1229,9 @@
     if (window.lucide) {
       window.lucide.createIcons();
     }
+
+    // Smooth staggered entrance for rows
+    MotionAnim.animateFileList();
 
     // Trigger lazy extraction for visible file thumbnails
     initListThumbnailObserver();
@@ -1145,7 +1331,7 @@
   function renderBreadcrumbs() {
     if (state.viewMode === 'flat' || state.searchQuery) {
       elements.breadcrumbs.innerHTML = `
-        <span class="font-semibold text-jet-black">
+        <span class="font-semibold text-jet-black dark:text-[#f3f4f6]">
           ${state.searchQuery ? `Search Results: "${escapeHtml(state.searchQuery)}"` : 'All Files (Flat View)'}
         </span>
       `;
@@ -1155,7 +1341,7 @@
     const parts = state.currentDirectory ? state.currentDirectory.split('/') : [];
 
     let html = `
-      <div class="breadcrumb-item inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-almond-cream/60 cursor-pointer transition ${parts.length === 0 ? 'font-bold text-jet-black' : 'text-stone-brown'}" data-dir="">
+      <div class="breadcrumb-item inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-almond-cream/60 dark:hover:bg-[#202532] cursor-pointer transition ${parts.length === 0 ? 'font-bold text-jet-black dark:text-[#f3f4f6]' : 'text-stone-brown dark:text-[#9aa4b2]'}" data-dir="">
         <i data-lucide="folder" class="w-3.5 h-3.5"></i>
         <span>Root</span>
       </div>
@@ -1166,8 +1352,8 @@
       accumulatedPath = accumulatedPath ? `${accumulatedPath}/${part}` : part;
       const isLast = index === parts.length - 1;
       html += `
-        <span class="text-khaki-beige select-none">/</span>
-        <div class="breadcrumb-item px-2 py-1 rounded hover:bg-almond-cream/60 cursor-pointer transition ${isLast ? 'font-bold text-jet-black' : 'text-stone-brown'}" data-dir="${escapeHtml(accumulatedPath)}">
+        <span class="text-khaki-beige dark:text-[#758092] select-none">/</span>
+        <div class="breadcrumb-item px-2 py-1 rounded hover:bg-almond-cream/60 dark:hover:bg-[#202532] cursor-pointer transition ${isLast ? 'font-bold text-jet-black dark:text-[#f3f4f6]' : 'text-stone-brown dark:text-[#9aa4b2]'}" data-dir="${escapeHtml(accumulatedPath)}">
           <span>${escapeHtml(part)}</span>
         </div>
       `;
@@ -1182,6 +1368,7 @@
 
   // State Banner Helpers
   function showState(iconName, title, desc, showBtn = false, btnLabel = 'Retry', onBtnClick = null, spin = false) {
+    if (elements.fileList) elements.fileList.style.display = 'none';
     elements.explorerState.style.display = 'flex';
     elements.stateIcon.innerHTML = `<i data-lucide="${iconName}" class="w-10 h-10 ${spin ? 'animate-spin' : ''}"></i>`;
     elements.stateTitle.innerText = title;
@@ -1203,6 +1390,7 @@
 
   function hideState() {
     elements.explorerState.style.display = 'none';
+    if (elements.fileList) elements.fileList.style.display = 'block';
   }
 
   function setLoading(loading) {
@@ -1232,11 +1420,14 @@
     if (window.lucide) {
       window.lucide.createIcons();
     }
+    MotionAnim.animateModalIn(elements.authModal);
   }
 
   function hideAuthModal() {
-    elements.authModal.style.display = 'none';
-    elements.authErrorMsg.classList.add('hidden');
+    MotionAnim.animateModalOut(elements.authModal, () => {
+      elements.authModal.style.display = 'none';
+      elements.authErrorMsg.classList.add('hidden');
+    });
   }
 
   // ==========================================
@@ -1255,17 +1446,20 @@
       if (window.lucide) window.lucide.createIcons();
       // Instantly poll GitHub API with fresh no-cache request on modal open!
       pollActiveIngestion(true);
+      MotionAnim.animateModalIn(elements.activityModal);
     }
   }
 
   function hideActivityModal() {
     if (elements.activityModal) {
-      elements.activityModal.style.display = 'none';
       // Stop polling when modal is closed
       if (activeIngestionPollTimer) {
         clearTimeout(activeIngestionPollTimer);
         activeIngestionPollTimer = null;
       }
+      MotionAnim.animateModalOut(elements.activityModal, () => {
+        elements.activityModal.style.display = 'none';
+      });
     }
   }
 
@@ -1346,6 +1540,7 @@
         elements.activityStatusPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-100 text-stone-brown';
         if (elements.activityPulseDot) elements.activityPulseDot.className = 'w-2.5 h-2.5 rounded-full bg-stone-brown/40';
       }
+      if (elements.mobileActivityDot) elements.mobileActivityDot.classList.add('hidden');
       if (elements.activityStepInfo) elements.activityStepInfo.innerText = 'No ingestion runs recorded yet.';
       if (elements.activityTimeElapsed) elements.activityTimeElapsed.innerText = '00:00';
       if (elements.activityProgressBar) {
@@ -1355,8 +1550,8 @@
       if (elements.activityCounts) elements.activityCounts.innerText = 'Ready to import';
       if (elements.activityItemsList) {
         elements.activityItemsList.innerHTML = `
-          <div class="p-4 text-center text-xs text-stone-brown bg-almond-cream/15 rounded-xl border border-dashed border-almond-cream flex flex-col items-center gap-2">
-            <i data-lucide="info" class="w-4 h-4 text-stone-brown/60"></i>
+          <div class="p-4 text-center text-xs text-stone-brown dark:text-[#9aa4b2] bg-almond-cream/15 dark:bg-[#1a1e26] rounded-xl border border-dashed border-almond-cream dark:border-[#2b3240] flex flex-col items-center gap-2">
+            <i data-lucide="info" class="w-4 h-4 text-stone-brown/60 dark:text-[#758092]"></i>
             <span>No active downloads. Click the Import button (download icon) in the header to import songs from YouTube.</span>
           </div>
         `;
@@ -1399,6 +1594,7 @@
         elements.activityStatusPill.innerText = run.status === 'queued' ? 'Queued' : 'In Progress';
         elements.activityStatusPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800';
         if (elements.activityPulseDot) elements.activityPulseDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse';
+        if (elements.mobileActivityDot) elements.mobileActivityDot.classList.remove('hidden');
       }
       if (elements.activityStepInfo) {
         elements.activityStepInfo.innerText = activeStep ? `Step: ${activeStep.name}` : (run.status === 'queued' ? 'Runner queued in GitHub Actions...' : 'Running workflow...');
@@ -1415,6 +1611,7 @@
         elements.activityStatusPill.innerText = 'Completed';
         elements.activityStatusPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800';
         if (elements.activityPulseDot) elements.activityPulseDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
+        if (elements.mobileActivityDot) elements.mobileActivityDot.classList.add('hidden');
       }
       if (elements.activityStepInfo) {
         elements.activityStepInfo.innerText = `Finished successfully in ${formatDuration(elapsedSec)}`;
@@ -1432,6 +1629,7 @@
         elements.activityStatusPill.innerText = run.conclusion ? run.conclusion.toUpperCase() : 'FAILED';
         elements.activityStatusPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-800';
         if (elements.activityPulseDot) elements.activityPulseDot.className = 'w-2.5 h-2.5 rounded-full bg-red-500';
+        if (elements.mobileActivityDot) elements.mobileActivityDot.classList.add('hidden');
       }
       if (elements.activityStepInfo) {
         elements.activityStepInfo.innerText = `Run ended with: ${run.conclusion || 'failure'}`;
@@ -1445,7 +1643,7 @@
     if (elements.activityItemsList) {
       if (visibleSteps.length === 0) {
         elements.activityItemsList.innerHTML = `
-          <div class="p-3 text-center text-xs text-stone-brown bg-almond-cream/15 rounded-xl border border-dashed border-almond-cream">
+          <div class="p-3 text-center text-xs text-stone-brown dark:text-[#9aa4b2] bg-almond-cream/15 dark:bg-[#1a1e26] rounded-xl border border-dashed border-almond-cream dark:border-[#2b3240]">
             ${isRunning ? 'Connecting to runner...' : 'Workflow completed.'}
           </div>
         `;
@@ -1453,26 +1651,26 @@
         let listHtml = '';
         visibleSteps.forEach((st, idx) => {
           let badge = '';
-          let rowBg = 'bg-almond-cream/15 border-almond-cream/60';
+          let rowBg = 'bg-almond-cream/15 border-almond-cream/60 dark:bg-[#1a1e26] dark:border-[#2b3240]';
 
           if (st.status === 'completed' && st.conclusion === 'success') {
-            badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 shrink-0"><i data-lucide="check" class="w-3 h-3"></i>Done</span>';
-            rowBg = 'bg-emerald-50/50 border-emerald-200/60';
+            badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 shrink-0"><i data-lucide="check" class="w-3 h-3"></i>Done</span>';
+            rowBg = 'bg-emerald-50/50 border-emerald-200/60 dark:bg-emerald-950/30 dark:border-emerald-800/40';
           } else if (st.status === 'in_progress') {
-            badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-100 text-amber-800 shrink-0"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i>In Progress</span>';
-            rowBg = 'bg-amber-50/80 border-amber-300';
+            badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 shrink-0"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i>In Progress</span>';
+            rowBg = 'bg-amber-50/80 border-amber-300 dark:bg-amber-950/30 dark:border-amber-700/50';
           } else if (st.conclusion === 'failure') {
-            badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-red-100 text-red-800 shrink-0"><i data-lucide="x" class="w-3 h-3"></i>Failed</span>';
-            rowBg = 'bg-red-50/60 border-red-200';
+            badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 shrink-0"><i data-lucide="x" class="w-3 h-3"></i>Failed</span>';
+            rowBg = 'bg-red-50/60 border-red-200 dark:bg-red-950/30 dark:border-red-800/40';
           } else {
-            badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-100 text-stone-brown shrink-0"><i data-lucide="clock" class="w-3 h-3"></i>Queued</span>';
+            badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-100 text-stone-brown dark:bg-[#202532] dark:text-[#9aa4b2] shrink-0"><i data-lucide="clock" class="w-3 h-3"></i>Queued</span>';
           }
 
           listHtml += `
             <div class="p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2.5 transition ${rowBg}">
               <div class="flex items-center gap-2 min-w-0 flex-1">
-                <span class="font-mono text-[10px] text-stone-brown/60 shrink-0">#${idx + 1}</span>
-                <span class="font-semibold text-black truncate" title="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>
+                <span class="font-mono text-[10px] text-stone-brown/60 dark:text-[#758092] shrink-0">#${idx + 1}</span>
+                <span class="font-semibold text-black dark:text-[#f3f4f6] truncate" title="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>
               </div>
               ${badge}
             </div>
@@ -1636,10 +1834,13 @@
     elements.startImportBtn.classList.remove('opacity-50', 'pointer-events-none');
     setTimeout(() => elements.importUrlsInput.focus(), 50);
     if (window.lucide) window.lucide.createIcons();
+    MotionAnim.animateModalIn(elements.importModal);
   }
 
   function hideImportModal() {
-    elements.importModal.style.display = 'none';
+    MotionAnim.animateModalOut(elements.importModal, () => {
+      elements.importModal.style.display = 'none';
+    });
   }
 
   // Strip tracking/share parameters from YouTube URLs (?si=..., &feature=..., etc.)
@@ -2027,6 +2228,10 @@
 
       if (window.lucide) window.lucide.createIcons();
 
+      if (thumbUrl) {
+        MotionAnim.animateTrackArt();
+      }
+
       // Keep native Lock Screen / Notification MediaSession artwork in sync
       if (thumbUrl && this.currentTrack && item && this.currentTrack.path === item.path) {
         this.updateMediaSession(thumbUrl);
@@ -2204,8 +2409,8 @@
       this.isLoading = loading;
       if (loading) {
         elements.barLoadingBadge.classList.remove('hidden');
-        elements.btnPlayPause.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin text-white"></i>';
-        elements.btnExpandedPlay.innerHTML = '<i data-lucide="loader-2" class="w-7 h-7 animate-spin text-white"></i>';
+        elements.btnPlayPause.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin text-current"></i>';
+        elements.btnExpandedPlay.innerHTML = '<i data-lucide="loader-2" class="w-7 h-7 animate-spin text-current"></i>';
         elements.videoLoadingOverlay.classList.remove('hidden');
       } else {
         elements.barLoadingBadge.classList.add('hidden');
@@ -2323,8 +2528,8 @@
       if (this.isLoading) return;
 
       const icon = this.isPlaying ? 'pause' : 'play';
-      elements.btnPlayPause.innerHTML = `<i data-lucide="${icon}" class="w-4 h-4 ml-0.5 text-white"></i>`;
-      elements.btnExpandedPlay.innerHTML = `<i data-lucide="${icon}" class="w-7 h-7 ml-0.5 text-white"></i>`;
+      elements.btnPlayPause.innerHTML = `<i data-lucide="${icon}" class="w-4 h-4 ml-0.5 text-current"></i>`;
+      elements.btnExpandedPlay.innerHTML = `<i data-lucide="${icon}" class="w-7 h-7 ml-0.5 text-current"></i>`;
 
       if (this.isPlaying) {
         elements.barPlayingIndicator.classList.remove('hidden');
@@ -2349,26 +2554,26 @@
         elements.bottomPlayBar.classList.add('translate-y-0', 'opacity-100', 'pointer-events-auto');
       }, 10);
       document.body.classList.add('pb-28');
+      MotionAnim.animateBottomBar();
     },
 
     expand() {
       this.isExpanded = true;
       elements.expandedPlayer.style.display = 'flex';
-      setTimeout(() => {
-        elements.expandedPlayer.classList.remove('translate-y-full');
-        elements.expandedPlayer.classList.add('translate-y-0');
-      }, 10);
+      elements.expandedPlayer.classList.remove('translate-y-full');
+      elements.expandedPlayer.classList.add('translate-y-0');
       savePlaybackState();
+      MotionAnim.animateExpandedOpen();
     },
 
     minimize() {
       this.isExpanded = false;
-      elements.expandedPlayer.classList.remove('translate-y-0');
-      elements.expandedPlayer.classList.add('translate-y-full');
-      setTimeout(() => {
-        if (!this.isExpanded) elements.expandedPlayer.style.display = 'none';
-      }, 300);
       savePlaybackState();
+      MotionAnim.animateExpandedClose(() => {
+        elements.expandedPlayer.classList.remove('translate-y-0');
+        elements.expandedPlayer.classList.add('translate-y-full');
+        elements.expandedPlayer.style.display = 'none';
+      });
     },
 
     toggleShuffle() {
@@ -2610,9 +2815,9 @@
           else checkIcon.classList.add('hidden');
         }
         if (isActive) {
-          opt.classList.add('bg-almond-cream/50', 'font-semibold');
+          opt.classList.add('bg-almond-cream/50', 'dark:bg-[#222734]', 'font-semibold');
         } else {
-          opt.classList.remove('bg-almond-cream/50', 'font-semibold');
+          opt.classList.remove('bg-almond-cream/50', 'dark:bg-[#222734]', 'font-semibold');
         }
       });
     }
@@ -2631,6 +2836,7 @@
       localStorage.setItem(storage.tokenKey, inputVal);
       hideAuthModal();
       if (elements.authBtnLabel) elements.authBtnLabel.innerText = 'Connected';
+      if (elements.mobileAuthBadge) elements.mobileAuthBadge.innerText = 'Connected';
       if (elements.authSettingsBtn) elements.authSettingsBtn.title = 'Hugging Face Access Token (Connected)';
       loadRepository(true);
     });
@@ -2691,7 +2897,13 @@
     if (elements.filterDropdownBtn && elements.filterDropdownMenu) {
       elements.filterDropdownBtn.addEventListener('click', (e) => {
         e.stopPropagation();
+        const willOpen = elements.filterDropdownMenu.classList.contains('hidden');
         elements.filterDropdownMenu.classList.toggle('hidden');
+        if (willOpen && MotionAnim.isAvailable()) {
+          try {
+            window.Motion.animate(elements.filterDropdownMenu, { opacity: [0, 1], transform: ['scale(0.96) translateY(-6px)', 'scale(1) translateY(0px)'] }, { duration: 0.16, easing: 'ease-out' });
+          } catch (_) {}
+        }
       });
 
       elements.filterDropdownMenu.addEventListener('click', (e) => {
@@ -2763,27 +2975,33 @@
     // Player Play/Pause Buttons
     elements.btnPlayPause.addEventListener('click', (e) => {
       e.stopPropagation();
+      MotionAnim.pulseButton(elements.btnPlayPause);
       player.togglePlayPause();
     });
 
     elements.btnExpandedPlay.addEventListener('click', () => {
+      MotionAnim.pulseButton(elements.btnExpandedPlay);
       player.togglePlayPause();
     });
 
     // Skip Next & Previous Buttons
     elements.btnNext.addEventListener('click', (e) => {
       e.stopPropagation();
+      MotionAnim.pulseButton(elements.btnNext);
       player.playNext();
     });
     elements.btnExpandedNext.addEventListener('click', () => {
+      MotionAnim.pulseButton(elements.btnExpandedNext);
       player.playNext();
     });
 
     elements.btnPrev.addEventListener('click', (e) => {
       e.stopPropagation();
+      MotionAnim.pulseButton(elements.btnPrev);
       player.playPrev();
     });
     elements.btnExpandedPrev.addEventListener('click', () => {
+      MotionAnim.pulseButton(elements.btnExpandedPrev);
       player.playPrev();
     });
 
@@ -2989,35 +3207,48 @@
       saveViewSettings();
     });
 
-    // PWA Install Button & BeforeInstallPrompt Listener
-    let deferredInstallPrompt = null;
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredInstallPrompt = e;
-      if (elements.pwaInstallBtn) {
-        elements.pwaInstallBtn.classList.remove('hidden');
-        if (window.lucide) window.lucide.createIcons();
-      }
-    });
-
-    if (elements.pwaInstallBtn) {
-      elements.pwaInstallBtn.addEventListener('click', async () => {
-        if (!deferredInstallPrompt) return;
-        deferredInstallPrompt.prompt();
-        const choice = await deferredInstallPrompt.userChoice;
-        if (choice && choice.outcome === 'accepted') {
-          console.log('User accepted Trove PWA install');
-        }
-        deferredInstallPrompt = null;
-        elements.pwaInstallBtn.classList.add('hidden');
+    // Mobile Header Dropdown Menu Toggle & Actions
+    if (elements.mobileMenuBtn && elements.mobileNavMenu) {
+      elements.mobileMenuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        elements.mobileNavMenu.classList.toggle('hidden');
       });
-    }
 
-    window.addEventListener('appinstalled', () => {
-      console.log('Trove PWA installed successfully');
-      if (elements.pwaInstallBtn) elements.pwaInstallBtn.classList.add('hidden');
-      deferredInstallPrompt = null;
-    });
+      // Close mobile menu when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!elements.mobileNavMenu.contains(e.target) && !elements.mobileMenuBtn.contains(e.target)) {
+          elements.mobileNavMenu.classList.add('hidden');
+        }
+      });
+
+      if (elements.mobileThemeBtn) {
+        elements.mobileThemeBtn.addEventListener('click', () => {
+          elements.mobileNavMenu.classList.add('hidden');
+          toggleTheme();
+        });
+      }
+
+      if (elements.mobileActivityBtn) {
+        elements.mobileActivityBtn.addEventListener('click', () => {
+          elements.mobileNavMenu.classList.add('hidden');
+          showActivityModal();
+        });
+      }
+
+      if (elements.mobileRefreshBtn) {
+        elements.mobileRefreshBtn.addEventListener('click', () => {
+          elements.mobileNavMenu.classList.add('hidden');
+          loadRepository(true);
+        });
+      }
+
+      if (elements.mobileAuthBtn) {
+        elements.mobileAuthBtn.addEventListener('click', () => {
+          elements.mobileNavMenu.classList.add('hidden');
+          showAuthModal();
+        });
+      }
+    }
 
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
@@ -3084,6 +3315,76 @@
       toast.classList.remove('opacity-100', 'translate-y-0');
       toast.classList.add('opacity-0', 'translate-y-3');
     }, 2000);
+  }
+
+  // Theme Management (Light / Dark)
+  function initTheme() {
+    const savedTheme = localStorage.getItem('trove_theme');
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const isDark = savedTheme === 'dark' || (!savedTheme && prefersDark);
+    applyTheme(isDark ? 'dark' : 'light');
+
+    if (elements.themeToggleBtn) {
+      elements.themeToggleBtn.addEventListener('click', toggleTheme);
+    }
+
+    if (window.matchMedia) {
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+        if (!localStorage.getItem('trove_theme')) {
+          applyTheme(e.matches ? 'dark' : 'light');
+        }
+      });
+    }
+  }
+
+  function applyTheme(theme) {
+    const isDark = theme === 'dark';
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+
+    if (elements.themeToggleIcon) {
+      elements.themeToggleIcon.setAttribute('data-lucide', isDark ? 'sun' : 'moon');
+    }
+
+    // Sync mobile menu row
+    if (elements.mobileThemeIcon) {
+      elements.mobileThemeIcon.setAttribute('data-lucide', isDark ? 'sun' : 'moon');
+    }
+    if (elements.mobileThemeLabel) {
+      elements.mobileThemeLabel.innerText = isDark ? 'Light Mode' : 'Dark Mode';
+    }
+    if (elements.mobileThemeBadge) {
+      elements.mobileThemeBadge.innerText = isDark ? 'On' : 'Off';
+    }
+
+    if (window.lucide) {
+      window.lucide.createIcons();
+    }
+
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) {
+      metaTheme.setAttribute('content', isDark ? '#0e1116' : '#22333b');
+    }
+
+    if (elements.themeToggleBtn) {
+      elements.themeToggleBtn.title = isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+    }
+  }
+
+  function toggleTheme() {
+    const isCurrentlyDark = document.documentElement.classList.contains('dark');
+    const newTheme = isCurrentlyDark ? 'light' : 'dark';
+    localStorage.setItem('trove_theme', newTheme);
+    applyTheme(newTheme);
+
+    if (window.Motion && Motion.animate && elements.themeToggleBtn) {
+      try {
+        Motion.animate(elements.themeToggleBtn, { rotate: [0, 180], scale: [0.88, 1] }, { duration: 0.3, easing: [0.22, 1, 0.36, 1] });
+      } catch (err) {}
+    }
   }
 
   // PWA & Browser History / Back Gesture Trapping
@@ -3153,6 +3454,7 @@
 
   // Initialize
   function init() {
+    initTheme();
     if (elements.repoIdDisplay) elements.repoIdDisplay.innerText = repo.id;
     if (elements.modalRepoId) elements.modalRepoId.innerText = repo.id;
     if (elements.authUsername) elements.authUsername.value = repo.owner || 'mnswa';
@@ -3162,6 +3464,7 @@
     loadSavedViewSettings();
     loadStoredThumbnails();
     setupEventListeners();
+    MotionAnim.playAppIntro();
 
     // Register Service Worker for PWA (Offline Shell & Fast Launch)
     if ('serviceWorker' in navigator) {
@@ -3189,10 +3492,12 @@
 
     if (state.token) {
       if (elements.authBtnLabel) elements.authBtnLabel.innerText = 'Connected';
+      if (elements.mobileAuthBadge) elements.mobileAuthBadge.innerText = 'Connected';
       if (elements.authSettingsBtn) elements.authSettingsBtn.title = 'Hugging Face Access Token (Connected)';
       loadRepository(false); // Uses 1-hour cache if valid
     } else {
       if (elements.authBtnLabel) elements.authBtnLabel.innerText = 'Token';
+      if (elements.mobileAuthBadge) elements.mobileAuthBadge.innerText = 'Token';
       if (elements.authSettingsBtn) elements.authSettingsBtn.title = 'Configure Hugging Face Token';
       showAuthModal();
     }

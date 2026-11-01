@@ -48,28 +48,32 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Tailwind CSS Configuration (Configured BEFORE CDN script) -->
   <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            'black': '#0a0908',
-            'jet-black': '#22333b',
-            'almond-cream': '#eae0d5',
-            'khaki-beige': '#c6ac8f',
-            'stone-brown': '#5e503f',
-          },
-          fontFamily: {
-            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
-            mono: ['"JetBrains Mono"', 'monospace'],
+    window.tailwind = {
+      config: {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              'black': '#0a0908',
+              'jet-black': '#22333b',
+              'almond-cream': '#eae0d5',
+              'khaki-beige': '#c6ac8f',
+              'stone-brown': '#5e503f',
+            },
+            fontFamily: {
+              sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+              mono: ['"JetBrains Mono"', 'monospace'],
+            }
           }
         }
       }
-    }
+    };
   </script>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
 
   <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
@@ -116,35 +120,80 @@
         </div>
       </div>
 
-      <!-- Right: Action Buttons (Clean Icons Only) -->
-      <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
-        <!-- Install PWA App Button (Shown when browser detects installability) -->
-        <button id="pwa-install-btn" class="hidden h-8 px-2 sm:px-2.5 inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-900 dark:bg-emerald-500/20 dark:border-emerald-500/40 dark:text-emerald-300 hover:bg-emerald-500/25 transition shadow-sm select-none" title="Install Trove App">
-          <i data-lucide="download-cloud" class="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400"></i>
-          <span class="text-xs font-semibold font-mono hidden sm:inline">Install</span>
+      <!-- Right: Action Buttons (Responsive: Desktop rows vs Mobile Dropdown) -->
+      <div class="flex items-center gap-1 sm:gap-1.5 shrink-0 relative">
+        <!-- Direct Primary Action: Import (Always accessible on both mobile and desktop) -->
+        <button id="import-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-jet-black text-white hover:bg-black dark:bg-[#f3f4f6] dark:text-[#0e1116] dark:hover:bg-white transition shadow-sm shrink-0" title="Import from YouTube">
+          <i data-lucide="download" class="w-4 h-4"></i>
         </button>
 
-        <!-- Theme Switcher (Toggle Light / Dark) -->
-        <button id="theme-toggle-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm select-none" title="Toggle Theme (Light / Dark)">
+        <!-- Desktop Action Buttons (Hidden on mobile < 640px) -->
+        <button id="theme-toggle-btn" class="hidden sm:inline-flex w-8 h-8 items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm select-none" title="Toggle Theme (Light / Dark)">
           <i data-lucide="moon" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]" id="theme-toggle-icon"></i>
           <span class="sr-only">Toggle Theme</span>
         </button>
 
-        <!-- Live Ingestion Activity Button (Beside Import Button) -->
-        <button id="activity-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm select-none" title="Ingestion Activity">
+        <button id="activity-btn" class="hidden sm:inline-flex w-8 h-8 items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm select-none" title="Ingestion Activity">
           <i data-lucide="activity" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]" id="activity-btn-icon"></i>
           <span id="activity-btn-label" class="sr-only">Activity</span>
         </button>
-        <button id="import-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-jet-black text-white hover:bg-black dark:bg-[#f3f4f6] dark:text-[#0e1116] dark:hover:bg-white transition shadow-sm" title="Import from YouTube">
-          <i data-lucide="download" class="w-4 h-4"></i>
-        </button>
-        <button id="refresh-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm" title="Refresh Vault">
+
+        <button id="refresh-btn" class="hidden sm:inline-flex w-8 h-8 items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm" title="Refresh Vault">
           <i data-lucide="refresh-cw" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]"></i>
         </button>
-        <button id="auth-settings-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm" title="Hugging Face Access Token">
+
+        <button id="auth-settings-btn" class="hidden sm:inline-flex w-8 h-8 items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm" title="Hugging Face Access Token">
           <i data-lucide="key-round" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]"></i>
           <span id="auth-btn-label" class="sr-only">Token</span>
         </button>
+
+        <!-- Mobile 3-Lines Menu Button (Visible ONLY on mobile < 640px) -->
+        <div class="relative shrink-0 sm:hidden" id="mobile-menu-container">
+          <button id="mobile-menu-btn" type="button" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm select-none" title="Menu">
+            <i data-lucide="menu" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]" id="mobile-menu-icon"></i>
+            <span class="sr-only">Menu</span>
+          </button>
+
+          <!-- Mobile Dropdown Menu (Collapses: Theme, Activity, Refresh, Token) -->
+          <div id="mobile-nav-menu" class="absolute right-0 top-full mt-1.5 w-52 bg-white dark:bg-[#191d26] border border-almond-cream dark:border-[#2b3240] rounded-xl shadow-2xl z-50 py-1.5 hidden animate-in fade-in select-none">
+            <div class="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-brown/60 dark:text-[#758092]">Options</div>
+
+            <!-- Theme Switcher -->
+            <button type="button" id="mobile-theme-btn" class="w-full px-3 py-2 text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] flex items-center justify-between transition text-left">
+              <div class="flex items-center gap-2.5">
+                <i data-lucide="moon" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]" id="mobile-theme-icon"></i>
+                <span id="mobile-theme-label" class="font-medium">Dark Mode</span>
+              </div>
+              <span id="mobile-theme-badge" class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">Off</span>
+            </button>
+
+            <!-- Live Ingestion Activity -->
+            <button type="button" id="mobile-activity-btn" class="w-full px-3 py-2 text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] flex items-center justify-between transition text-left">
+              <div class="flex items-center gap-2.5">
+                <i data-lucide="activity" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]" id="mobile-activity-icon"></i>
+                <span class="font-medium">Activity</span>
+              </div>
+              <div class="w-2 h-2 rounded-full bg-amber-500 animate-pulse hidden" id="mobile-activity-dot"></div>
+            </button>
+
+            <!-- Refresh / Resync Vault -->
+            <button type="button" id="mobile-refresh-btn" class="w-full px-3 py-2 text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] flex items-center justify-between transition text-left">
+              <div class="flex items-center gap-2.5">
+                <i data-lucide="refresh-cw" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]"></i>
+                <span class="font-medium">Refresh Vault</span>
+              </div>
+            </button>
+
+            <!-- Access Token / Connected Status -->
+            <button type="button" id="mobile-auth-btn" class="w-full px-3 py-2 text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] flex items-center justify-between transition text-left border-t border-almond-cream/60 dark:border-[#252a36] mt-1 pt-2">
+              <div class="flex items-center gap-2.5">
+                <i data-lucide="key-round" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]"></i>
+                <span class="font-medium">HF Token</span>
+              </div>
+              <span id="mobile-auth-badge" class="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">Token</span>
+            </button>
+          </div>
+        </div>
       </div>
     </header>
 

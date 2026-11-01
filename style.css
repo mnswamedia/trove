@@ -1,42 +1,130 @@
 /* Minimal baseline complementing Tailwind CSS */
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
+:root {
+  /* Theme Variables: Light Theme (Default) */
+  --bg-page: #fbf9f6;
+  --bg-surface: #ffffff;
+  --bg-subtle: rgba(234, 224, 213, 0.25);
+  --border-main: #eae0d5;
+  --border-muted: rgba(234, 224, 213, 0.7);
+  --border-input: #c6ac8f;
+  
+  --text-main: #0a0908;
+  --text-heading: #22333b;
+  --text-muted: #5e503f;
+  --text-subtle: rgba(94, 80, 63, 0.7);
+  
+  --accent: #c6ac8f;
+  --scrollbar-thumb: rgba(198, 172, 143, 0.45);
+  --scrollbar-thumb-hover: rgba(94, 80, 63, 0.65);
+
+  color-scheme: light;
+}
+
+html.dark,
+.dark {
+  /* Theme Variables: Dark Theme */
+  --bg-page: #0e1116;
+  --bg-surface: #15181f;
+  --bg-subtle: #1e222c;
+  --border-main: #262c38;
+  --border-muted: #202530;
+  --border-input: #353c4d;
+  
+  --text-main: #f3f4f6;
+  --text-heading: #ffffff;
+  --text-muted: #9aa4b2;
+  --text-subtle: #758092;
+  
+  --accent: #c6ac8f;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.18);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.35);
+
+  color-scheme: dark;
+}
+
+/* Explicit CSS Variable overrides for rock-solid cross-device rendering */
+html.dark body,
+.dark body {
+  background-color: var(--bg-page) !important;
+  color: var(--text-main) !important;
+}
+
+html.dark .text-black,
+.dark .text-black {
+  color: var(--text-main) !important;
+}
+
+html.dark .text-jet-black,
+.dark .text-jet-black {
+  color: var(--text-heading) !important;
+}
+
+html.dark .text-stone-brown,
+.dark .text-stone-brown {
+  color: var(--text-muted) !important;
+}
+
+html.dark .bg-white,
+.dark .bg-white {
+  background-color: var(--bg-surface) !important;
+}
+
+html.dark .border-almond-cream,
+.dark .border-almond-cream {
+  border-color: var(--border-main) !important;
+}
+
+html.dark .border-khaki-beige,
+.dark .border-khaki-beige {
+  border-color: var(--border-input) !important;
+}
+
 body {
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: #fbf9f6;
-  color: #0a0908;
+  background-color: var(--bg-page);
+  color: var(--text-main);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 code, .font-mono {
   font-family: 'JetBrains Mono', monospace;
 }
 
-/* Custom sleek scrollbar for file list */
-#file-list {
+/* Custom sleek scrollbar for file list and scrollable containers */
+#file-list,
+.custom-scrollbar {
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
-  scrollbar-color: rgba(198, 172, 143, 0.5) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
-#file-list::-webkit-scrollbar {
+#file-list::-webkit-scrollbar,
+.custom-scrollbar::-webkit-scrollbar {
   width: 6px;
 }
 
-#file-list::-webkit-scrollbar-track {
+#file-list::-webkit-scrollbar-track,
+.custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 
-#file-list::-webkit-scrollbar-thumb {
-  background: rgba(198, 172, 143, 0.45);
+#file-list::-webkit-scrollbar-thumb,
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
   border-radius: 9999px;
+  transition: background-color 0.2s ease;
 }
 
-#file-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(94, 80, 63, 0.65);
+#file-list::-webkit-scrollbar-thumb:hover,
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
 
-/* Floating Filter Dropdown Animation */
-#filter-dropdown-menu:not(.hidden) {
+/* Floating Filter & Mobile Navigation Dropdown Animation */
+#filter-dropdown-menu:not(.hidden),
+#mobile-nav-menu:not(.hidden) {
   display: block;
   animation: dropdownSlideIn 0.14s ease-out forwards;
 }
