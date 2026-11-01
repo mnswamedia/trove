@@ -3341,8 +3341,10 @@
     const isDark = theme === 'dark';
     if (isDark) {
       document.documentElement.classList.add('dark');
+      if (document.body) document.body.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
+      if (document.body) document.body.classList.remove('dark');
     }
 
     if (elements.themeToggleIcon) {

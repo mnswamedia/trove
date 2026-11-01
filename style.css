@@ -5,7 +5,9 @@
   /* Theme Variables: Light Theme (Default) */
   --bg-page: #fbf9f6;
   --bg-surface: #ffffff;
+  --bg-surface-elevated: #ffffff;
   --bg-subtle: rgba(234, 224, 213, 0.25);
+  --bg-hover: rgba(234, 224, 213, 0.35);
   --border-main: #eae0d5;
   --border-muted: rgba(234, 224, 213, 0.7);
   --border-input: #c6ac8f;
@@ -23,11 +25,14 @@
 }
 
 html.dark,
+body.dark,
 .dark {
   /* Theme Variables: Dark Theme */
   --bg-page: #0e1116;
   --bg-surface: #15181f;
+  --bg-surface-elevated: #191d26;
   --bg-subtle: #1e222c;
+  --bg-hover: #242a38;
   --border-main: #262c38;
   --border-muted: #202530;
   --border-input: #353c4d;
@@ -44,43 +49,206 @@ html.dark,
   color-scheme: dark;
 }
 
-/* Explicit CSS Variable overrides for rock-solid cross-device rendering */
+/* =========================================================================
+   COMPREHENSIVE FAIL-SAFE DARK MODE OVERRIDES
+   Ensures instantaneous color switching across all viewports & devices
+   ========================================================================= */
+
 html.dark body,
-.dark body {
-  background-color: var(--bg-page) !important;
-  color: var(--text-main) !important;
+body.dark {
+  background-color: #0e1116 !important;
+  color: #f3f4f6 !important;
 }
 
+/* Surfaces & Cards */
+html.dark header,
+body.dark header,
+html.dark .bg-white,
+body.dark .bg-white,
+html.dark [class*="bg-white/"] {
+  background-color: #15181f !important;
+}
+
+/* Main page background wrappers */
+html.dark .bg-\[\#fbf9f6\],
+body.dark .bg-\[\#fbf9f6\] {
+  background-color: #0e1116 !important;
+}
+
+/* Bottom Play Bar */
+html.dark #bottom-play-bar,
+body.dark #bottom-play-bar {
+  background-color: rgba(21, 24, 31, 0.95) !important;
+  border-color: #2b3240 !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* Fullscreen Expanded Player */
+html.dark #expanded-player,
+body.dark #expanded-player {
+  background-color: #0e1116 !important;
+}
+
+/* Sub-surfaces & table header & metrics bar & parent directory */
+html.dark [class*="bg-almond-cream/"],
+body.dark [class*="bg-almond-cream/"] {
+  background-color: #1c202a !important;
+}
+
+/* Borders */
+html.dark [class*="border-almond-cream"],
+body.dark [class*="border-almond-cream"] {
+  border-color: #262c38 !important;
+}
+
+html.dark [class*="border-khaki-beige"],
+body.dark [class*="border-khaki-beige"] {
+  border-color: #353c4d !important;
+}
+
+html.dark [class*="divide-almond-cream"],
+body.dark [class*="divide-almond-cream"] {
+  border-color: #202530 !important;
+}
+
+/* Typography & Text */
 html.dark .text-black,
-.dark .text-black {
-  color: var(--text-main) !important;
+body.dark .text-black,
+html.dark h1,
+body.dark h1,
+html.dark h2,
+body.dark h2,
+html.dark h3,
+body.dark h3 {
+  color: #f3f4f6 !important;
 }
 
 html.dark .text-jet-black,
-.dark .text-jet-black {
-  color: var(--text-heading) !important;
+body.dark .text-jet-black {
+  color: #ffffff !important;
 }
 
 html.dark .text-stone-brown,
-.dark .text-stone-brown {
-  color: var(--text-muted) !important;
+body.dark .text-stone-brown {
+  color: #9aa4b2 !important;
 }
 
-html.dark .bg-white,
-.dark .bg-white {
-  background-color: var(--bg-surface) !important;
+html.dark [class*="text-stone-brown/"],
+body.dark [class*="text-stone-brown/"] {
+  color: #758092 !important;
 }
 
-html.dark .border-almond-cream,
-.dark .border-almond-cream {
-  border-color: var(--border-main) !important;
+/* Inverted Primary Action Buttons (Contrast-optimized) */
+html.dark #import-btn,
+body.dark #import-btn,
+html.dark #btn-play-pause,
+body.dark #btn-play-pause,
+html.dark #btn-expanded-play,
+body.dark #btn-expanded-play,
+html.dark #start-import-btn,
+body.dark #start-import-btn,
+html.dark #save-token-btn,
+body.dark #save-token-btn,
+html.dark #state-action-btn,
+body.dark #state-action-btn {
+  background-color: #f3f4f6 !important;
+  color: #0e1116 !important;
 }
 
-html.dark .border-khaki-beige,
-.dark .border-khaki-beige {
-  border-color: var(--border-input) !important;
+html.dark #import-btn i,
+body.dark #import-btn i,
+html.dark #btn-play-pause i,
+body.dark #btn-play-pause i,
+html.dark #btn-expanded-play i,
+body.dark #btn-expanded-play i,
+html.dark #start-import-btn i,
+body.dark #start-import-btn i,
+html.dark #save-token-btn i,
+body.dark #save-token-btn i {
+  color: #0e1116 !important;
 }
 
+/* Secondary header & utility buttons in dark mode */
+html.dark #theme-toggle-btn,
+body.dark #theme-toggle-btn,
+html.dark #activity-btn,
+body.dark #activity-btn,
+html.dark #refresh-btn,
+body.dark #refresh-btn,
+html.dark #auth-settings-btn,
+body.dark #auth-settings-btn,
+html.dark #mobile-menu-btn,
+body.dark #mobile-menu-btn,
+html.dark #view-toggle-btn,
+body.dark #view-toggle-btn,
+html.dark #filter-dropdown-btn,
+body.dark #filter-dropdown-btn {
+  background-color: #1a1e26 !important;
+  border-color: #353c4d !important;
+  color: #f3f4f6 !important;
+}
+
+/* Dropdown menus & Modals */
+html.dark #filter-dropdown-menu,
+body.dark #filter-dropdown-menu,
+html.dark #mobile-nav-menu,
+body.dark #mobile-nav-menu,
+html.dark #activity-modal > div,
+body.dark #activity-modal > div,
+html.dark #import-modal > div,
+body.dark #import-modal > div,
+html.dark #auth-modal > div,
+body.dark #auth-modal > div {
+  background-color: #15181f !important;
+  border-color: #2b3240 !important;
+  color: #f3f4f6 !important;
+}
+
+/* Form Inputs & Textareas */
+html.dark input[type="text"],
+body.dark input[type="text"],
+html.dark input[type="password"],
+body.dark input[type="password"],
+html.dark textarea,
+body.dark textarea {
+  background-color: #1a1e26 !important;
+  border-color: #353c4d !important;
+  color: #f3f4f6 !important;
+}
+
+html.dark input::placeholder,
+body.dark input::placeholder,
+html.dark textarea::placeholder,
+body.dark textarea::placeholder {
+  color: #758092 !important;
+}
+
+/* File list rows & active states */
+html.dark .file-row:hover,
+body.dark .file-row:hover {
+  background-color: #1a1f28 !important;
+}
+
+html.dark .file-row[class*="border-l-jet-black"],
+body.dark .file-row[class*="border-l-jet-black"] {
+  background-color: #202736 !important;
+  border-left-color: #c6ac8f !important;
+}
+
+/* Range scrubber sliders */
+html.dark input[type="range"],
+body.dark input[type="range"] {
+  background-color: #2b3240 !important;
+  accent-color: #c6ac8f !important;
+}
+
+/* SVG icon stroke inheritance */
+html.dark svg,
+body.dark svg {
+  color: inherit;
+}
+
+/* Base Typography */
 body {
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: var(--bg-page);
