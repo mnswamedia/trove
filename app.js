@@ -2148,26 +2148,64 @@
     ctx: null,
     sourceAudio: null,
     sourceVideo: null,
-    compressor: null,
     filters: [],
+    // Virtualizer & Room Nodes
+    splitter: null,
+    merger: null,
+    leftGainDirect: null,
+    leftGainCross: null,
+    rightGainDirect: null,
+    rightGainCross: null,
+    convolver: null,
+    reverbDryGain: null,
+    reverbWetGain: null,
+    compressor: null,
+    studioBuffer: null,
+    hallBuffer: null,
+
     enabled: true,
     currentPreset: 'flat',
-    gains: [0, 0, 0, 0, 0],
+    spatialWidth: 0, // 0% to 100%
+    roomMode: 'off', // 'off' | 'studio' | 'hall'
+    gains: [0, 0, 0, 0, 0, 0, 0, 0],
+    customGains: [0, 0, 0, 0, 0, 0, 0, 0],
+
     frequencies: [
-      { freq: 60, type: 'lowshelf' },
-      { freq: 230, type: 'peaking' },
-      { freq: 910, type: 'peaking' },
-      { freq: 3600, type: 'peaking' },
-      { freq: 14000, type: 'highshelf' }
+      { freq: 32, type: 'lowshelf', label: '32', desc: 'Sub' },
+      { freq: 64, type: 'peaking', label: '64', desc: 'Bass' },
+      { freq: 125, type: 'peaking', label: '125', desc: 'Low' },
+      { freq: 250, type: 'peaking', label: '250', desc: 'Warm' },
+      { freq: 500, type: 'peaking', label: '500', desc: 'Mid' },
+      { freq: 1000, type: 'peaking', label: '1k', desc: 'Voice' },
+      { freq: 4000, type: 'peaking', label: '4k', desc: 'Clear' },
+      { freq: 16000, type: 'highshelf', label: '16k', desc: 'Air' }
     ],
+
     presets: {
-      flat: [0, 0, 0, 0, 0],
-      bass: [6, 4, 0, 0, -1],
-      vocal: [-2, 1, 4, 3, 0],
-      rock: [4, 2, -1, 2, 4],
-      electronic: [5, 3, 0, 2, 4],
-      acoustic: [2, 1, 0, 2, 3],
-      treble: [-2, 0, 1, 3, 6]
+      flat: [0, 0, 0, 0, 0, 0, 0, 0],
+      bass: [6, 5.5, 4, 1.5, 0, 0, 0, -1],
+      vocal: [-3, -2, 0, 1.5, 3.5, 4, 2, 0],
+      rock: [4.5, 3.5, 2, -0.5, -1, 1, 3, 4.5],
+      electronic: [5.5, 5, 3, 0, 0.5, 2, 3.5, 5],
+      acoustic: [2, 2, 1, 0, 1, 2, 3, 3.5],
+      treble: [-2, -1, 0, 0, 1, 2, 4.5, 6.5]
+    },
+
+    // Synthetic room impulse generator (pure Web Audio math, no external audio files)
+    createImpulse(duration = 1.2, decay = 2.0) {
+      if (!this.ctx) return null;
+      const rate = this.ctx.sampleRate;
+      const length = Math.floor(rate * duration);
+      const buffer = this.ctx.createBuffer(2, length, rate);
+      const left = buffer.getChannelData(0);
+      const right = buffer.getChannelData(1);
+      for (let i = 0; i < length; i++) {
+        const t = i / length;
+        const env = Math.pow(1 - t, decay);
+        left[i] = (Math.random() * 2 - 1) * env;
+        right[i] = (Math.random() * 2 - 1) * env;
+      }
+      return buffer;
     },
 
     init() {
@@ -2177,24 +2215,61 @@
         if (!AudioCtx) return;
         this.ctx = new AudioCtx();
 
-        // Build 5-band filter chain
+        // 1. Build 8-band filter chain
         this.filters = this.frequencies.map((f, idx) => {
           const filter = this.ctx.createBiquadFilter();
           filter.type = f.type;
           filter.frequency.value = f.freq;
           filter.gain.value = this.enabled ? (this.gains[idx] || 0) : 0;
           if (f.type === 'peaking') {
-            filter.Q.value = 1.0;
+            filter.Q.value = 1.4;
           }
           return filter;
         });
 
-        // Connect filter chain: 0 -> 1 -> 2 -> 3 -> 4
         for (let i = 0; i < this.filters.length - 1; i++) {
           this.filters[i].connect(this.filters[i + 1]);
         }
+        const lastFilter = this.filters[this.filters.length - 1];
 
-        // Protective compressor to prevent digital clipping/distortion when boosting frequencies
+        // 2. 3D Spatial Virtualizer Stage (Mid-Side Stereo Widener)
+        this.splitter = this.ctx.createChannelSplitter(2);
+        this.merger = this.ctx.createChannelMerger(2);
+        this.leftGainDirect = this.ctx.createGain();
+        this.leftGainCross = this.ctx.createGain();
+        this.rightGainDirect = this.ctx.createGain();
+        this.rightGainCross = this.ctx.createGain();
+
+        lastFilter.connect(this.splitter);
+
+        // Splitter Ch0 (Left) -> leftGainDirect -> Merger Ch0 (Left)
+        this.splitter.connect(this.leftGainDirect, 0);
+        this.leftGainDirect.connect(this.merger, 0, 0);
+
+        // Splitter Ch1 (Right) -> leftGainCross -> Merger Ch0 (Left)
+        this.splitter.connect(this.leftGainCross, 1);
+        this.leftGainCross.connect(this.merger, 0, 0);
+
+        // Splitter Ch1 (Right) -> rightGainDirect -> Merger Ch1 (Right)
+        this.splitter.connect(this.rightGainDirect, 1);
+        this.rightGainDirect.connect(this.merger, 0, 1);
+
+        // Splitter Ch0 (Left) -> rightGainCross -> Merger Ch1 (Right)
+        this.splitter.connect(this.rightGainCross, 0);
+        this.rightGainCross.connect(this.merger, 0, 1);
+
+        this.applySpatialWidth();
+
+        // 3. Acoustic Environment (Reverb Convolver Node)
+        this.convolver = this.ctx.createConvolver();
+        this.reverbDryGain = this.ctx.createGain();
+        this.reverbWetGain = this.ctx.createGain();
+
+        this.merger.connect(this.reverbDryGain);
+        this.merger.connect(this.convolver);
+        this.convolver.connect(this.reverbWetGain);
+
+        // 4. Output Stage: DynamicsCompressor (protective limiter) -> Destination
         this.compressor = this.ctx.createDynamicsCompressor();
         this.compressor.threshold.value = -24;
         this.compressor.knee.value = 30;
@@ -2202,10 +2277,13 @@
         this.compressor.attack.value = 0.003;
         this.compressor.release.value = 0.25;
 
-        this.filters[this.filters.length - 1].connect(this.compressor);
+        this.reverbDryGain.connect(this.compressor);
+        this.reverbWetGain.connect(this.compressor);
         this.compressor.connect(this.ctx.destination);
 
-        // Connect player elements
+        this.applyRoomMode();
+
+        // Connect media elements
         if (elements.playerAudio && !this.sourceAudio) {
           try {
             this.sourceAudio = this.ctx.createMediaElementSource(elements.playerAudio);
@@ -2239,9 +2317,44 @@
       });
     },
 
+    applySpatialWidth() {
+      if (!this.leftGainDirect || !this.ctx) return;
+      const pct = this.enabled ? (this.spatialWidth / 100) : 0;
+      const w = 1.0 + pct * 1.0;
+      const direct = (1 + w) / 2;
+      const cross = (1 - w) / 2;
+
+      this.leftGainDirect.gain.setTargetAtTime(direct, this.ctx.currentTime, 0.02);
+      this.leftGainCross.gain.setTargetAtTime(cross, this.ctx.currentTime, 0.02);
+      this.rightGainDirect.gain.setTargetAtTime(direct, this.ctx.currentTime, 0.02);
+      this.rightGainCross.gain.setTargetAtTime(cross, this.ctx.currentTime, 0.02);
+    },
+
+    applyRoomMode() {
+      if (!this.convolver || !this.ctx) return;
+      if (!this.enabled || this.roomMode === 'off') {
+        this.reverbDryGain.gain.setTargetAtTime(1.0, this.ctx.currentTime, 0.02);
+        this.reverbWetGain.gain.setTargetAtTime(0.0, this.ctx.currentTime, 0.02);
+        return;
+      }
+
+      if (this.roomMode === 'studio') {
+        if (!this.studioBuffer) this.studioBuffer = this.createImpulse(0.55, 3.2);
+        this.convolver.buffer = this.studioBuffer;
+        this.reverbDryGain.gain.setTargetAtTime(0.88, this.ctx.currentTime, 0.02);
+        this.reverbWetGain.gain.setTargetAtTime(0.24, this.ctx.currentTime, 0.02);
+      } else if (this.roomMode === 'hall') {
+        if (!this.hallBuffer) this.hallBuffer = this.createImpulse(2.0, 2.0);
+        this.convolver.buffer = this.hallBuffer;
+        this.reverbDryGain.gain.setTargetAtTime(0.76, this.ctx.currentTime, 0.02);
+        this.reverbWetGain.gain.setTargetAtTime(0.38, this.ctx.currentTime, 0.02);
+      }
+    },
+
     setBand(bandIdx, val) {
       const parsed = Math.max(-12, Math.min(12, parseFloat(val) || 0));
       this.gains[bandIdx] = parsed;
+      this.customGains = [...this.gains];
       this.currentPreset = 'custom';
       this.applyGains();
       this.save();
@@ -2249,39 +2362,77 @@
     },
 
     setPreset(presetKey) {
-      if (!this.presets[presetKey]) return;
-      this.currentPreset = presetKey;
-      this.gains = [...this.presets[presetKey]];
+      if (presetKey === 'custom') {
+        this.currentPreset = 'custom';
+        this.gains = [...this.customGains];
+      } else if (this.presets[presetKey]) {
+        this.currentPreset = presetKey;
+        this.gains = [...this.presets[presetKey]];
+      } else {
+        return;
+      }
       this.applyGains();
       this.save();
       this.updateUI();
     },
 
+    setSpatialWidth(pct) {
+      this.spatialWidth = Math.max(0, Math.min(100, parseInt(pct, 10) || 0));
+      this.applySpatialWidth();
+      this.save();
+      this.updateUI();
+    },
+
+    setRoomMode(mode) {
+      if (['off', 'studio', 'hall'].includes(mode)) {
+        this.roomMode = mode;
+        this.applyRoomMode();
+        this.save();
+        this.updateUI();
+      }
+    },
+
     toggleBypass() {
       this.enabled = !this.enabled;
       this.applyGains();
+      this.applySpatialWidth();
+      this.applyRoomMode();
       this.save();
       this.updateUI();
     },
 
     save() {
       try {
-        localStorage.setItem('trove_eq', JSON.stringify({
+        localStorage.setItem('trove_eq_settings', JSON.stringify({
           enabled: this.enabled,
           preset: this.currentPreset,
-          gains: this.gains
+          gains: this.gains,
+          customGains: this.customGains,
+          spatialWidth: this.spatialWidth,
+          roomMode: this.roomMode
         }));
       } catch (_) {}
     },
 
     load() {
       try {
-        const raw = localStorage.getItem('trove_eq');
+        const raw = localStorage.getItem('trove_eq_settings') || localStorage.getItem('trove_eq');
         if (raw) {
           const parsed = JSON.parse(raw);
           if (typeof parsed.enabled === 'boolean') this.enabled = parsed.enabled;
           if (typeof parsed.preset === 'string') this.currentPreset = parsed.preset;
-          if (Array.isArray(parsed.gains) && parsed.gains.length === 5) this.gains = parsed.gains;
+          if (typeof parsed.spatialWidth === 'number') this.spatialWidth = parsed.spatialWidth;
+          if (typeof parsed.roomMode === 'string') this.roomMode = parsed.roomMode;
+          if (Array.isArray(parsed.customGains) && parsed.customGains.length === 8) {
+            this.customGains = parsed.customGains;
+          }
+          if (Array.isArray(parsed.gains) && parsed.gains.length === 8) {
+            this.gains = parsed.gains;
+          } else if (this.currentPreset === 'custom') {
+            this.gains = [...this.customGains];
+          } else if (this.presets[this.currentPreset]) {
+            this.gains = [...this.presets[this.currentPreset]];
+          }
         }
       } catch (_) {}
     },
@@ -2331,7 +2482,23 @@
         }
       });
 
-      // 5. Update sliders and gain values
+      // 5. Update Spatial Widener slider & text
+      const spatialSlider = document.getElementById('spatial-widener-slider');
+      const spatialVal = document.getElementById('spatial-widener-val');
+      if (spatialSlider) spatialSlider.value = this.spatialWidth;
+      if (spatialVal) spatialVal.innerText = `${this.spatialWidth}%`;
+
+      // 6. Update Room buttons active state
+      document.querySelectorAll('.eq-room-btn').forEach(btn => {
+        const rm = btn.dataset.room;
+        if (rm === this.roomMode) {
+          btn.className = 'eq-room-btn px-2 py-0.5 rounded text-[11px] font-mono font-medium transition bg-jet-black text-white dark:bg-[#f3f4f6] dark:text-[#0e1116] shadow-sm';
+        } else {
+          btn.className = 'eq-room-btn px-2 py-0.5 rounded text-[11px] font-mono font-medium transition text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white';
+        }
+      });
+
+      // 7. Update 8 sliders and gain text values
       this.gains.forEach((val, idx) => {
         const slider = document.querySelector(`.eq-band-slider[data-band="${idx}"]`);
         if (slider) slider.value = val;
@@ -2852,7 +3019,7 @@
         elements.bottomPlayBar.classList.remove('translate-y-28', 'opacity-0', 'pointer-events-none');
         elements.bottomPlayBar.classList.add('translate-y-0', 'opacity-100', 'pointer-events-auto');
       }, 10);
-      document.body.classList.add('pb-28');
+      document.body.classList.add('pb-32', 'sm:pb-28');
       MotionAnim.animateBottomBar();
     },
 
@@ -3439,6 +3606,21 @@
       slider.addEventListener('input', (e) => {
         const band = parseInt(e.target.dataset.band, 10);
         Equalizer.setBand(band, e.target.value);
+      });
+    });
+
+    // 3D Spatial Virtualizer Slider
+    const spatialSlider = document.getElementById('spatial-widener-slider');
+    if (spatialSlider) {
+      spatialSlider.addEventListener('input', (e) => {
+        Equalizer.setSpatialWidth(e.target.value);
+      });
+    }
+
+    // Acoustic Room Environment Buttons
+    document.querySelectorAll('.eq-room-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        Equalizer.setRoomMode(btn.dataset.room);
       });
     });
 

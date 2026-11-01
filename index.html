@@ -292,7 +292,7 @@
         </div>
 
         <!-- Files Container: ONLY THIS SCROLLS -->
-        <div id="file-list" class="flex-1 overflow-y-auto divide-y divide-almond-cream/60 dark:divide-[#202530] min-h-0 pb-16 sm:pb-20">
+        <div id="file-list" class="flex-1 overflow-y-auto divide-y divide-almond-cream/60 dark:divide-[#202530] min-h-0 pb-24 sm:pb-20">
           <!-- Dynamically populated rows -->
         </div>
 
@@ -318,7 +318,7 @@
   <audio id="player-audio" preload="metadata" playsinline crossorigin="anonymous" class="hidden"></audio>
 
   <!-- Persistent Floating Bottom Play Bar (Floating Island tightly hugging bottom edge) -->
-  <aside id="bottom-play-bar" class="fixed bottom-2 sm:bottom-3.5 inset-x-0 mx-auto w-[calc(100%-1.25rem)] sm:w-[calc(100%-2rem)] max-w-4xl bg-white/95 dark:bg-[#15181f]/95 backdrop-blur-md border border-almond-cream dark:border-[#2b3240] rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.6)] z-40 px-3 sm:px-4 md:px-5 py-2 sm:py-2.5 transition-all duration-300 translate-y-28 opacity-0 pointer-events-none" style="display: none;">
+  <aside id="bottom-play-bar" class="fixed bottom-5 sm:bottom-3.5 inset-x-0 mx-auto w-[calc(100%-1.25rem)] sm:w-[calc(100%-2rem)] max-w-4xl bg-white/95 dark:bg-[#15181f]/95 backdrop-blur-md border border-almond-cream dark:border-[#2b3240] rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.6)] z-40 px-3 sm:px-4 md:px-5 py-2 sm:py-2.5 transition-all duration-300 translate-y-28 opacity-0 pointer-events-none" style="display: none;">
     <div class="flex items-center justify-between gap-3 md:gap-5">
       
       <!-- Track & Mini Scrubber (Clicking expands the player) -->
@@ -537,136 +537,203 @@
     <!-- Backdrop Click to dismiss -->
     <div id="eq-backdrop" class="absolute inset-0"></div>
 
-    <!-- Sheet Container -->
-    <div class="relative w-full max-w-lg mx-auto bg-white dark:bg-[#15181f] border-t sm:border border-almond-cream dark:border-[#2b3240] rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh] animate-in slide-in-from-bottom duration-200">
+    <!-- Sheet Container (Spacious, elegant mixing console sizing) -->
+    <div class="relative w-full max-w-xl sm:max-w-2xl md:max-w-3xl mx-auto bg-white dark:bg-[#15181f] border-t sm:border border-almond-cream dark:border-[#2b3240] rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[85vh] animate-in slide-in-from-bottom duration-200">
       
       <!-- Drag Handle (Mobile) -->
-      <div class="pt-2.5 pb-1 flex justify-center sm:hidden">
-        <div class="w-10 h-1 rounded-full bg-stone-brown/20 dark:bg-white/20"></div>
+      <div class="pt-3 pb-1.5 flex justify-center sm:hidden">
+        <div class="w-12 h-1.5 rounded-full bg-stone-brown/20 dark:bg-white/20"></div>
       </div>
 
       <!-- Sheet Header -->
-      <div class="px-5 py-3 border-b border-almond-cream dark:border-[#262c38] flex items-center justify-between">
-        <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-lg bg-almond-cream/50 dark:bg-[#222734] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0">
-            <i data-lucide="sliders" class="w-4 h-4"></i>
+      <div class="px-5 sm:px-7 py-3.5 sm:py-4 border-b border-almond-cream dark:border-[#262c38] flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-almond-cream/50 dark:bg-[#222734] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0 shadow-sm">
+            <i data-lucide="sliders" class="w-4 h-4 sm:w-5 sm:h-5"></i>
           </div>
           <div>
             <div class="flex items-center gap-2">
-              <h3 class="text-sm font-bold text-black dark:text-[#f3f4f6]">Audio Equalizer</h3>
-              <span id="eq-active-preset-tag" class="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">Flat</span>
+              <h3 class="text-sm sm:text-base font-bold text-black dark:text-[#f3f4f6]">Audio Equalizer & 3D Stage</h3>
+              <span id="eq-active-preset-tag" class="px-2 py-0.5 rounded-md text-xs font-mono font-semibold bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">Flat</span>
             </div>
-            <p class="text-[11px] font-mono text-stone-brown/70 dark:text-[#9aa4b2]">5-band hardware-accelerated DSP</p>
+            <p class="text-[11px] sm:text-xs font-mono text-stone-brown/70 dark:text-[#9aa4b2]">8-band hardware-accelerated DSP • Spatializer</p>
           </div>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2.5">
           <!-- Toggle EQ Enabled / Bypass -->
-          <button type="button" id="btn-eq-bypass" class="px-2.5 py-1 rounded-lg text-xs font-semibold font-mono border transition flex items-center gap-1.5 bg-emerald-500/15 border-emerald-500/30 text-emerald-900 dark:text-emerald-300" title="Toggle EQ Bypass">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" id="eq-bypass-dot"></span>
+          <button type="button" id="btn-eq-bypass" class="px-3 py-1.5 rounded-xl text-xs font-semibold font-mono border transition flex items-center gap-1.5 bg-emerald-500/15 border-emerald-500/30 text-emerald-900 dark:text-emerald-300 shadow-sm" title="Toggle EQ Bypass">
+            <span class="w-2 h-2 rounded-full bg-emerald-500" id="eq-bypass-dot"></span>
             <span id="eq-bypass-label">ON</span>
           </button>
 
           <!-- Close Sheet Button -->
-          <button type="button" id="btn-close-eq" class="p-1.5 rounded-lg text-stone-brown dark:text-[#9aa4b2] hover:bg-almond-cream/50 dark:hover:bg-[#202532] hover:text-black dark:hover:text-white transition" title="Close Equalizer">
-            <i data-lucide="x" class="w-4 h-4"></i>
+          <button type="button" id="btn-close-eq" class="p-2 rounded-xl text-stone-brown dark:text-[#9aa4b2] hover:bg-almond-cream/50 dark:hover:bg-[#202532] hover:text-black dark:hover:text-white transition" title="Close Equalizer">
+            <i data-lucide="x" class="w-4 h-4 sm:w-5 sm:h-5"></i>
           </button>
         </div>
       </div>
 
       <!-- Presets Scroll Row -->
-      <div class="px-4 sm:px-5 py-2.5 border-b border-almond-cream/60 dark:border-[#222734] bg-almond-cream/15 dark:bg-[#1a1e26] overflow-x-auto flex items-center gap-1.5 no-scrollbar">
-        <span class="text-[10px] font-bold uppercase tracking-wider text-stone-brown/60 dark:text-[#758092] mr-1 shrink-0">Presets</span>
-        <button type="button" class="eq-preset-btn px-2.5 py-1 rounded-lg text-xs font-medium shrink-0 transition bg-jet-black text-white dark:bg-[#f3f4f6] dark:text-[#0e1116] shadow-sm" data-preset="flat">Flat</button>
-        <button type="button" class="eq-preset-btn px-2.5 py-1 rounded-lg text-xs font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="bass">Bass Boost</button>
-        <button type="button" class="eq-preset-btn px-2.5 py-1 rounded-lg text-xs font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="vocal">Vocal</button>
-        <button type="button" class="eq-preset-btn px-2.5 py-1 rounded-lg text-xs font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="rock">Rock</button>
-        <button type="button" class="eq-preset-btn px-2.5 py-1 rounded-lg text-xs font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="electronic">Electronic</button>
-        <button type="button" class="eq-preset-btn px-2.5 py-1 rounded-lg text-xs font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="acoustic">Acoustic</button>
-        <button type="button" class="eq-preset-btn px-2.5 py-1 rounded-lg text-xs font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="treble">Treble</button>
+      <div class="px-4 sm:px-7 py-3 border-b border-almond-cream/60 dark:border-[#222734] bg-almond-cream/15 dark:bg-[#1a1e26] overflow-x-auto flex items-center gap-2 no-scrollbar">
+        <span class="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-stone-brown/60 dark:text-[#758092] mr-1 shrink-0">Presets</span>
+        <button type="button" class="eq-preset-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium shrink-0 transition bg-jet-black text-white dark:bg-[#f3f4f6] dark:text-[#0e1116] shadow-sm" data-preset="flat">Flat</button>
+        <button type="button" class="eq-preset-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="bass">Bass Boost</button>
+        <button type="button" class="eq-preset-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="vocal">Vocal</button>
+        <button type="button" class="eq-preset-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="rock">Rock</button>
+        <button type="button" class="eq-preset-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="electronic">Electronic</button>
+        <button type="button" class="eq-preset-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="acoustic">Acoustic</button>
+        <button type="button" class="eq-preset-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="treble">Treble</button>
+        <button type="button" class="eq-preset-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="custom">Custom</button>
       </div>
 
-      <!-- 5-Band Slider Stage -->
-      <div class="px-4 sm:px-6 py-4 flex items-center justify-between gap-2 sm:gap-4 overflow-hidden">
+      <!-- Spatial Virtualizer & Acoustic Room Stage (Spacious, well-proportioned layout) -->
+      <div class="px-5 sm:px-7 py-3 sm:py-3.5 border-b border-almond-cream/60 dark:border-[#222734] bg-almond-cream/10 dark:bg-[#13161c] flex flex-col gap-2.5">
+        <div class="flex items-center justify-between gap-3 sm:gap-4 flex-wrap">
+          
+          <!-- 3D Spatial Virtualizer (Stereo Widener) -->
+          <div class="flex-1 min-w-[220px] flex items-center gap-3 bg-white/90 dark:bg-[#1a1e26] border border-almond-cream/80 dark:border-[#2b3240] rounded-xl px-3.5 py-2 shadow-sm">
+            <div class="flex items-center gap-1.5 shrink-0">
+              <i data-lucide="sparkles" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]"></i>
+              <span class="text-xs sm:text-sm font-semibold text-jet-black dark:text-[#f3f4f6]">3D Spatial</span>
+            </div>
+            <input 
+              type="range" 
+              id="spatial-widener-slider" 
+              min="0" 
+              max="100" 
+              value="0" 
+              class="flex-1 h-2 bg-almond-cream dark:bg-[#2b3240] rounded-lg appearance-none cursor-pointer accent-jet-black dark:accent-[#c6ac8f]"
+            >
+            <span id="spatial-widener-val" class="font-mono text-xs font-bold text-stone-brown dark:text-[#c6ac8f] w-9 text-right">0%</span>
+          </div>
+
+          <!-- Virtual Acoustic Room Environment -->
+          <div class="flex items-center gap-1.5 shrink-0 bg-white/90 dark:bg-[#1a1e26] border border-almond-cream/80 dark:border-[#2b3240] rounded-xl px-2.5 py-1.5 shadow-sm">
+            <span class="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-stone-brown/60 dark:text-[#758092] px-1">Room</span>
+            <button type="button" class="eq-room-btn px-2.5 py-1 rounded-lg text-xs font-mono font-medium transition bg-jet-black text-white dark:bg-[#f3f4f6] dark:text-[#0e1116] shadow-sm" data-room="off">Off</button>
+            <button type="button" class="eq-room-btn px-2.5 py-1 rounded-lg text-xs font-mono font-medium transition text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white" data-room="studio">Studio</button>
+            <button type="button" class="eq-room-btn px-2.5 py-1 rounded-lg text-xs font-mono font-medium transition text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white" data-room="hall">Hall</button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 8-Band Slider Stage (Spacious height, smooth tactile sliders) -->
+      <div class="px-4 sm:px-7 py-5 sm:py-7 flex items-center justify-between gap-1.5 sm:gap-3 md:gap-4 overflow-x-auto no-scrollbar">
         <!-- Range guide markers (+12dB, 0dB, -12dB) -->
-        <div class="h-36 flex flex-col justify-between text-[10px] font-mono text-stone-brown/50 dark:text-[#6a7585] py-0.5 shrink-0 select-none">
+        <div class="h-44 sm:h-52 flex flex-col justify-between text-[10px] sm:text-xs font-mono text-stone-brown/50 dark:text-[#6a7585] py-1 shrink-0 select-none pr-1">
           <span>+12</span>
           <span>0</span>
           <span>-12</span>
         </div>
 
-        <!-- 5 Sliders Columns -->
-        <!-- Band 0: 60Hz -->
-        <div class="flex-1 flex flex-col items-center gap-2 min-w-0">
-          <span class="eq-band-val font-mono text-[10px] font-bold text-jet-black dark:text-[#c6ac8f]" id="eq-val-0">0dB</span>
-          <div class="h-36 flex items-center justify-center">
-            <input type="range" class="eq-band-slider vertical-slider h-32 w-2.5 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]" data-band="0" min="-12" max="12" step="0.5" value="0">
+        <!-- Band 0: 32Hz -->
+        <div class="flex-1 flex flex-col items-center gap-2 sm:gap-2.5 min-w-[38px] sm:min-w-[48px]">
+          <span class="eq-band-val font-mono text-[10px] sm:text-xs font-bold text-jet-black dark:text-[#c6ac8f]" id="eq-val-0">0dB</span>
+          <div class="h-44 sm:h-52 flex items-center justify-center">
+            <input type="range" class="eq-band-slider vertical-slider h-40 sm:h-48 w-2.5 sm:w-3 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]" data-band="0" min="-12" max="12" step="0.5" value="0">
           </div>
           <div class="text-center">
-            <div class="font-mono text-[11px] font-bold text-black dark:text-[#f3f4f6]">60</div>
-            <div class="text-[9px] font-mono uppercase text-stone-brown/60 dark:text-[#758092]">Bass</div>
+            <div class="font-mono text-xs sm:text-sm font-bold text-black dark:text-[#f3f4f6]">32</div>
+            <div class="text-[9px] sm:text-[10px] font-mono uppercase font-semibold text-stone-brown/60 dark:text-[#758092]">Sub</div>
           </div>
         </div>
 
-        <!-- Band 1: 230Hz -->
-        <div class="flex-1 flex flex-col items-center gap-2 min-w-0">
-          <span class="eq-band-val font-mono text-[10px] font-bold text-jet-black dark:text-[#c6ac8f]" id="eq-val-1">0dB</span>
-          <div class="h-36 flex items-center justify-center">
-            <input type="range" class="eq-band-slider vertical-slider h-32 w-2.5 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]" data-band="1" min="-12" max="12" step="0.5" value="0">
+        <!-- Band 1: 64Hz -->
+        <div class="flex-1 flex flex-col items-center gap-2 sm:gap-2.5 min-w-[38px] sm:min-w-[48px]">
+          <span class="eq-band-val font-mono text-[10px] sm:text-xs font-bold text-jet-black dark:text-[#c6ac8f]" id="eq-val-1">0dB</span>
+          <div class="h-44 sm:h-52 flex items-center justify-center">
+            <input type="range" class="eq-band-slider vertical-slider h-40 sm:h-48 w-2.5 sm:w-3 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]" data-band="1" min="-12" max="12" step="0.5" value="0">
           </div>
           <div class="text-center">
-            <div class="font-mono text-[11px] font-bold text-black dark:text-[#f3f4f6]">230</div>
-            <div class="text-[9px] font-mono uppercase text-stone-brown/60 dark:text-[#758092]">Low</div>
+            <div class="font-mono text-xs sm:text-sm font-bold text-black dark:text-[#f3f4f6]">64</div>
+            <div class="text-[9px] sm:text-[10px] font-mono uppercase font-semibold text-stone-brown/60 dark:text-[#758092]">Bass</div>
           </div>
         </div>
 
-        <!-- Band 2: 910Hz -->
-        <div class="flex-1 flex flex-col items-center gap-2 min-w-0">
-          <span class="eq-band-val font-mono text-[10px] font-bold text-jet-black dark:text-[#c6ac8f]" id="eq-val-2">0dB</span>
-          <div class="h-36 flex items-center justify-center">
-            <input type="range" class="eq-band-slider vertical-slider h-32 w-2.5 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]" data-band="2" min="-12" max="12" step="0.5" value="0">
+        <!-- Band 2: 125Hz -->
+        <div class="flex-1 flex flex-col items-center gap-2 sm:gap-2.5 min-w-[38px] sm:min-w-[48px]">
+          <span class="eq-band-val font-mono text-[10px] sm:text-xs font-bold text-jet-black dark:text-[#c6ac8f]" id="eq-val-2">0dB</span>
+          <div class="h-44 sm:h-52 flex items-center justify-center">
+            <input type="range" class="eq-band-slider vertical-slider h-40 sm:h-48 w-2.5 sm:w-3 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]" data-band="2" min="-12" max="12" step="0.5" value="0">
           </div>
           <div class="text-center">
-            <div class="font-mono text-[11px] font-bold text-black dark:text-[#f3f4f6]">910</div>
-            <div class="text-[9px] font-mono uppercase text-stone-brown/60 dark:text-[#758092]">Mid</div>
+            <div class="font-mono text-xs sm:text-sm font-bold text-black dark:text-[#f3f4f6]">125</div>
+            <div class="text-[9px] sm:text-[10px] font-mono uppercase font-semibold text-stone-brown/60 dark:text-[#758092]">Low</div>
           </div>
         </div>
 
-        <!-- Band 3: 3.6kHz -->
-        <div class="flex-1 flex flex-col items-center gap-2 min-w-0">
-          <span class="eq-band-val font-mono text-[10px] font-bold text-jet-black dark:text-[#c6ac8f]" id="eq-val-3">0dB</span>
-          <div class="h-36 flex items-center justify-center">
-            <input type="range" class="eq-band-slider vertical-slider h-32 w-2.5 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]" data-band="3" min="-12" max="12" step="0.5" value="0">
+        <!-- Band 3: 250Hz -->
+        <div class="flex-1 flex flex-col items-center gap-2 sm:gap-2.5 min-w-[38px] sm:min-w-[48px]">
+          <span class="eq-band-val font-mono text-[10px] sm:text-xs font-bold text-jet-black dark:text-[#c6ac8f]" id="eq-val-3">0dB</span>
+          <div class="h-44 sm:h-52 flex items-center justify-center">
+            <input type="range" class="eq-band-slider vertical-slider h-40 sm:h-48 w-2.5 sm:w-3 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]" data-band="3" min="-12" max="12" step="0.5" value="0">
           </div>
           <div class="text-center">
-            <div class="font-mono text-[11px] font-bold text-black dark:text-[#f3f4f6]">3.6k</div>
-            <div class="text-[9px] font-mono uppercase text-stone-brown/60 dark:text-[#758092]">Upper</div>
+            <div class="font-mono text-xs sm:text-sm font-bold text-black dark:text-[#f3f4f6]">250</div>
+            <div class="text-[9px] sm:text-[10px] font-mono uppercase font-semibold text-stone-brown/60 dark:text-[#758092]">Warm</div>
           </div>
         </div>
 
-        <!-- Band 4: 14kHz -->
-        <div class="flex-1 flex flex-col items-center gap-2 min-w-0">
-          <span class="eq-band-val font-mono text-[10px] font-bold text-jet-black dark:text-[#c6ac8f]" id="eq-val-4">0dB</span>
-          <div class="h-36 flex items-center justify-center">
-            <input type="range" class="eq-band-slider vertical-slider h-32 w-2.5 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]" data-band="4" min="-12" max="12" step="0.5" value="0">
+        <!-- Band 4: 500Hz -->
+        <div class="flex-1 flex flex-col items-center gap-2 sm:gap-2.5 min-w-[38px] sm:min-w-[48px]">
+          <span class="eq-band-val font-mono text-[10px] sm:text-xs font-bold text-jet-black dark:text-[#c6ac8f]" id="eq-val-4">0dB</span>
+          <div class="h-44 sm:h-52 flex items-center justify-center">
+            <input type="range" class="eq-band-slider vertical-slider h-40 sm:h-48 w-2.5 sm:w-3 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]" data-band="4" min="-12" max="12" step="0.5" value="0">
           </div>
           <div class="text-center">
-            <div class="font-mono text-[11px] font-bold text-black dark:text-[#f3f4f6]">14k</div>
-            <div class="text-[9px] font-mono uppercase text-stone-brown/60 dark:text-[#758092]">Treble</div>
+            <div class="font-mono text-xs sm:text-sm font-bold text-black dark:text-[#f3f4f6]">500</div>
+            <div class="text-[9px] sm:text-[10px] font-mono uppercase font-semibold text-stone-brown/60 dark:text-[#758092]">Mid</div>
+          </div>
+        </div>
+
+        <!-- Band 5: 1kHz -->
+        <div class="flex-1 flex flex-col items-center gap-2 sm:gap-2.5 min-w-[38px] sm:min-w-[48px]">
+          <span class="eq-band-val font-mono text-[10px] sm:text-xs font-bold text-jet-black dark:text-[#c6ac8f]" id="eq-val-5">0dB</span>
+          <div class="h-44 sm:h-52 flex items-center justify-center">
+            <input type="range" class="eq-band-slider vertical-slider h-40 sm:h-48 w-2.5 sm:w-3 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]" data-band="5" min="-12" max="12" step="0.5" value="0">
+          </div>
+          <div class="text-center">
+            <div class="font-mono text-xs sm:text-sm font-bold text-black dark:text-[#f3f4f6]">1k</div>
+            <div class="text-[9px] sm:text-[10px] font-mono uppercase font-semibold text-stone-brown/60 dark:text-[#758092]">Voice</div>
+          </div>
+        </div>
+
+        <!-- Band 6: 4kHz -->
+        <div class="flex-1 flex flex-col items-center gap-2 sm:gap-2.5 min-w-[38px] sm:min-w-[48px]">
+          <span class="eq-band-val font-mono text-[10px] sm:text-xs font-bold text-jet-black dark:text-[#c6ac8f]" id="eq-val-6">0dB</span>
+          <div class="h-44 sm:h-52 flex items-center justify-center">
+            <input type="range" class="eq-band-slider vertical-slider h-40 sm:h-48 w-2.5 sm:w-3 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]" data-band="6" min="-12" max="12" step="0.5" value="0">
+          </div>
+          <div class="text-center">
+            <div class="font-mono text-xs sm:text-sm font-bold text-black dark:text-[#f3f4f6]">4k</div>
+            <div class="text-[9px] sm:text-[10px] font-mono uppercase font-semibold text-stone-brown/60 dark:text-[#758092]">Clear</div>
+          </div>
+        </div>
+
+        <!-- Band 7: 16kHz -->
+        <div class="flex-1 flex flex-col items-center gap-2 sm:gap-2.5 min-w-[38px] sm:min-w-[48px]">
+          <span class="eq-band-val font-mono text-[10px] sm:text-xs font-bold text-jet-black dark:text-[#c6ac8f]" id="eq-val-7">0dB</span>
+          <div class="h-44 sm:h-52 flex items-center justify-center">
+            <input type="range" class="eq-band-slider vertical-slider h-40 sm:h-48 w-2.5 sm:w-3 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]" data-band="7" min="-12" max="12" step="0.5" value="0">
+          </div>
+          <div class="text-center">
+            <div class="font-mono text-xs sm:text-sm font-bold text-black dark:text-[#f3f4f6]">16k</div>
+            <div class="text-[9px] sm:text-[10px] font-mono uppercase font-semibold text-stone-brown/60 dark:text-[#758092]">Air</div>
           </div>
         </div>
       </div>
 
       <!-- Footer Action -->
-      <div class="px-5 py-3 border-t border-almond-cream dark:border-[#262c38] bg-almond-cream/10 dark:bg-[#1a1e26] flex items-center justify-between text-xs">
-        <button type="button" id="btn-reset-eq" class="px-3 py-1 font-semibold rounded-lg bg-white dark:bg-[#202532] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] transition">
+      <div class="px-5 sm:px-7 py-3.5 sm:py-4 border-t border-almond-cream dark:border-[#262c38] bg-almond-cream/10 dark:bg-[#1a1e26] flex items-center justify-between text-xs">
+        <button type="button" id="btn-reset-eq" class="px-3.5 py-1.5 font-semibold rounded-xl bg-white dark:bg-[#202532] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] transition shadow-sm">
           Reset to Flat
         </button>
-        <span class="text-[11px] font-mono text-stone-brown/60 dark:text-[#758092]">Auto-saved</span>
+        <span class="text-[11px] sm:text-xs font-mono text-stone-brown/60 dark:text-[#758092]" id="eq-cache-status">Persistent Cache Ready</span>
       </div>
 
     </div>
-  </div>
   </div>
 
   <!-- Live Ingestion Activity Modal -->
