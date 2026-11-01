@@ -45,11 +45,40 @@ export async function ensureSchema(db) {
       )
     `),
 
+    // Ingest Jobs Tracking Table
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS ingest_jobs (
+        id TEXT PRIMARY KEY,
+        run_id TEXT,
+        status TEXT NOT NULL DEFAULT 'queued',
+        targets_count INTEGER DEFAULT 0,
+        format TEXT DEFAULT 'm4a',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `),
+
+    // Ingest Events & Live Song Status Table
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS ingest_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_id TEXT NOT NULL,
+        song_id TEXT,
+        url TEXT,
+        title TEXT,
+        status TEXT NOT NULL,
+        error TEXT,
+        timestamp INTEGER NOT NULL
+      )
+    `),
+
     // Indexes for high-speed queries
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_playlists_updated ON playlists(updated_at DESC)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_track_metrics_play_count ON track_metrics(play_count DESC)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_track_metrics_last_played ON track_metrics(last_played_at DESC)`),
-    db.prepare(`CREATE INDEX IF NOT EXISTS idx_play_history_played_at ON play_history(played_at DESC)`)
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_play_history_played_at ON play_history(played_at DESC)`),
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_ingest_events_job ON ingest_events(job_id, timestamp ASC)`),
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_ingest_jobs_updated ON ingest_jobs(updated_at DESC)`)
   ]);
 
   schemaInitialized = true;

@@ -153,43 +153,88 @@
       }
 
       const state = window.Trove.state || {};
+      const workerUrl = CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/ingest') : null;
+      const workerToken = localStorage.getItem(storage.workerTokenKey) || '';
 
       try {
-        const dispatchUrl = `https://api.github.com/repos/${owner}/${repoName}/actions/workflows/${workflowFile}/dispatches`;
-        const response = await fetch(dispatchUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${ghToken}`,
-            'Accept': 'application/vnd.github+json',
-            'X-GitHub-Api-Version': '2022-11-28',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            ref: CONFIG.github?.ref || 'main',
-            inputs: {
+        let currentJobId = null;
+
+        if (workerUrl) {
+          if (this.elements.statusText) this.elements.statusText.innerText = 'Dispatching via Cloudflare Worker...';
+          const headers = { 'Content-Type': 'application/json' };
+          if (workerToken) {
+            headers['Authorization'] = `Bearer ${workerToken}`;
+            headers['X-API-Key'] = workerToken;
+          }
+
+          const response = await fetch(`${workerUrl.replace(/\/+$/, '')}/dispatch`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
               targets: combinedTargets,
               format: selectedFormat,
               bucket_id: repo.id,
-              hf_token: state.token || ''
-            }
-          })
-        });
+              hf_token: state.token || '',
+              gh_token: ghToken,
+              owner: owner,
+              repo: repoName,
+              ref: CONFIG.github?.ref || 'main',
+              workflow: workflowFile
+            })
+          });
 
-        if (!response.ok) {
-          let errDetail = `GitHub API request failed with status ${response.status}`;
-          try {
-            const errData = await response.json();
-            errDetail = errData.message || errDetail;
-          } catch (_) {}
-          if (response.status === 404) {
-            errDetail = `Workflow '${workflowFile}' not found in repository ${owner}/${repoName}.`;
-          } else if (response.status === 401 || response.status === 403) {
-            errDetail = `GitHub authentication failed. Check your Personal Access Token scopes.`;
+          if (!response.ok) {
+            let errDetail = `Worker request failed with status ${response.status}`;
+            try {
+              const errData = await response.json();
+              errDetail = errData.error || errDetail;
+            } catch (_) {}
+            throw new Error(errDetail);
           }
-          throw new Error(errDetail);
+
+          const resData = await response.json();
+          currentJobId = resData.job_id;
+          if (currentJobId) {
+            sessionStorage.setItem('trove_current_job_id', currentJobId);
+          }
+        } else {
+          // Fallback to direct GitHub API
+          const dispatchUrl = `https://api.github.com/repos/${owner}/${repoName}/actions/workflows/${workflowFile}/dispatches`;
+          const response = await fetch(dispatchUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${ghToken}`,
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              ref: CONFIG.github?.ref || 'main',
+              inputs: {
+                targets: combinedTargets,
+                format: selectedFormat,
+                bucket_id: repo.id,
+                hf_token: state.token || ''
+              }
+            })
+          });
+
+          if (!response.ok) {
+            let errDetail = `GitHub API request failed with status ${response.status}`;
+            try {
+              const errData = await response.json();
+              errDetail = errData.message || errDetail;
+            } catch (_) {}
+            if (response.status === 404) {
+              errDetail = `Workflow '${workflowFile}' not found in repository ${owner}/${repoName}.`;
+            } else if (response.status === 401 || response.status === 403) {
+              errDetail = `GitHub authentication failed. Check your Personal Access Token scopes.`;
+            }
+            throw new Error(errDetail);
+          }
         }
 
-        if (this.elements.statusText) this.elements.statusText.innerText = 'Dispatched to GitHub Actions!';
+        if (this.elements.statusText) this.elements.statusText.innerText = 'Dispatched successfully!';
         if (this.elements.statusSubtext) this.elements.statusSubtext.innerText = 'Opening live Activity Monitor...';
 
         setTimeout(() => {
@@ -203,7 +248,7 @@
 
           if (window.Trove.activity) {
             window.Trove.activity.showButton('Starting...', true, 'amber');
-            window.Trove.activity.open();
+            window.Trove.activity.open(currentJobId);
             window.Trove.activity.startPolling();
           }
         }, 700);

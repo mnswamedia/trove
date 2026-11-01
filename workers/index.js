@@ -20,6 +20,7 @@ import { handlePlaylists } from "./routes/playlists.js";
 import { handleMetrics } from "./routes/metrics.js";
 import { handleLyrics } from "./routes/lyrics.js";
 import { handleRecommendations } from "./routes/recommendations.js";
+import { handleIngest } from "./routes/ingest.js";
 
 export default {
   async fetch(request, env) {
@@ -53,6 +54,7 @@ export default {
           "/metrics",
           "/lyrics",
           "/recommendations",
+          "/ingest",
           "/health"
         ],
         timestamp: Date.now()
@@ -97,6 +99,11 @@ export default {
       pathname === "/extract"
     ) {
       return handleRecommendations(request, env, url);
+    }
+
+    // Ingestion Telemetry & Workflow Dispatch
+    if (pathname === "/ingest" || pathname.startsWith("/ingest/")) {
+      return handleIngest(request, env, url);
     }
 
     // 5. Root & Legacy Parameter Fallback

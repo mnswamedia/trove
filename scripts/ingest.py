@@ -33,6 +33,44 @@ MAX_PROXY_ATTEMPTS = int(os.getenv("MAX_PROXY_ATTEMPTS", "5"))
 
 # Number of songs to download before incrementally pushing to Hugging Face (Default: 3)
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "3"))
+
+# Cloudflare Worker Telemetry & Job Tracking
+CF_WORKER_URL = os.environ.get("CF_WORKER_URL", "").strip()
+CF_WORKER_TOKEN = os.environ.get("CF_WORKER_TOKEN", "").strip()
+JOB_ID = os.environ.get("JOB_ID", "").strip()
+GITHUB_RUN_ID = os.environ.get("GITHUB_RUN_ID", "").strip()
+
+def send_progress_ping(status: str, song_id: str = "", url: str = "", title: str = "", error: str = ""):
+    """Send non-blocking progress telemetry to Cloudflare Worker."""
+    if not CF_WORKER_URL:
+        return
+    target_endpoint = CF_WORKER_URL
+    if not target_endpoint.endswith("/progress") and not target_endpoint.endswith("/event"):
+        target_endpoint = target_endpoint.rstrip("/") + "/ingest/progress"
+    payload = {
+        "job_id": JOB_ID,
+        "run_id": GITHUB_RUN_ID,
+        "song_id": song_id,
+        "url": url,
+        "title": title,
+        "status": status,
+        "error": error
+    }
+    headers = {"Content-Type": "application/json"}
+    if CF_WORKER_TOKEN:
+        headers["Authorization"] = f"Bearer {CF_WORKER_TOKEN}"
+        headers["X-API-Key"] = CF_WORKER_TOKEN
+    try:
+        req = urllib.request.Request(
+            target_endpoint,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=4):
+            pass
+    except Exception:
+        pass  # Telemetry blips must never interrupt ingestion
 # ==============================================================================
 
 def upload_file_to_hf(local_path: str, remote_path: str, bucket_id: str, env: dict, token: str) -> bool:
@@ -482,6 +520,14 @@ def main():
     os.makedirs(metadata_dir, exist_ok=True)
     archive_file = os.path.join(workdir, "all_songs.txt")
 
+    start_epoch = int(time.time())
+    start_time_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    start_time_slug = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    target_results = []
+
+    # Send initial started telemetry ping to Cloudflare Worker
+    send_progress_ping("started", title=f"Ingestion started for {len(targets)} item(s)")
+
     env = {**os.environ, "HF_TOKEN": token}
 
     try:
@@ -712,6 +758,8 @@ def main():
             print(f" Ingesting Song [{target_idx}/{total_targets}]: {target}")
             print(f"==================================================")
 
+            send_progress_ping("downloading", url=target, title=f"Downloading [{target_idx}/{total_targets}]")
+
             target_success = False
 
             # 1. Attempt Direct Download first (Fastest; Android/iOS clients + Deno)
@@ -761,15 +809,99 @@ def main():
 
             if target_success:
                 successful_targets += 1
+
+                # Extract song title and details for report & telemetry
+                song_title = ""
+                song_id = ""
+                file_format = media_format
+                size_bytes = 0
+                pending_now = get_pending_media()
+                if pending_now:
+                    latest_media = pending_now[-1]
+                    size_bytes = latest_media.stat().st_size
+                    file_format = latest_media.suffix.lstrip(".").lower()
+                    meta_file = Path(metadata_dir) / f"{latest_media.stem}.json"
+                    if meta_file.exists():
+                        try:
+                            with open(meta_file, "r", encoding="utf-8") as mf:
+                                mdata = json.load(mf)
+                                song_title = mdata.get("title") or latest_media.stem
+                                song_id = mdata.get("id") or ""
+                        except Exception:
+                            pass
+                    if not song_title:
+                        song_title = latest_media.stem
+
+                target_results.append({
+                    "id": song_id,
+                    "url": target,
+                    "title": song_title or target,
+                    "format": file_format,
+                    "size_bytes": size_bytes,
+                    "size_formatted": format_bytes_py(size_bytes),
+                    "status": "success"
+                })
+
+                send_progress_ping(
+                    "succeeded",
+                    song_id=song_id,
+                    url=target,
+                    title=song_title or target
+                )
+
                 # Check if buffer has reached CHUNK_SIZE
-                pending = get_pending_media()
-                if len(pending) >= CHUNK_SIZE:
+                if len(pending_now) >= CHUNK_SIZE:
                     flush_chunk(reason=f"Reached threshold of {CHUNK_SIZE} songs")
+            else:
+                err_msg = "Download failed (sign in or unavailable)"
+                target_results.append({
+                    "id": "",
+                    "url": target,
+                    "title": target,
+                    "status": "failed",
+                    "error": err_msg
+                })
+                send_progress_ping("failed", url=target, title=target, error=err_msg)
 
         # Flush any remaining items in the final chunk
         pending_remaining = get_pending_media()
         if pending_remaining:
             flush_chunk(reason="Final remaining songs in batch")
+
+        # 3. Compile and upload permanent Ingestion Report to HF (ingests/ingest_{start_time_slug}.json)
+        end_time_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        duration_sec = int(time.time() - start_epoch)
+        report_data = {
+            "job_id": JOB_ID,
+            "run_id": GITHUB_RUN_ID,
+            "start_time": start_time_iso,
+            "end_time": end_time_iso,
+            "duration_seconds": duration_sec,
+            "warp_used": bool(warp_proxy),
+            "format": media_format,
+            "bucket_id": bucket_id,
+            "summary": {
+                "total": total_targets,
+                "successful": successful_targets,
+                "failed": total_targets - successful_targets
+            },
+            "results": target_results
+        }
+        report_local = os.path.join(workdir, f"ingest_{start_time_slug}.json")
+        try:
+            with open(report_local, "w", encoding="utf-8") as rf:
+                json.dump(report_data, rf, indent=2, ensure_ascii=False)
+            remote_report_path = f"ingests/ingest_{start_time_slug}.json"
+            print(f"\n--> Uploading permanent ingestion report to {remote_report_path}...")
+            upload_file_to_hf(report_local, remote_report_path, bucket_id, env, token)
+        except Exception as report_err:
+            print(f"    Warning: Could not upload ingestion report: {report_err}")
+
+        # Send final completed telemetry ping
+        send_progress_ping(
+            "completed",
+            title=f"Finished: {successful_targets}/{total_targets} succeeded"
+        )
 
         if total_uploaded == 0 and successful_targets == 0:
             print("\nNotice: No new media files were downloaded (items may already exist in all_songs.txt).")

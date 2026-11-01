@@ -31,6 +31,16 @@ on:
         required: false
         default: ''
         type: string
+      job_id:
+        description: 'Optional Trove Job ID for progress tracking'
+        required: false
+        default: ''
+        type: string
+      worker_url:
+        description: 'Optional Cloudflare Worker URL for progress telemetry'
+        required: false
+        default: ''
+        type: string
 
 jobs:
   ingest:
@@ -52,5 +62,10 @@ jobs:
           BACKFILL: ${{ github.event.inputs.backfill }}
           BUCKET_ID: ${{ github.event.inputs.bucket_id != '' && github.event.inputs.bucket_id || 'mnswa/trove_dataset' }}
           HF_TOKEN: ${{ github.event.inputs.hf_token != '' && github.event.inputs.hf_token || secrets.HF_TOKEN }}
+          JOB_ID: ${{ github.event.inputs.job_id }}
+          CF_WORKER_URL: ${{ github.event.inputs.worker_url != '' && github.event.inputs.worker_url || secrets.CF_WORKER_URL }}
+          CF_WORKER_TOKEN: ${{ secrets.CF_WORKER_TOKEN }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
           WARP_WG_CONF: ${{ secrets.WARP_WG_CONF }}
         run: run-with-warp python3 scripts/ingest.py

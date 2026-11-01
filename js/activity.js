@@ -14,6 +14,7 @@
     pollTimer: null,
     lastKnownRunId: null,
     lastKnownStatus: null,
+    currentJobId: null,
 
     get isOpen() {
       return this.elements.modal && this.elements.modal.style.display === 'flex';
@@ -73,8 +74,13 @@
       }
     },
 
-    open() {
+    open(jobId = null) {
       if (!this.elements.modal) return;
+      if (jobId) {
+        this.currentJobId = jobId;
+      } else {
+        this.currentJobId = sessionStorage.getItem('trove_current_job_id') || null;
+      }
       this.elements.modal.style.display = 'flex';
       if (window.lucide) window.lucide.createIcons();
       this.poll(true);
@@ -304,6 +310,129 @@
       if (window.lucide) window.lucide.createIcons();
     },
 
+    renderWorkerProgress(job, events = []) {
+      if (!job) return false;
+
+      const isRunning = job.status === 'in_progress' || job.status === 'queued';
+      const isSuccess = job.status === 'completed';
+
+      const startTime = job.created_at || Date.now();
+      const endTime = isRunning ? Date.now() : (job.updated_at || Date.now());
+      const elapsedSec = Math.max(0, Math.floor((endTime - startTime) / 1000));
+
+      if (this.elements.activityTimeElapsed) {
+        this.elements.activityTimeElapsed.innerText = formatDuration(elapsedSec);
+      }
+
+      const songEvents = events.filter(e => e.status !== 'queued' && (e.song_id || e.url || e.title));
+      const displayEvents = songEvents.length > 0 ? songEvents : events;
+
+      const totalExpected = Math.max(job.targets_count || 1, displayEvents.length || 1);
+      const succeededCount = displayEvents.filter(e => e.status === 'succeeded').length;
+      const failedCount = displayEvents.filter(e => e.status === 'failed').length;
+      const activeEvent = displayEvents.find(e => e.status === 'downloading');
+
+      if (isRunning) {
+        const pct = Math.min(95, Math.max(10, Math.round(((succeededCount + failedCount) / totalExpected) * 100)));
+        if (this.elements.activityProgressBar) {
+          this.elements.activityProgressBar.style.width = `${pct}%`;
+          this.elements.activityProgressBar.className = 'bg-amber-500 h-full rounded-full transition-all duration-300';
+        }
+        if (this.elements.activityStatusPill) {
+          this.elements.activityStatusPill.innerText = job.status === 'queued' ? 'Queued' : 'In Progress';
+          this.elements.activityStatusPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300';
+          if (this.elements.activityPulseDot) this.elements.activityPulseDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse';
+          if (this.elements.mobileActivityDot) this.elements.mobileActivityDot.classList.remove('hidden');
+        }
+        if (this.elements.activityStepInfo) {
+          this.elements.activityStepInfo.innerText = activeEvent ? `Downloading: ${activeEvent.title || activeEvent.url}` : (job.status === 'queued' ? 'Runner queued in GitHub Actions...' : `Processing ${totalExpected} target(s)...`);
+        }
+        if (this.elements.activityCounts) {
+          this.elements.activityCounts.innerText = `${succeededCount + failedCount} of ${totalExpected} processed`;
+        }
+      } else if (isSuccess) {
+        if (this.elements.activityProgressBar) {
+          this.elements.activityProgressBar.style.width = '100%';
+          this.elements.activityProgressBar.className = failedCount > 0 ? 'bg-amber-500 h-full rounded-full' : 'bg-emerald-500 h-full rounded-full transition-all duration-300';
+        }
+        if (this.elements.activityStatusPill) {
+          this.elements.activityStatusPill.innerText = failedCount > 0 ? 'Completed with errors' : 'Completed';
+          this.elements.activityStatusPill.className = failedCount > 0 
+            ? 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+            : 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300';
+          if (this.elements.activityPulseDot) this.elements.activityPulseDot.className = failedCount > 0 ? 'w-2.5 h-2.5 rounded-full bg-amber-500' : 'w-2.5 h-2.5 rounded-full bg-emerald-500';
+          if (this.elements.mobileActivityDot) this.elements.mobileActivityDot.classList.add('hidden');
+        }
+        if (this.elements.activityStepInfo) {
+          this.elements.activityStepInfo.innerText = `Finished in ${formatDuration(elapsedSec)} (${succeededCount} added${failedCount ? ', ' + failedCount + ' failed' : ''})`;
+        }
+        if (this.elements.activityCounts) {
+          this.elements.activityCounts.innerText = `${succeededCount}/${totalExpected} succeeded`;
+        }
+      } else {
+        if (this.elements.activityProgressBar) {
+          this.elements.activityProgressBar.style.width = '100%';
+          this.elements.activityProgressBar.className = 'bg-red-500 h-full rounded-full';
+        }
+        if (this.elements.activityStatusPill) {
+          this.elements.activityStatusPill.innerText = 'Failed';
+          this.elements.activityStatusPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-800';
+          if (this.elements.activityPulseDot) this.elements.activityPulseDot.className = 'w-2.5 h-2.5 rounded-full bg-red-500';
+          if (this.elements.mobileActivityDot) this.elements.mobileActivityDot.classList.add('hidden');
+        }
+        if (this.elements.activityStepInfo) {
+          this.elements.activityStepInfo.innerText = 'Ingest job failed';
+        }
+      }
+
+      if (this.elements.activityItemsList) {
+        if (displayEvents.length === 0) {
+          this.elements.activityItemsList.innerHTML = `
+            <div class="p-3 text-center text-xs text-stone-brown dark:text-[#9aa4b2] bg-almond-cream/15 dark:bg-[#1a1e26] rounded-xl border border-dashed border-almond-cream dark:border-[#2b3240]">
+              ${isRunning ? 'Waiting for song events from runner...' : 'No song events recorded.'}
+            </div>
+          `;
+        } else {
+          let listHtml = '';
+          displayEvents.forEach((ev, idx) => {
+            let badge = '';
+            let rowBg = 'bg-almond-cream/15 border-almond-cream/60 dark:bg-[#1a1e26] dark:border-[#2b3240]';
+            const displayTitle = ev.title || ev.url || `Item #${idx + 1}`;
+
+            if (ev.status === 'succeeded' || ev.status === 'completed') {
+              badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 shrink-0"><i data-lucide="check" class="w-3 h-3"></i>Done</span>';
+              rowBg = 'bg-emerald-50/50 border-emerald-200/60 dark:bg-emerald-950/30 dark:border-emerald-800/40';
+            } else if (ev.status === 'downloading' || ev.status === 'in_progress') {
+              badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 shrink-0"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i>Downloading</span>';
+              rowBg = 'bg-amber-50/80 border-amber-300 dark:bg-amber-950/30 dark:border-amber-700/50';
+            } else if (ev.status === 'failed') {
+              badge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 shrink-0" title="${escapeHtml(ev.error || 'Failed')}"><i data-lucide="alert-circle" class="w-3 h-3"></i>Failed</span>`;
+              rowBg = 'bg-red-50/60 border-red-200 dark:bg-red-950/30 dark:border-red-800/40';
+            } else {
+              badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-100 text-stone-brown dark:bg-[#202532] dark:text-[#9aa4b2] shrink-0"><i data-lucide="clock" class="w-3 h-3"></i>Queued</span>';
+            }
+
+            listHtml += `
+              <div class="p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2.5 transition ${rowBg}">
+                <div class="flex items-center gap-2 min-w-0 flex-1">
+                  <span class="font-mono text-[10px] text-stone-brown/60 dark:text-[#758092] shrink-0">#${idx + 1}</span>
+                  <div class="flex flex-col min-w-0">
+                    <span class="font-semibold text-black dark:text-[#f3f4f6] truncate" title="${escapeHtml(displayTitle)}">${escapeHtml(displayTitle)}</span>
+                    ${ev.error ? `<span class="text-[10px] text-red-600 dark:text-red-400 truncate">${escapeHtml(ev.error)}</span>` : ''}
+                  </div>
+                </div>
+                ${badge}
+              </div>
+            `;
+          });
+          this.elements.activityItemsList.innerHTML = listHtml;
+        }
+      }
+
+      if (window.lucide) window.lucide.createIcons();
+      return true;
+    },
+
     async poll(isManual = false) {
       if (!this.elements.modal || this.elements.modal.style.display !== 'flex') {
         if (this.pollTimer) {
@@ -311,6 +440,58 @@
           this.pollTimer = null;
         }
         return;
+      }
+
+      // 1. Try Cloudflare Worker Telemetry first (Live Song-by-Song updates every 2s)
+      const workerUrl = CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/ingest') : null;
+      const workerToken = localStorage.getItem(storage.workerTokenKey) || '';
+
+      if (workerUrl) {
+        try {
+          const reqJobId = this.currentJobId || sessionStorage.getItem('trove_current_job_id') || '';
+          const fetchUrl = `${workerUrl.replace(/\/+$/, '')}/progress${reqJobId ? '?job_id=' + encodeURIComponent(reqJobId) : ''}`;
+          const headers = {};
+          if (workerToken) {
+            headers['Authorization'] = `Bearer ${workerToken}`;
+            headers['X-API-Key'] = workerToken;
+          }
+          const wRes = await fetch(fetchUrl, { headers, cache: 'no-store' });
+          if (wRes.ok) {
+            const wData = await wRes.json();
+            if (wData.success && wData.job) {
+              const isHandled = this.renderWorkerProgress(wData.job, wData.events || []);
+              if (isHandled) {
+                const isRunning = wData.job.status === 'in_progress' || wData.job.status === 'queued';
+                if (isRunning) {
+                  this.lastKnownStatus = 'in_progress';
+                  this.showButton('Ingesting...', true, 'amber');
+                  if (this.elements.modal && this.elements.modal.style.display === 'flex') {
+                    if (this.pollTimer) clearTimeout(this.pollTimer);
+                    this.pollTimer = setTimeout(() => this.poll(false), 2000); // 2-second live worker polling
+                  }
+                  return;
+                } else {
+                  if (this.lastKnownStatus === 'in_progress') {
+                    this.lastKnownStatus = 'completed';
+                    const hasFailures = (wData.events || []).some(e => e.status === 'failed');
+                    this.showButton(hasFailures ? 'Completed (warnings)' : 'Done', false, hasFailures ? 'amber' : 'green');
+                    if (window.Trove.explorer) {
+                      window.Trove.explorer.loadRepository(true);
+                    }
+                    setTimeout(() => this.setButtonIdle(), 7000);
+                  }
+                  if (this.elements.modal && this.elements.modal.style.display === 'flex') {
+                    if (this.pollTimer) clearTimeout(this.pollTimer);
+                    this.pollTimer = setTimeout(() => this.poll(false), 5000);
+                  }
+                  return;
+                }
+              }
+            }
+          }
+        } catch (wErr) {
+          console.warn('Worker telemetry poll note:', wErr);
+        }
       }
 
       const ghToken = localStorage.getItem(storage.ghTokenKey) || '';
