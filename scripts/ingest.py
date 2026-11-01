@@ -42,7 +42,7 @@ GITHUB_RUN_ID = os.environ.get("GITHUB_RUN_ID", "").strip()
 
 def send_progress_ping(status: str, song_id: str = "", url: str = "", title: str = "", error: str = ""):
     """Send non-blocking progress telemetry to Cloudflare Worker."""
-    if not CF_WORKER_URL:
+    if not CF_WORKER_URL or not (CF_WORKER_URL.startswith("http://") or CF_WORKER_URL.startswith("https://")):
         return
     target_endpoint = CF_WORKER_URL
     if not target_endpoint.endswith("/progress") and not target_endpoint.endswith("/event"):
@@ -56,7 +56,10 @@ def send_progress_ping(status: str, song_id: str = "", url: str = "", title: str
         "status": status,
         "error": error
     }
-    headers = {"Content-Type": "application/json"}
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Trove-Runner/1.0"
+    }
     if CF_WORKER_TOKEN:
         headers["Authorization"] = f"Bearer {CF_WORKER_TOKEN}"
         headers["X-API-Key"] = CF_WORKER_TOKEN
@@ -67,10 +70,11 @@ def send_progress_ping(status: str, song_id: str = "", url: str = "", title: str
             headers=headers,
             method="POST"
         )
-        with urllib.request.urlopen(req, timeout=4):
-            pass
-    except Exception:
-        pass  # Telemetry blips must never interrupt ingestion
+        with urllib.request.urlopen(req, timeout=4) as resp:
+            if resp.status in (200, 201, 204):
+                print(f"    ✓ [Telemetry] Ping delivered ({status}): {title or url or status}")
+    except Exception as e:
+        print(f"    Notice: Telemetry ping ({status}) to {target_endpoint} skipped: {e}")
 # ==============================================================================
 
 def upload_file_to_hf(local_path: str, remote_path: str, bucket_id: str, env: dict, token: str) -> bool:

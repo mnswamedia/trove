@@ -61,8 +61,9 @@ export default {
       });
     }
 
-    // 3. Optional Authentication Check
-    if (!checkAuth(request, env)) {
+    // 3. Optional Authentication Check (exempt /health and ingest progress telemetry)
+    const isTelemetry = pathname === "/ingest/progress" || pathname === "/ingest/event";
+    if (!isTelemetry && !checkAuth(request, env)) {
       return jsonResponse({
         success: false,
         error: "Unauthorized. Provide a valid Bearer token, X-API-Key header, or ?token= parameter."

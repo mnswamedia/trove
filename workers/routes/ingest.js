@@ -139,6 +139,14 @@ export async function handleIngest(request, env, url) {
         if (found) resolvedJobId = found.id;
       }
 
+      if (!resolvedJobId) {
+        resolvedJobId = "job_" + (runId || now);
+        await env.DB.prepare(`
+          INSERT INTO ingest_jobs (id, run_id, status, targets_count, format, created_at, updated_at)
+          VALUES (?, ?, 'in_progress', 1, 'm4a', ?, ?)
+        `).bind(resolvedJobId, runId, now, now).run();
+      }
+
       if (resolvedJobId) {
         // Insert event
         await env.DB.prepare(`
