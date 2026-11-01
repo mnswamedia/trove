@@ -1,5 +1,5 @@
 // Trove PWA Service Worker
-const CACHE_NAME = 'trove-pwa-v4';
+const CACHE_NAME = 'trove-pwa-v10';
 
 // Core App Shell assets to pre-cache on install
 const PRECACHE_ASSETS = [
@@ -71,12 +71,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 4. Immutable CDN assets (Tailwind, Lucide, Google Fonts, jsmediatags): Cache-First
+  // 4. Immutable CDN assets (Tailwind, Lucide, Google Fonts, jsmediatags, Motion): Cache-First
   const isCdn = url.hostname.includes('fonts.googleapis.com') ||
     url.hostname.includes('fonts.gstatic.com') ||
     url.hostname.includes('cdn.tailwindcss.com') ||
     url.hostname.includes('unpkg.com') ||
-    url.hostname.includes('cdnjs.cloudflare.com');
+    url.hostname.includes('cdnjs.cloudflare.com') ||
+    url.hostname.includes('cdn.jsdelivr.net');
 
   if (isCdn) {
     event.respondWith(

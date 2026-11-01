@@ -24,6 +24,25 @@
   <link rel="icon" type="image/png" sizes="16x16" href="./assets/icons/icon-16x16.png">
   <link rel="shortcut icon" href="./assets/icons/icon-32x32.png">
 
+  <!-- Instant Theme Initializer (Prevents Theme Flash/FOUT before render) -->
+  <script>
+    (function() {
+      try {
+        const savedTheme = localStorage.getItem('trove_theme');
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+          document.documentElement.classList.add('dark');
+          const metaTheme = document.querySelector('meta[name="theme-color"]');
+          if (metaTheme) metaTheme.setAttribute('content', '#0e1116');
+        } else {
+          document.documentElement.classList.remove('dark');
+          const metaTheme = document.querySelector('meta[name="theme-color"]');
+          if (metaTheme) metaTheme.setAttribute('content', '#22333b');
+        }
+      } catch (e) {}
+    })();
+  </script>
+
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -33,6 +52,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
+      darkMode: 'class',
       theme: {
         extend: {
           colors: {
@@ -57,62 +77,72 @@
   <!-- jsmediatags for Embedded ID3 Album Art extraction -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
 
-  <!-- Minimal Style Overrides -->
+  <!-- Motion Animation Engine CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/motion@latest/dist/motion.js"></script>
+
+  <!-- Minimal Style Overrides & Variables -->
   <link rel="stylesheet" href="./style.css">
 </head>
-<body class="h-screen overflow-hidden text-black antialiased bg-[#fbf9f6]">
+<body class="h-screen overflow-hidden text-black dark:text-[#f3f4f6] antialiased bg-[#fbf9f6] dark:bg-[#0e1116] transition-colors duration-200">
   <div class="max-w-6xl mx-auto px-2.5 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 flex flex-col h-full gap-1.5 sm:gap-2">
     
     <!-- Clean Top Bar Header (Always in place) -->
-    <header class="shrink-0 flex items-center justify-between gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-white border border-almond-cream rounded-xl shadow-sm">
+    <header class="shrink-0 flex items-center justify-between gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#262c38] rounded-xl shadow-sm transition-colors duration-200">
       <!-- Left: Just the clean name 'Trove' -->
       <div class="flex items-center shrink-0">
-        <h1 class="text-base sm:text-lg font-bold tracking-tight text-jet-black leading-none select-none">Trove</h1>
+        <h1 class="text-base sm:text-lg font-bold tracking-tight text-jet-black dark:text-white leading-none select-none">Trove</h1>
       </div>
 
       <!-- Center: Consolidated Metrics in Top Bar (Compact & mobile-friendly) -->
-      <div class="flex items-center gap-1.5 sm:gap-2.5 px-2 py-0.5 sm:px-2.5 sm:py-1 bg-almond-cream/25 border border-almond-cream/70 rounded-lg text-[11px] sm:text-xs font-mono text-stone-brown">
+      <div class="flex items-center gap-1.5 sm:gap-2.5 px-2 py-0.5 sm:px-2.5 sm:py-1 bg-almond-cream/25 dark:bg-[#1e222c] border border-almond-cream/70 dark:border-[#282e3b] rounded-lg text-[11px] sm:text-xs font-mono text-stone-brown dark:text-[#9aa4b2]">
         <div class="flex items-center gap-1">
-          <span class="text-stone-brown/60">Files:</span>
-          <strong id="stat-total-files" class="text-jet-black font-semibold">--</strong>
+          <span class="text-stone-brown/60 dark:text-[#758092]">Files:</span>
+          <strong id="stat-total-files" class="text-jet-black dark:text-white font-semibold">--</strong>
         </div>
-        <span class="text-khaki-beige select-none">•</span>
+        <span class="text-khaki-beige dark:text-[#c6ac8f] select-none">•</span>
         <div class="flex items-center gap-1">
-          <span class="text-stone-brown/60">Music:</span>
-          <strong id="stat-music-count" class="text-jet-black font-semibold">--</strong>
+          <span class="text-stone-brown/60 dark:text-[#758092]">Music:</span>
+          <strong id="stat-music-count" class="text-jet-black dark:text-white font-semibold">--</strong>
         </div>
-        <span class="text-khaki-beige select-none hidden xs:inline">•</span>
+        <span class="text-khaki-beige dark:text-[#c6ac8f] select-none hidden xs:inline">•</span>
         <div class="items-center gap-1 hidden xs:flex">
-          <span class="text-stone-brown/60">Videos:</span>
-          <strong id="stat-video-count" class="text-jet-black font-semibold">--</strong>
+          <span class="text-stone-brown/60 dark:text-[#758092]">Videos:</span>
+          <strong id="stat-video-count" class="text-jet-black dark:text-white font-semibold">--</strong>
         </div>
-        <span class="text-khaki-beige select-none hidden sm:inline">•</span>
+        <span class="text-khaki-beige dark:text-[#c6ac8f] select-none hidden sm:inline">•</span>
         <div class="items-center gap-1 hidden sm:flex">
-          <span class="text-stone-brown/60">Size:</span>
-          <strong id="stat-total-size" class="text-jet-black font-semibold">--</strong>
+          <span class="text-stone-brown/60 dark:text-[#758092]">Size:</span>
+          <strong id="stat-total-size" class="text-jet-black dark:text-white font-semibold">--</strong>
         </div>
       </div>
 
       <!-- Right: Action Buttons (Clean Icons Only) -->
       <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
         <!-- Install PWA App Button (Shown when browser detects installability) -->
-        <button id="pwa-install-btn" class="hidden h-8 px-2 sm:px-2.5 inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-900 hover:bg-emerald-500/25 transition shadow-sm select-none" title="Install Trove App">
-          <i data-lucide="download-cloud" class="w-3.5 h-3.5 text-emerald-700"></i>
+        <button id="pwa-install-btn" class="hidden h-8 px-2 sm:px-2.5 inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-900 dark:bg-emerald-500/20 dark:border-emerald-500/40 dark:text-emerald-300 hover:bg-emerald-500/25 transition shadow-sm select-none" title="Install Trove App">
+          <i data-lucide="download-cloud" class="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400"></i>
           <span class="text-xs font-semibold font-mono hidden sm:inline">Install</span>
         </button>
+
+        <!-- Theme Switcher (Toggle Light / Dark) -->
+        <button id="theme-toggle-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm select-none" title="Toggle Theme (Light / Dark)">
+          <i data-lucide="moon" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]" id="theme-toggle-icon"></i>
+          <span class="sr-only">Toggle Theme</span>
+        </button>
+
         <!-- Live Ingestion Activity Button (Beside Import Button) -->
-        <button id="activity-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white border border-khaki-beige text-jet-black hover:bg-almond-cream/40 transition shadow-sm select-none" title="Ingestion Activity">
-          <i data-lucide="activity" class="w-4 h-4 text-stone-brown" id="activity-btn-icon"></i>
+        <button id="activity-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm select-none" title="Ingestion Activity">
+          <i data-lucide="activity" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]" id="activity-btn-icon"></i>
           <span id="activity-btn-label" class="sr-only">Activity</span>
         </button>
-        <button id="import-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-jet-black text-white hover:bg-black transition shadow-sm" title="Import from YouTube">
+        <button id="import-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-jet-black text-white hover:bg-black dark:bg-[#f3f4f6] dark:text-[#0e1116] dark:hover:bg-white transition shadow-sm" title="Import from YouTube">
           <i data-lucide="download" class="w-4 h-4"></i>
         </button>
-        <button id="refresh-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white border border-khaki-beige text-jet-black hover:bg-almond-cream/40 transition shadow-sm" title="Refresh Vault">
-          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+        <button id="refresh-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm" title="Refresh Vault">
+          <i data-lucide="refresh-cw" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]"></i>
         </button>
-        <button id="auth-settings-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white border border-khaki-beige text-jet-black hover:bg-almond-cream/40 transition shadow-sm" title="Hugging Face Access Token">
-          <i data-lucide="key-round" class="w-4 h-4"></i>
+        <button id="auth-settings-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm" title="Hugging Face Access Token">
+          <i data-lucide="key-round" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]"></i>
           <span id="auth-btn-label" class="sr-only">Token</span>
         </button>
       </div>
@@ -121,18 +151,18 @@
     <!-- Explorer Workspace (Fills all remaining height) -->
     <main class="flex-1 flex flex-col gap-1.5 sm:gap-2 min-h-0">
       <!-- Toolbar: Search on left (compact width), Dropdown Filter & Single View Toggle on right (Always 1 row) -->
-      <div class="shrink-0 flex items-center justify-between gap-1.5 sm:gap-2 relative">
+      <div class="shrink-0 flex items-center justify-between gap-1.5 sm:gap-2 relative z-30">
         <!-- Search Input (Compact, not stretched) -->
         <div class="relative w-44 sm:w-60 md:w-72 shrink-0">
-          <i data-lucide="search" class="w-3.5 h-3.5 absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-stone-brown/60 pointer-events-none"></i>
+          <i data-lucide="search" class="w-3.5 h-3.5 absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-stone-brown/60 dark:text-[#758092] pointer-events-none"></i>
           <input 
             type="text" 
             id="search-input" 
             placeholder="Search files..." 
-            class="w-full pl-8 sm:pl-9 pr-7 sm:pr-8 py-1.5 text-xs sm:text-sm bg-white border border-khaki-beige rounded-lg text-black placeholder-stone-brown/50 focus:outline-none focus:ring-2 focus:ring-jet-black/20 focus:border-jet-black transition"
+            class="w-full pl-8 sm:pl-9 pr-7 sm:pr-8 py-1.5 text-xs sm:text-sm bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] rounded-lg text-black dark:text-[#f3f4f6] placeholder-stone-brown/50 dark:placeholder-[#758092] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 focus:border-jet-black dark:focus:border-white/50 transition"
             autocomplete="off"
           >
-          <button id="clear-search-btn" class="absolute right-2 top-1/2 -translate-y-1/2 text-stone-brown/60 hover:text-black hidden" title="Clear">
+          <button id="clear-search-btn" class="absolute right-2 top-1/2 -translate-y-1/2 text-stone-brown/60 dark:text-[#758092] hover:text-black dark:hover:text-white hidden" title="Clear">
             <i data-lucide="x" class="w-3.5 h-3.5"></i>
           </button>
         </div>
@@ -140,76 +170,76 @@
         <!-- Right Controls: Filter Dropdown & View Toggle -->
         <div class="flex items-center gap-1.5 sm:gap-2">
           <!-- Filter Dropdown (Custom styled, floating on top) -->
-          <div class="relative shrink-0" id="filter-dropdown-container">
-            <button id="filter-dropdown-btn" type="button" class="h-8 inline-flex items-center gap-1.5 px-2.5 text-xs font-semibold rounded-lg bg-white border border-khaki-beige text-jet-black hover:bg-almond-cream/40 transition shadow-sm select-none" title="Filter by file type">
-              <i data-lucide="layers" class="w-3.5 h-3.5 text-stone-brown" id="filter-active-icon"></i>
+          <div class="relative shrink-0 z-40" id="filter-dropdown-container">
+            <button id="filter-dropdown-btn" type="button" class="h-8 inline-flex items-center gap-1.5 px-2.5 text-xs font-semibold rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm select-none" title="Filter by file type">
+              <i data-lucide="layers" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f]" id="filter-active-icon"></i>
               <span id="filter-active-label" class="hidden sm:inline">All</span>
-              <i data-lucide="chevron-down" class="w-3 h-3 text-stone-brown"></i>
+              <i data-lucide="chevron-down" class="w-3 h-3 text-stone-brown dark:text-[#c6ac8f]"></i>
             </button>
             <!-- Floating Dropdown Menu -->
-            <div id="filter-dropdown-menu" class="absolute right-0 top-full mt-1.5 w-48 bg-white border border-almond-cream rounded-xl shadow-xl z-50 py-1.5 hidden animate-in fade-in slide-in-from-top-1 select-none">
-              <div class="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-brown/60 select-none">Filter by Type</div>
-              <button type="button" class="filter-option w-full px-3 py-1.5 text-xs text-jet-black hover:bg-almond-cream/40 flex items-center justify-between transition text-left" data-filter="all">
+            <div id="filter-dropdown-menu" class="absolute right-0 top-full mt-1.5 w-48 bg-white dark:bg-[#191d26] border border-almond-cream dark:border-[#2b3240] rounded-xl shadow-xl z-50 py-1.5 hidden animate-in fade-in slide-in-from-top-1 select-none">
+              <div class="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-brown/60 dark:text-[#758092] select-none">Filter by Type</div>
+              <button type="button" class="filter-option w-full px-3 py-1.5 text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] flex items-center justify-between transition text-left" data-filter="all">
                 <div class="flex items-center gap-2">
-                  <i data-lucide="layers" class="w-3.5 h-3.5 text-stone-brown"></i>
+                  <i data-lucide="layers" class="w-3.5 h-3.5 text-stone-brown dark:text-[#9aa4b2]"></i>
                   <span class="font-medium">All Files</span>
                 </div>
-                <i data-lucide="check" class="w-3.5 h-3.5 filter-check-icon text-jet-black"></i>
+                <i data-lucide="check" class="w-3.5 h-3.5 filter-check-icon text-jet-black dark:text-[#c6ac8f]"></i>
               </button>
-              <button type="button" class="filter-option w-full px-3 py-1.5 text-xs text-jet-black hover:bg-almond-cream/40 flex items-center justify-between transition text-left" data-filter="music">
+              <button type="button" class="filter-option w-full px-3 py-1.5 text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] flex items-center justify-between transition text-left" data-filter="music">
                 <div class="flex items-center gap-2">
-                  <i data-lucide="music" class="w-3.5 h-3.5 text-stone-brown"></i>
+                  <i data-lucide="music" class="w-3.5 h-3.5 text-stone-brown dark:text-[#9aa4b2]"></i>
                   <span class="font-medium">Music</span>
                 </div>
-                <i data-lucide="check" class="w-3.5 h-3.5 filter-check-icon text-jet-black hidden"></i>
+                <i data-lucide="check" class="w-3.5 h-3.5 filter-check-icon text-jet-black dark:text-[#c6ac8f] hidden"></i>
               </button>
-              <button type="button" class="filter-option w-full px-3 py-1.5 text-xs text-jet-black hover:bg-almond-cream/40 flex items-center justify-between transition text-left" data-filter="video">
+              <button type="button" class="filter-option w-full px-3 py-1.5 text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] flex items-center justify-between transition text-left" data-filter="video">
                 <div class="flex items-center gap-2">
-                  <i data-lucide="video" class="w-3.5 h-3.5 text-stone-brown"></i>
+                  <i data-lucide="video" class="w-3.5 h-3.5 text-stone-brown dark:text-[#9aa4b2]"></i>
                   <span class="font-medium">Video</span>
                 </div>
-                <i data-lucide="check" class="w-3.5 h-3.5 filter-check-icon text-jet-black hidden"></i>
+                <i data-lucide="check" class="w-3.5 h-3.5 filter-check-icon text-jet-black dark:text-[#c6ac8f] hidden"></i>
               </button>
-              <button type="button" class="filter-option w-full px-3 py-1.5 text-xs text-jet-black hover:bg-almond-cream/40 flex items-center justify-between transition text-left" data-filter="document">
+              <button type="button" class="filter-option w-full px-3 py-1.5 text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] flex items-center justify-between transition text-left" data-filter="document">
                 <div class="flex items-center gap-2">
-                  <i data-lucide="file-text" class="w-3.5 h-3.5 text-stone-brown"></i>
+                  <i data-lucide="file-text" class="w-3.5 h-3.5 text-stone-brown dark:text-[#9aa4b2]"></i>
                   <span class="font-medium">Text / Docs (.txt, .json)</span>
                 </div>
-                <i data-lucide="check" class="w-3.5 h-3.5 filter-check-icon text-jet-black hidden"></i>
+                <i data-lucide="check" class="w-3.5 h-3.5 filter-check-icon text-jet-black dark:text-[#c6ac8f] hidden"></i>
               </button>
-              <button type="button" class="filter-option w-full px-3 py-1.5 text-xs text-jet-black hover:bg-almond-cream/40 flex items-center justify-between transition text-left" data-filter="image">
+              <button type="button" class="filter-option w-full px-3 py-1.5 text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] flex items-center justify-between transition text-left" data-filter="image">
                 <div class="flex items-center gap-2">
-                  <i data-lucide="image" class="w-3.5 h-3.5 text-stone-brown"></i>
+                  <i data-lucide="image" class="w-3.5 h-3.5 text-stone-brown dark:text-[#9aa4b2]"></i>
                   <span class="font-medium">Images</span>
                 </div>
-                <i data-lucide="check" class="w-3.5 h-3.5 filter-check-icon text-jet-black hidden"></i>
+                <i data-lucide="check" class="w-3.5 h-3.5 filter-check-icon text-jet-black dark:text-[#c6ac8f] hidden"></i>
               </button>
-              <button type="button" class="filter-option w-full px-3 py-1.5 text-xs text-jet-black hover:bg-almond-cream/40 flex items-center justify-between transition text-left" data-filter="other">
+              <button type="button" class="filter-option w-full px-3 py-1.5 text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] flex items-center justify-between transition text-left" data-filter="other">
                 <div class="flex items-center gap-2">
-                  <i data-lucide="file" class="w-3.5 h-3.5 text-stone-brown"></i>
+                  <i data-lucide="file" class="w-3.5 h-3.5 text-stone-brown dark:text-[#9aa4b2]"></i>
                   <span class="font-medium">Other</span>
                 </div>
-                <i data-lucide="check" class="w-3.5 h-3.5 filter-check-icon text-jet-black hidden"></i>
+                <i data-lucide="check" class="w-3.5 h-3.5 filter-check-icon text-jet-black dark:text-[#c6ac8f] hidden"></i>
               </button>
             </div>
           </div>
 
           <!-- Single View Toggle Button (Tree / Flat) -->
-          <button id="view-toggle-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white border border-khaki-beige text-jet-black hover:bg-almond-cream/40 transition shadow-sm shrink-0" title="Current: Tree View. Click to switch to Flat View.">
-            <i data-lucide="folder-tree" class="w-4 h-4" id="view-toggle-icon"></i>
+          <button id="view-toggle-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm shrink-0" title="Current: Tree View. Click to switch to Flat View.">
+            <i data-lucide="folder-tree" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]" id="view-toggle-icon"></i>
           </button>
         </div>
       </div>
 
       <!-- Breadcrumbs: Current path row (Always in place) -->
-      <nav id="breadcrumbs" class="shrink-0 flex items-center flex-wrap gap-1 px-3 py-1 bg-almond-cream/30 border border-almond-cream rounded-lg text-xs font-medium text-stone-brown" aria-label="Breadcrumb">
+      <nav id="breadcrumbs" class="shrink-0 flex items-center flex-wrap gap-1 px-3 py-1 bg-almond-cream/30 dark:bg-[#15181f] border border-almond-cream dark:border-[#262c38] rounded-lg text-xs font-medium text-stone-brown dark:text-[#9aa4b2] transition-colors" aria-label="Breadcrumb">
         <!-- Rendered dynamically -->
       </nav>
 
       <!-- File List Card (Fills remaining height) -->
-      <div class="flex-1 flex flex-col min-h-0 bg-white border border-almond-cream rounded-xl shadow-sm overflow-hidden">
+      <div class="flex-1 flex flex-col min-h-0 bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#262c38] rounded-xl shadow-sm overflow-hidden transition-colors">
         <!-- Table Header: Column name row (Always in place) -->
-        <div class="shrink-0 grid grid-cols-12 px-3 py-2 sm:px-4 sm:py-2.5 bg-almond-cream/25 border-b border-almond-cream text-[11px] font-bold uppercase tracking-wider text-stone-brown/70 select-none">
+        <div class="shrink-0 grid grid-cols-12 px-3 py-2 sm:px-4 sm:py-2.5 bg-almond-cream/25 dark:bg-[#1a1e26] border-b border-almond-cream dark:border-[#262c38] text-[11px] font-bold uppercase tracking-wider text-stone-brown/70 dark:text-[#8b95a5] select-none">
           <span class="col-span-7 md:col-span-6">Name</span>
           <span class="col-span-2 md:col-span-2">Type</span>
           <span class="col-span-3 md:col-span-2 text-right md:text-left">Size</span>
@@ -217,22 +247,22 @@
         </div>
 
         <!-- Files Container: ONLY THIS SCROLLS -->
-        <div id="file-list" class="flex-1 overflow-y-auto divide-y divide-almond-cream/60 min-h-0 pb-16 sm:pb-20">
+        <div id="file-list" class="flex-1 overflow-y-auto divide-y divide-almond-cream/60 dark:divide-[#202530] min-h-0 pb-16 sm:pb-20">
           <!-- Dynamically populated rows -->
         </div>
 
         <!-- Explorer State (Loading / Empty / Error) -->
         <div id="explorer-state" class="flex-1 flex flex-col items-center justify-center p-8 text-center gap-3 overflow-y-auto min-h-0" style="display: none;">
-          <div id="state-icon" class="text-khaki-beige"></div>
-          <h3 id="state-title" class="text-base font-bold text-jet-black">Loading Vault</h3>
-          <p id="state-desc" class="text-xs text-stone-brown max-w-md">Fetching dataset files from Hugging Face...</p>
-          <button id="state-action-btn" class="mt-2 inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-jet-black text-white hover:bg-black transition hidden">Retry</button>
+          <div id="state-icon" class="text-khaki-beige dark:text-[#c6ac8f]"></div>
+          <h3 id="state-title" class="text-base font-bold text-jet-black dark:text-[#f3f4f6]">Loading Vault</h3>
+          <p id="state-desc" class="text-xs text-stone-brown dark:text-[#9aa4b2] max-w-md">Fetching dataset files from Hugging Face...</p>
+          <button id="state-action-btn" class="mt-2 inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-jet-black text-white hover:bg-black dark:bg-[#f3f4f6] dark:text-[#0e1116] dark:hover:bg-white transition hidden">Retry</button>
         </div>
       </div>
     </main>
 
     <!-- Footer (Always in place, ultra-compact) -->
-    <footer id="app-footer" class="shrink-0 py-0.5 flex items-center justify-center gap-2 text-[10px] text-stone-brown/60 transition-all duration-300">
+    <footer id="app-footer" class="shrink-0 py-0.5 flex items-center justify-center gap-2 text-[10px] text-stone-brown/60 dark:text-[#758092] transition-colors">
       <span>Trove · Hugging Face Dataset Explorer</span>
       <span>•</span>
       <span id="footer-status">Ready</span>
@@ -243,17 +273,17 @@
   <audio id="player-audio" preload="metadata" playsinline class="hidden"></audio>
 
   <!-- Persistent Floating Bottom Play Bar (Floating Island tightly hugging bottom edge) -->
-  <aside id="bottom-play-bar" class="fixed bottom-2 sm:bottom-3.5 left-1/2 -translate-x-1/2 w-[calc(100%-1.25rem)] sm:w-[calc(100%-2rem)] max-w-4xl bg-white/95 backdrop-blur-md border border-almond-cream rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] z-40 px-3 sm:px-4 md:px-5 py-2 sm:py-2.5 transition-all duration-300 translate-y-28 opacity-0 pointer-events-none" style="display: none;">
+  <aside id="bottom-play-bar" class="fixed bottom-2 sm:bottom-3.5 inset-x-0 mx-auto w-[calc(100%-1.25rem)] sm:w-[calc(100%-2rem)] max-w-4xl bg-white/95 dark:bg-[#15181f]/95 backdrop-blur-md border border-almond-cream dark:border-[#2b3240] rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.6)] z-40 px-3 sm:px-4 md:px-5 py-2 sm:py-2.5 transition-all duration-300 translate-y-28 opacity-0 pointer-events-none" style="display: none;">
     <div class="flex items-center justify-between gap-3 md:gap-5">
       
       <!-- Track & Mini Scrubber (Clicking expands the player) -->
       <div id="bar-expand-trigger" class="flex items-center gap-3 min-w-0 flex-1 cursor-pointer select-none group" title="Click to expand player">
         <!-- Thumbnail on the edge (Extracts embedded ID3 album art) -->
-        <div id="bar-thumbnail" class="w-11 h-11 rounded-lg bg-jet-black text-almond-cream flex items-center justify-center shrink-0 shadow-sm relative overflow-hidden group-hover:scale-105 transition">
+        <div id="bar-thumbnail" class="w-11 h-11 rounded-lg bg-jet-black dark:bg-[#202532] text-almond-cream dark:text-[#c6ac8f] flex items-center justify-center shrink-0 shadow-sm relative overflow-hidden group-hover:scale-105 transition">
           <img id="bar-thumb-img" class="w-full h-full object-contain hidden" alt="Album Art">
           <i data-lucide="music" id="bar-type-icon" class="w-5 h-5"></i>
           <!-- Mini Equalizer Wave Bars -->
-          <div id="bar-playing-indicator" class="absolute inset-0 bg-jet-black/60 flex items-center justify-center gap-0.5 hidden">
+          <div id="bar-playing-indicator" class="absolute inset-0 bg-jet-black/60 dark:bg-black/60 flex items-center justify-center gap-0.5 hidden">
             <span class="w-1 h-3 bg-almond-cream rounded-full animate-pulse"></span>
             <span class="w-1 h-4 bg-almond-cream rounded-full animate-pulse delay-75"></span>
             <span class="w-1 h-2 bg-almond-cream rounded-full animate-pulse delay-150"></span>
@@ -263,10 +293,10 @@
         <!-- Track metadata & scrubber -->
         <div class="flex flex-col min-w-0 flex-1">
           <div class="flex items-center gap-2">
-            <span id="bar-track-title" class="text-sm font-semibold text-black truncate group-hover:text-jet-black">No media playing</span>
-            <span id="bar-track-ext" class="px-1.5 py-0.2 rounded text-[10px] font-bold font-mono uppercase bg-almond-cream text-stone-brown hidden sm:inline-block">--</span>
+            <span id="bar-track-title" class="text-sm font-semibold text-black dark:text-[#f3f4f6] truncate group-hover:text-jet-black dark:group-hover:text-white">No media playing</span>
+            <span id="bar-track-ext" class="px-1.5 py-0.2 rounded text-[10px] font-bold font-mono uppercase bg-almond-cream dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f] hidden sm:inline-block">--</span>
             <!-- Loading indicator in play bar -->
-            <span id="bar-loading-badge" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-khaki-beige/30 text-stone-brown animate-pulse hidden">
+            <span id="bar-loading-badge" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-khaki-beige/30 dark:bg-[#282e3b] text-stone-brown dark:text-[#c6ac8f] animate-pulse hidden">
               <i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i>
               <span>Loading...</span>
             </span>
@@ -274,7 +304,7 @@
           
           <!-- Scrubber and timestamps -->
           <div class="flex items-center gap-2 mt-0.5">
-            <span id="bar-time-current" class="text-[11px] font-mono text-stone-brown/70 shrink-0">0:00</span>
+            <span id="bar-time-current" class="text-[11px] font-mono text-stone-brown/70 dark:text-[#8b95a5] shrink-0">0:00</span>
             <div class="relative flex-1 flex items-center" onclick="event.stopPropagation();">
               <input 
                 type="range" 
@@ -282,29 +312,29 @@
                 min="0" 
                 max="100" 
                 value="0" 
-                class="w-full h-1.5 bg-almond-cream rounded-lg appearance-none cursor-pointer accent-jet-black focus:outline-none"
+                class="w-full h-1.5 bg-almond-cream dark:bg-[#2b3240] rounded-lg appearance-none cursor-pointer accent-jet-black dark:accent-[#c6ac8f] focus:outline-none"
               >
             </div>
-            <span id="bar-time-duration" class="text-[11px] font-mono text-stone-brown/70 shrink-0">0:00</span>
+            <span id="bar-time-duration" class="text-[11px] font-mono text-stone-brown/70 dark:text-[#8b95a5] shrink-0">0:00</span>
           </div>
         </div>
       </div>
 
       <!-- Playback Controls -->
       <div class="flex items-center gap-1 md:gap-2 shrink-0">
-        <button id="btn-prev" class="p-2 text-stone-brown hover:text-black transition rounded-full hover:bg-almond-cream/40" title="Previous Track (P)">
+        <button id="btn-prev" class="p-2 text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white transition rounded-full hover:bg-almond-cream/40 dark:hover:bg-[#202532]" title="Previous Track (P)">
           <i data-lucide="skip-back" class="w-4 h-4"></i>
         </button>
         
-        <button id="btn-play-pause" class="w-10 h-10 rounded-full bg-jet-black text-white flex items-center justify-center hover:bg-black transition shadow-sm" title="Play/Pause (Space)">
+        <button id="btn-play-pause" class="w-10 h-10 rounded-full bg-jet-black text-white hover:bg-black dark:bg-[#f3f4f6] dark:text-[#0e1116] dark:hover:bg-white flex items-center justify-center transition shadow-sm" title="Play/Pause (Space)">
           <i data-lucide="play" id="play-pause-icon" class="w-4 h-4 ml-0.5"></i>
         </button>
         
-        <button id="btn-next" class="p-2 text-stone-brown hover:text-black transition rounded-full hover:bg-almond-cream/40" title="Next Track (N)">
+        <button id="btn-next" class="p-2 text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white transition rounded-full hover:bg-almond-cream/40 dark:hover:bg-[#202532]" title="Next Track (N)">
           <i data-lucide="skip-forward" class="w-4 h-4"></i>
         </button>
 
-        <button id="btn-expand-player" class="p-2 text-stone-brown hover:text-black transition rounded-full hover:bg-almond-cream/40 ml-1" title="Expand Player">
+        <button id="btn-expand-player" class="p-2 text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white transition rounded-full hover:bg-almond-cream/40 dark:hover:bg-[#202532] ml-1" title="Expand Player">
           <i data-lucide="chevron-up" class="w-5 h-5"></i>
         </button>
       </div>
@@ -313,19 +343,19 @@
   </aside>
 
   <!-- Fullscreen / Expanded Player Sheet -->
-  <div id="expanded-player" class="fixed inset-0 z-50 bg-[#fbf9f6] flex flex-col transition-transform duration-300 ease-out translate-y-full" style="display: none;">
+  <div id="expanded-player" class="fixed inset-0 z-50 bg-[#fbf9f6] dark:bg-[#0e1116] flex flex-col translate-y-full will-change-transform transition-colors duration-200" style="display: none;">
     <!-- Top Header: Title on Left, Minimize on Right -->
     <div class="max-w-4xl w-full mx-auto p-4 md:p-6 flex items-center justify-between">
       <div class="flex flex-col min-w-0 pr-4">
-        <span class="text-[11px] font-bold uppercase tracking-wider text-stone-brown/60">Now Playing</span>
-        <p id="expanded-subtitle" class="text-xs font-mono text-stone-brown truncate max-w-xs md:max-w-md">Trove Media Vault</p>
+        <span class="text-[11px] font-bold uppercase tracking-wider text-stone-brown/60 dark:text-[#758092]">Now Playing</span>
+        <p id="expanded-subtitle" class="text-xs font-mono text-stone-brown dark:text-[#9aa4b2] truncate max-w-xs md:max-w-md">Trove Media Vault</p>
       </div>
       <div class="flex items-center gap-1.5 shrink-0">
-        <button id="btn-pip-toggle" class="p-2.5 rounded-full hover:bg-almond-cream/50 text-stone-brown hover:text-black transition hidden" title="Picture-in-Picture">
+        <button id="btn-pip-toggle" class="p-2.5 rounded-full hover:bg-almond-cream/50 dark:hover:bg-[#202532] text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white transition hidden" title="Picture-in-Picture">
           <i data-lucide="picture-in-picture" class="w-5 h-5"></i>
         </button>
-        <button id="btn-speed" class="px-2.5 py-1 rounded-md bg-almond-cream/40 font-mono text-xs hover:bg-almond-cream transition font-semibold text-stone-brown" title="Playback Speed">1.0x</button>
-        <button id="btn-minimize-player" class="p-2.5 rounded-full hover:bg-almond-cream/50 text-stone-brown hover:text-black transition ml-1" title="Minimize Player">
+        <button id="btn-speed" class="px-2.5 py-1 rounded-md bg-almond-cream/40 dark:bg-[#1e222c] font-mono text-xs hover:bg-almond-cream dark:hover:bg-[#282e3b] transition font-semibold text-stone-brown dark:text-[#c6ac8f]" title="Playback Speed">1.0x</button>
+        <button id="btn-minimize-player" class="p-2.5 rounded-full hover:bg-almond-cream/50 dark:hover:bg-[#202532] text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white transition ml-1" title="Minimize Player">
           <i data-lucide="chevron-down" class="w-6 h-6"></i>
         </button>
       </div>
@@ -337,9 +367,9 @@
       <!-- Music Stage (When playing audio) - Direct Album Cover Card with Dynamic Fitting -->
       <div id="stage-music" class="flex flex-col items-center justify-center text-center gap-5 max-w-xl w-full my-auto px-4">
         <div class="relative group flex items-center justify-center w-full">
-          <div id="expanded-cover-art" class="max-w-full max-h-[46vh] rounded-2xl shadow-2xl overflow-hidden border border-almond-cream bg-almond-cream/20 flex items-center justify-center transition-all duration-300">
+          <div id="expanded-cover-art" class="max-w-full max-h-[46vh] rounded-2xl shadow-2xl overflow-hidden border border-almond-cream dark:border-[#2b3240] bg-almond-cream/20 dark:bg-[#15181f] flex items-center justify-center transition-all duration-300">
             <img id="expanded-cover-img" class="max-w-full max-h-[46vh] w-auto h-auto object-contain rounded-2xl hidden" alt="Album Art">
-            <div id="expanded-cover-fallback" class="w-60 h-60 flex flex-col items-center justify-center text-stone-brown/60 gap-3 p-6">
+            <div id="expanded-cover-fallback" class="w-60 h-60 flex flex-col items-center justify-center text-stone-brown/60 dark:text-[#758092] gap-3 p-6">
               <i data-lucide="music" id="expanded-cover-icon" class="w-16 h-16"></i>
               <span class="text-xs font-mono font-medium">Audio Track</span>
             </div>
@@ -347,8 +377,8 @@
         </div>
         
         <div class="w-full px-4">
-          <h2 id="expanded-track-title" class="text-xl md:text-2xl font-bold text-black truncate">--</h2>
-          <p id="expanded-track-meta" class="text-xs font-mono text-stone-brown/70 mt-1">--</p>
+          <h2 id="expanded-track-title" class="text-xl md:text-2xl font-bold text-black dark:text-[#f3f4f6] truncate">--</h2>
+          <p id="expanded-track-meta" class="text-xs font-mono text-stone-brown/70 dark:text-[#9aa4b2] mt-1">--</p>
         </div>
       </div>
 
@@ -372,9 +402,9 @@
           min="0" 
           max="100" 
           value="0" 
-          class="w-full h-2 bg-almond-cream rounded-lg appearance-none cursor-pointer accent-jet-black focus:outline-none"
+          class="w-full h-2 bg-almond-cream dark:bg-[#2b3240] rounded-lg appearance-none cursor-pointer accent-jet-black dark:accent-[#c6ac8f] focus:outline-none"
         >
-        <div class="flex justify-between text-xs font-mono text-stone-brown/70">
+        <div class="flex justify-between text-xs font-mono text-stone-brown/70 dark:text-[#8b95a5]">
           <span id="expanded-time-current">0:00</span>
           <span id="expanded-time-duration">0:00</span>
         </div>
@@ -383,36 +413,36 @@
       <!-- Controls Buttons Row -->
       <div class="flex items-center justify-between gap-2 px-2">
         <!-- Shuffle -->
-        <button id="btn-shuffle" class="p-2.5 rounded-full text-stone-brown/50 hover:text-black transition" title="Shuffle Off">
+        <button id="btn-shuffle" class="p-2.5 rounded-full text-stone-brown/50 dark:text-[#6b7688] hover:text-black dark:hover:text-white transition" title="Shuffle Off">
           <i data-lucide="shuffle" class="w-5 h-5"></i>
         </button>
 
         <!-- Previous Track -->
-        <button id="btn-expanded-prev" class="p-3 rounded-full text-stone-brown hover:text-black transition hover:bg-almond-cream/40" title="Previous (P)">
+        <button id="btn-expanded-prev" class="p-3 rounded-full text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white transition hover:bg-almond-cream/40 dark:hover:bg-[#202532]" title="Previous (P)">
           <i data-lucide="skip-back" class="w-6 h-6"></i>
         </button>
 
         <!-- Master Play / Pause Button -->
-        <button id="btn-expanded-play" class="w-16 h-16 rounded-full bg-jet-black text-white flex items-center justify-center hover:bg-black transition shadow-lg" title="Play/Pause (Space)">
+        <button id="btn-expanded-play" class="w-16 h-16 rounded-full bg-jet-black text-white hover:bg-black dark:bg-[#f3f4f6] dark:text-[#0e1116] dark:hover:bg-white flex items-center justify-center transition shadow-lg" title="Play/Pause (Space)">
           <i data-lucide="play" id="expanded-play-icon" class="w-7 h-7 ml-0.5"></i>
         </button>
 
         <!-- Next Track -->
-        <button id="btn-expanded-next" class="p-3 rounded-full text-stone-brown hover:text-black transition hover:bg-almond-cream/40" title="Next (N)">
+        <button id="btn-expanded-next" class="p-3 rounded-full text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white transition hover:bg-almond-cream/40 dark:hover:bg-[#202532]" title="Next (N)">
           <i data-lucide="skip-forward" class="w-6 h-6"></i>
         </button>
 
         <!-- Repeat Mode -->
-        <button id="btn-repeat" class="p-2.5 rounded-full text-stone-brown/50 hover:text-black transition" title="Repeat Mode: Off">
+        <button id="btn-repeat" class="p-2.5 rounded-full text-stone-brown/50 dark:text-[#6b7688] hover:text-black dark:hover:text-white transition" title="Repeat Mode: Off">
           <i data-lucide="repeat" class="w-5 h-5"></i>
         </button>
       </div>
 
       <!-- Bottom Audio Volume Utility -->
-      <div class="flex items-center justify-between text-xs text-stone-brown pt-2 border-t border-almond-cream/60">
-        <span id="active-queue-counter" class="font-mono text-stone-brown/60">1 / 1 in queue</span>
+      <div class="flex items-center justify-between text-xs text-stone-brown dark:text-[#9aa4b2] pt-2 border-t border-almond-cream/60 dark:border-[#252a36]">
+        <span id="active-queue-counter" class="font-mono text-stone-brown/60 dark:text-[#758092]">1 / 1 in queue</span>
         <div class="flex items-center gap-2">
-          <button id="btn-mute" class="hover:text-black text-stone-brown">
+          <button id="btn-mute" class="hover:text-black dark:hover:text-white text-stone-brown dark:text-[#9aa4b2]">
             <i data-lucide="volume-2" id="volume-icon" class="w-4 h-4"></i>
           </button>
           <input 
@@ -422,7 +452,7 @@
             max="1" 
             step="0.05" 
             value="1" 
-            class="w-20 md:w-28 h-1.5 bg-almond-cream rounded-lg appearance-none cursor-pointer accent-jet-black"
+            class="w-20 md:w-28 h-1.5 bg-almond-cream dark:bg-[#2b3240] rounded-lg appearance-none cursor-pointer accent-jet-black dark:accent-[#c6ac8f]"
           >
         </div>
       </div>
@@ -430,17 +460,17 @@
   </div>
 
   <!-- Live Ingestion Activity Modal -->
-  <div id="activity-modal" class="fixed inset-0 bg-jet-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4" style="display: none;">
-    <div class="bg-white border border-almond-cream rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
+  <div id="activity-modal" class="fixed inset-0 bg-jet-black/50 dark:bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4" style="display: none;">
+    <div class="bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#2b3240] rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
       
       <!-- Modal Header -->
-      <div class="px-4 py-3 border-b border-almond-cream flex items-center justify-between bg-almond-cream/20">
+      <div class="px-4 py-3 border-b border-almond-cream dark:border-[#2b3240] flex items-center justify-between bg-almond-cream/20 dark:bg-[#1a1e26]">
         <div class="flex items-center gap-2">
           <div class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" id="activity-pulse-dot"></div>
-          <h2 class="text-sm font-bold text-jet-black">Ingestion Activity</h2>
-          <span id="activity-status-pill" class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800">In Progress</span>
+          <h2 class="text-sm font-bold text-jet-black dark:text-[#f3f4f6]">Ingestion Activity</h2>
+          <span id="activity-status-pill" class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">In Progress</span>
         </div>
-        <button id="close-activity-modal-btn" class="p-1 rounded-lg text-stone-brown hover:text-black hover:bg-almond-cream/50 transition" title="Close">
+        <button id="close-activity-modal-btn" class="p-1 rounded-lg text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white hover:bg-almond-cream/50 dark:hover:bg-[#202532] transition" title="Close">
           <i data-lucide="x" class="w-4 h-4"></i>
         </button>
       </div>
@@ -448,18 +478,18 @@
       <!-- Modal Body -->
       <div class="p-4 overflow-y-auto flex-1 flex flex-col gap-3 min-h-0">
         <!-- Overview Card -->
-        <div class="bg-almond-cream/25 border border-almond-cream rounded-xl p-3 flex flex-col gap-2">
+        <div class="bg-almond-cream/25 dark:bg-[#1a1e26] border border-almond-cream dark:border-[#2b3240] rounded-xl p-3 flex flex-col gap-2">
           <div class="flex items-center justify-between text-xs font-mono">
-            <span class="text-stone-brown font-medium truncate max-w-[280px]" id="activity-step-info">Connecting to runner...</span>
-            <span class="text-jet-black font-semibold shrink-0" id="activity-time-elapsed">00:00</span>
+            <span class="text-stone-brown dark:text-[#9aa4b2] font-medium truncate max-w-[280px]" id="activity-step-info">Connecting to runner...</span>
+            <span class="text-jet-black dark:text-[#f3f4f6] font-semibold shrink-0" id="activity-time-elapsed">00:00</span>
           </div>
           <!-- Progress Bar -->
-          <div class="w-full bg-almond-cream/60 rounded-full h-1.5 overflow-hidden">
-            <div id="activity-progress-bar" class="bg-jet-black h-full rounded-full transition-all duration-300" style="width: 0%;"></div>
+          <div class="w-full bg-almond-cream/60 dark:bg-[#2b3240] rounded-full h-1.5 overflow-hidden">
+            <div id="activity-progress-bar" class="bg-jet-black dark:bg-[#f3f4f6] h-full rounded-full transition-all duration-300" style="width: 0%;"></div>
           </div>
-          <div class="flex items-center justify-between text-[11px] text-stone-brown/70 pt-0.5">
+          <div class="flex items-center justify-between text-[11px] text-stone-brown/70 dark:text-[#758092] pt-0.5">
             <span id="activity-counts">0 of 0 completed</span>
-            <a id="activity-github-link" href="#" target="_blank" rel="noopener noreferrer" class="text-stone-brown hover:text-black underline font-medium inline-flex items-center gap-1">
+            <a id="activity-github-link" href="#" target="_blank" rel="noopener noreferrer" class="text-stone-brown dark:text-[#c6ac8f] hover:text-black dark:hover:text-white underline font-medium inline-flex items-center gap-1">
               <span>View Terminal</span>
               <i data-lucide="external-link" class="w-3 h-3"></i>
             </a>
@@ -468,9 +498,9 @@
 
         <!-- Runner Steps List -->
         <div class="flex flex-col gap-1.5">
-          <div class="text-[10px] font-bold uppercase tracking-wider text-stone-brown/60 px-1 select-none">Workflow Steps</div>
+          <div class="text-[10px] font-bold uppercase tracking-wider text-stone-brown/60 dark:text-[#758092] px-1 select-none">Workflow Steps</div>
           <div id="activity-items-list" class="flex flex-col gap-1.5 max-h-60 overflow-y-auto pr-1">
-            <div class="p-3 text-center text-xs text-stone-brown bg-almond-cream/15 rounded-xl border border-dashed border-almond-cream">
+            <div class="p-3 text-center text-xs text-stone-brown dark:text-[#9aa4b2] bg-almond-cream/15 dark:bg-[#1a1e26] rounded-xl border border-dashed border-almond-cream dark:border-[#2b3240]">
               Connecting to runner...
             </div>
           </div>
@@ -478,33 +508,33 @@
       </div>
 
       <!-- Modal Footer -->
-      <div class="px-4 py-2.5 border-t border-almond-cream bg-almond-cream/10 flex items-center justify-between text-xs text-stone-brown">
+      <div class="px-4 py-2.5 border-t border-almond-cream dark:border-[#2b3240] bg-almond-cream/10 dark:bg-[#1a1e26] flex items-center justify-between text-xs text-stone-brown dark:text-[#9aa4b2]">
         <div class="flex items-center gap-1.5">
           <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
           <span class="text-[11px]">Live updates every 3s</span>
         </div>
-        <button id="dismiss-activity-btn" class="px-3.5 py-1 font-semibold text-xs rounded-lg bg-white border border-khaki-beige text-jet-black hover:bg-almond-cream/40 transition">Close</button>
+        <button id="dismiss-activity-btn" class="px-3.5 py-1 font-semibold text-xs rounded-lg bg-white dark:bg-[#202532] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] transition">Close</button>
       </div>
 
     </div>
   </div>
 
   <!-- YouTube Import Modal (yt-dlp Downloader) -->
-  <div id="import-modal" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
-    <div class="bg-white border border-almond-cream rounded-2xl shadow-2xl w-full max-w-lg p-6 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+  <div id="import-modal" class="fixed inset-0 bg-black/40 dark:bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+    <div class="bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#2b3240] rounded-2xl shadow-2xl w-full max-w-lg p-6 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
       
       <!-- Modal Header -->
       <div class="flex items-start justify-between gap-3">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-jet-black text-white flex items-center justify-center shrink-0 shadow-sm">
+          <div class="w-10 h-10 rounded-xl bg-jet-black text-white dark:bg-[#222734] dark:text-[#c6ac8f] flex items-center justify-center shrink-0 shadow-sm">
             <i data-lucide="download-cloud" class="w-5 h-5"></i>
           </div>
           <div>
-            <h2 class="text-base font-bold text-black">Import Music / Videos</h2>
-            <p class="text-xs text-stone-brown mt-0.5">Downloads from YouTube with yt-dlp &amp; adds to your vault</p>
+            <h2 class="text-base font-bold text-black dark:text-[#f3f4f6]">Import Music / Videos</h2>
+            <p class="text-xs text-stone-brown dark:text-[#9aa4b2] mt-0.5">Downloads from YouTube with yt-dlp &amp; adds to your vault</p>
           </div>
         </div>
-        <button id="close-import-modal-btn" class="p-1 rounded-lg text-stone-brown hover:text-black hover:bg-almond-cream/40 transition" title="Close">
+        <button id="close-import-modal-btn" class="p-1 rounded-lg text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition" title="Close">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
@@ -514,102 +544,102 @@
         
         <!-- URLs Textarea -->
         <div class="flex flex-col gap-1.5">
-          <label for="import-urls-input" class="text-xs font-semibold text-black flex items-center justify-between">
+          <label for="import-urls-input" class="text-xs font-semibold text-black dark:text-[#f3f4f6] flex items-center justify-between">
             <span>YouTube Links or Video IDs</span>
-            <span class="text-[11px] font-normal text-stone-brown/70">One per line</span>
+            <span class="text-[11px] font-normal text-stone-brown/70 dark:text-[#758092]">One per line</span>
           </label>
           <textarea 
             id="import-urls-input" 
             rows="3" 
             placeholder="https://www.youtube.com/watch?v=...&#10;or video ID: dQw4w9WgXcQ"
-            class="w-full px-3 py-2 font-mono text-xs bg-white border border-khaki-beige rounded-lg focus:outline-none focus:ring-2 focus:ring-jet-black/20 focus:border-jet-black transition"
+            class="w-full px-3 py-2 font-mono text-xs bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-lg text-black dark:text-[#f3f4f6] placeholder-stone-brown/50 dark:placeholder-[#758092] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 focus:border-jet-black dark:focus:border-white/50 transition"
           ></textarea>
         </div>
 
         <!-- OR File Upload for .txt -->
         <div class="flex flex-col gap-1.5">
-          <label class="text-xs font-semibold text-black">Or Batch .txt File</label>
+          <label class="text-xs font-semibold text-black dark:text-[#f3f4f6]">Or Batch .txt File</label>
           <input type="file" id="import-file-input" accept=".txt" class="hidden">
-          <div id="import-file-dropzone" class="flex items-center justify-between px-3.5 py-2.5 bg-almond-cream/30 border border-dashed border-khaki-beige rounded-xl cursor-pointer hover:bg-almond-cream/50 transition">
+          <div id="import-file-dropzone" class="flex items-center justify-between px-3.5 py-2.5 bg-almond-cream/30 dark:bg-[#1a1e26] border border-dashed border-khaki-beige dark:border-[#353c4d] rounded-xl cursor-pointer hover:bg-almond-cream/50 dark:hover:bg-[#202532] transition">
             <div class="flex items-center gap-2.5">
-              <i data-lucide="file-text" class="w-4 h-4 text-stone-brown"></i>
-              <span id="import-filename-display" class="text-xs text-stone-brown font-mono truncate max-w-xs">Select a .txt file (one link per line)</span>
+              <i data-lucide="file-text" class="w-4 h-4 text-stone-brown dark:text-[#9aa4b2]"></i>
+              <span id="import-filename-display" class="text-xs text-stone-brown dark:text-[#9aa4b2] font-mono truncate max-w-xs">Select a .txt file (one link per line)</span>
             </div>
-            <button type="button" id="import-clear-file-btn" class="text-xs text-stone-brown hover:text-black font-semibold hidden">Remove</button>
+            <button type="button" id="import-clear-file-btn" class="text-xs text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white font-semibold hidden">Remove</button>
           </div>
         </div>
 
         <!-- Format Selector -->
         <div class="flex items-center justify-between pt-1">
-          <span class="text-xs font-semibold text-black">Format</span>
-          <div class="flex items-center bg-almond-cream/40 p-1 rounded-lg border border-almond-cream gap-1">
+          <span class="text-xs font-semibold text-black dark:text-[#f3f4f6]">Format</span>
+          <div class="flex items-center bg-almond-cream/40 dark:bg-[#1a1e26] p-1 rounded-lg border border-almond-cream dark:border-[#2b3240] gap-1">
             <label class="cursor-pointer">
               <input type="radio" name="import-format" value="m4a" checked class="sr-only import-format-radio">
-              <span class="import-format-pill active px-3 py-1 text-xs font-semibold rounded-md transition text-jet-black bg-white shadow-sm inline-block">Audio (.m4a)</span>
+              <span class="import-format-pill active px-3 py-1 text-xs font-semibold rounded-md transition text-jet-black dark:text-[#f3f4f6] bg-white dark:bg-[#242a38] shadow-sm inline-block">Audio (.m4a)</span>
             </label>
             <label class="cursor-pointer">
               <input type="radio" name="import-format" value="mp4" class="sr-only import-format-radio">
-              <span class="import-format-pill px-3 py-1 text-xs font-semibold rounded-md transition text-stone-brown hover:text-black inline-block">Video (.mp4)</span>
+              <span class="import-format-pill px-3 py-1 text-xs font-semibold rounded-md transition text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white inline-block">Video (.mp4)</span>
             </label>
           </div>
         </div>
 
         <!-- GitHub Runner Configuration -->
-        <div class="border-t border-almond-cream/60 pt-3 flex flex-col gap-2">
+        <div class="border-t border-almond-cream/60 dark:border-[#252a36] pt-3 flex flex-col gap-2">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-semibold text-black flex items-center gap-1.5">
+            <span class="text-xs font-semibold text-black dark:text-[#f3f4f6] flex items-center gap-1.5">
               <i data-lucide="github" class="w-3.5 h-3.5"></i>
               <span>GitHub Actions Runner</span>
             </span>
-            <button type="button" id="toggle-gh-config-btn" class="text-[11px] text-stone-brown hover:text-black font-semibold">
+            <button type="button" id="toggle-gh-config-btn" class="text-[11px] text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white font-semibold">
               Settings &darr;
             </button>
           </div>
           <div id="gh-config-fields" class="flex flex-col gap-2.5">
             <div class="flex flex-col gap-1">
-              <label for="import-gh-token" class="text-[11px] font-semibold text-stone-brown flex items-center justify-between">
+              <label for="import-gh-token" class="text-[11px] font-semibold text-stone-brown dark:text-[#9aa4b2] flex items-center justify-between">
                 <span>GitHub Personal Access Token</span>
-                <a href="https://github.com/settings/tokens/new?scopes=repo,workflow&amp;description=Trove+Runner" target="_blank" rel="noopener noreferrer" class="text-accent-brown hover:underline text-[10px]">Create Token (workflow scope) &nearr;</a>
+                <a href="https://github.com/settings/tokens/new?scopes=repo,workflow&amp;description=Trove+Runner" target="_blank" rel="noopener noreferrer" class="text-accent-brown hover:underline text-[10px] dark:text-[#c6ac8f]">Create Token (workflow scope) &nearr;</a>
               </label>
               <input 
                 type="password" 
                 id="import-gh-token" 
                 placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
                 autocomplete="off"
-                class="w-full px-3 py-1.5 text-xs font-mono bg-white border border-khaki-beige rounded-lg focus:outline-none focus:ring-2 focus:ring-jet-black/20 focus:border-jet-black transition"
+                class="w-full px-3 py-1.5 text-xs font-mono bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-lg text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 focus:border-jet-black dark:focus:border-white/50 transition"
               >
             </div>
             <div class="flex flex-col gap-1">
-              <label for="import-gh-repo" class="text-[11px] font-semibold text-stone-brown">Repository (owner/repo)</label>
+              <label for="import-gh-repo" class="text-[11px] font-semibold text-stone-brown dark:text-[#9aa4b2]">Repository (owner/repo)</label>
               <input 
                 type="text" 
                 id="import-gh-repo" 
                 value="mnswa/trove"
                 placeholder="mnswa/trove"
-                class="w-full px-3 py-1.5 text-xs font-mono bg-white border border-khaki-beige rounded-lg focus:outline-none focus:ring-2 focus:ring-jet-black/20 focus:border-jet-black transition"
+                class="w-full px-3 py-1.5 text-xs font-mono bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-lg text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 focus:border-jet-black dark:focus:border-white/50 transition"
               >
             </div>
           </div>
         </div>
 
         <!-- Progress / Status Box -->
-        <div id="import-progress-box" class="p-3.5 rounded-xl bg-almond-cream/30 border border-almond-cream flex flex-col gap-2 hidden">
+        <div id="import-progress-box" class="p-3.5 rounded-xl bg-almond-cream/30 dark:bg-[#1a1e26] border border-almond-cream dark:border-[#2b3240] flex flex-col gap-2 hidden">
           <div class="flex items-center gap-2">
             <div id="import-spinner">
-              <i data-lucide="loader-2" class="w-4 h-4 text-jet-black animate-spin"></i>
+              <i data-lucide="loader-2" class="w-4 h-4 text-jet-black dark:text-[#c6ac8f] animate-spin"></i>
             </div>
-            <span id="import-status-text" class="text-xs font-bold text-jet-black">Processing import...</span>
+            <span id="import-status-text" class="text-xs font-bold text-jet-black dark:text-[#f3f4f6]">Processing import...</span>
           </div>
-          <p id="import-status-subtext" class="text-[11px] font-mono text-stone-brown truncate">Initializing...</p>
+          <p id="import-status-subtext" class="text-[11px] font-mono text-stone-brown dark:text-[#9aa4b2] truncate">Initializing...</p>
         </div>
 
         <!-- Error Banner -->
-        <div id="import-error-msg" class="p-3 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs hidden"></div>
+        <div id="import-error-msg" class="p-3 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 text-xs hidden"></div>
 
         <!-- Modal Actions -->
         <div class="flex items-center justify-end gap-2.5 pt-2">
-          <button type="button" id="cancel-import-btn" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-white border border-khaki-beige text-stone-brown hover:bg-almond-cream/30 transition">Cancel</button>
-          <button type="submit" id="start-import-btn" class="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg bg-jet-black text-white hover:bg-black transition shadow-sm">
+          <button type="button" id="cancel-import-btn" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-[#202532] border border-khaki-beige dark:border-[#353c4d] text-stone-brown dark:text-[#9aa4b2] hover:bg-almond-cream/30 dark:hover:bg-[#282e3b] transition">Cancel</button>
+          <button type="submit" id="start-import-btn" class="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg bg-jet-black text-white hover:bg-black dark:bg-[#f3f4f6] dark:text-[#0e1116] dark:hover:bg-white transition shadow-sm">
             <i data-lucide="download" class="w-3.5 h-3.5"></i>
             <span>Start Download</span>
           </button>
@@ -619,15 +649,15 @@
   </div>
 
   <!-- Authentication Modal (Password Manager Compliant) -->
-  <div id="auth-modal" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
-    <div class="bg-white border border-almond-cream rounded-xl shadow-xl w-full max-w-md p-6 flex flex-col gap-5">
+  <div id="auth-modal" class="fixed inset-0 bg-black/40 dark:bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+    <div class="bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#2b3240] rounded-xl shadow-xl w-full max-w-md p-6 flex flex-col gap-5">
       <div class="flex items-start gap-3.5">
-        <div class="w-10 h-10 rounded-lg bg-almond-cream text-stone-brown flex items-center justify-center shrink-0">
+        <div class="w-10 h-10 rounded-lg bg-almond-cream dark:bg-[#222734] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0">
           <i data-lucide="lock" class="w-5 h-5"></i>
         </div>
         <div>
-          <h2 class="text-lg font-bold text-black">Authentication Required</h2>
-          <p class="text-xs text-stone-brown mt-0.5">Connect to dataset <code id="modal-repo-id" class="px-1.5 py-0.5 bg-almond-cream/50 rounded font-mono text-jet-black">--</code></p>
+          <h2 class="text-lg font-bold text-black dark:text-[#f3f4f6]">Authentication Required</h2>
+          <p class="text-xs text-stone-brown dark:text-[#9aa4b2] mt-0.5">Connect to dataset <code id="modal-repo-id" class="px-1.5 py-0.5 bg-almond-cream/50 dark:bg-[#242a38] rounded font-mono text-jet-black dark:text-[#c6ac8f]">--</code></p>
         </div>
       </div>
 
@@ -636,7 +666,7 @@
         <input type="text" name="username" id="auth-username" autocomplete="username" class="sr-only" tabindex="-1">
 
         <div class="flex flex-col gap-1.5">
-          <label for="hf-token-input" class="text-xs font-semibold text-black">Hugging Face Read Token</label>
+          <label for="hf-token-input" class="text-xs font-semibold text-black dark:text-[#f3f4f6]">Hugging Face Read Token</label>
           <div class="relative flex items-center">
             <input 
               type="password" 
@@ -645,29 +675,29 @@
               autocomplete="current-password" 
               placeholder="hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
               required
-              class="w-full px-3 py-2 pr-10 font-mono text-xs bg-white border border-khaki-beige rounded-lg focus:outline-none focus:ring-2 focus:ring-jet-black/20 focus:border-jet-black transition"
+              class="w-full px-3 py-2 pr-10 font-mono text-xs bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-lg text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 focus:border-jet-black dark:focus:border-white/50 transition"
             >
-            <button type="button" id="toggle-token-visibility" class="absolute right-2.5 text-stone-brown hover:text-black p-1" title="Toggle visibility">
+            <button type="button" id="toggle-token-visibility" class="absolute right-2.5 text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white p-1" title="Toggle visibility">
               <i data-lucide="eye" id="eye-icon" class="w-4 h-4"></i>
             </button>
           </div>
-          <span class="text-[11px] text-stone-brown/80 leading-relaxed mt-0.5">
+          <span class="text-[11px] text-stone-brown/80 dark:text-[#9aa4b2] leading-relaxed mt-0.5">
             Token will be stored in your browser's local cache. Requires <strong>Read</strong> access to the dataset.
           </span>
         </div>
 
-        <div id="auth-error-msg" class="p-2.5 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs hidden"></div>
+        <div id="auth-error-msg" class="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 text-xs hidden"></div>
 
         <div class="flex items-center justify-end gap-2.5 pt-2">
-          <button type="button" id="close-modal-btn" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-white border border-khaki-beige text-stone-brown hover:bg-almond-cream/30 transition">Cancel</button>
-          <button type="submit" id="save-token-btn" class="px-4 py-1.5 text-xs font-semibold rounded-lg bg-jet-black text-white hover:bg-black transition">Connect Vault</button>
+          <button type="button" id="close-modal-btn" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-[#202532] border border-khaki-beige dark:border-[#353c4d] text-stone-brown dark:text-[#9aa4b2] hover:bg-almond-cream/30 dark:hover:bg-[#282e3b] transition">Cancel</button>
+          <button type="submit" id="save-token-btn" class="px-4 py-1.5 text-xs font-semibold rounded-lg bg-jet-black text-white hover:bg-black dark:bg-[#f3f4f6] dark:text-[#0e1116] dark:hover:bg-white transition">Connect Vault</button>
         </div>
       </form>
     </div>
   </div>
 
   <!-- Exit Toast Notification -->
-  <div id="trove-exit-toast" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] px-4 py-2 bg-jet-black/90 backdrop-blur text-white text-xs font-medium rounded-full shadow-2xl transition-all duration-300 pointer-events-none opacity-0 translate-y-3 select-none">
+  <div id="trove-exit-toast" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] px-4 py-2 bg-jet-black/90 dark:bg-[#1e222c]/95 border dark:border-[#2f3644] text-white dark:text-[#f3f4f6] text-xs font-medium rounded-full shadow-2xl transition-all duration-300 pointer-events-none opacity-0 translate-y-3 select-none">
     Press back again to exit
   </div>
 
