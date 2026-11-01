@@ -215,11 +215,11 @@
         return;
       }
 
-      const workerUrl = localStorage.getItem(storage.workerRecsUrlKey) || '';
+      const workerUrl = (CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/recommendations') : null) || localStorage.getItem(storage.workerRecsUrlKey) || '';
       const workerToken = localStorage.getItem(storage.workerTokenKey) || '';
 
       if (!workerUrl) {
-        this.renderEmpty('Cloudflare Worker Needed', 'Please configure your Recommendations Worker URL in Settings.');
+        this.renderEmpty('Cloudflare Worker Needed', 'Please configure your Trove Worker URL in Settings.');
         if (this.elements.btnEmptyOpenSettings) this.elements.btnEmptyOpenSettings.classList.remove('hidden');
         return;
       }
@@ -255,7 +255,8 @@
         this.currentVideoId = videoId;
 
         const cleanBase = workerUrl.replace(/\/+$/, '');
-        let targetUrl = `${cleanBase}/?videoId=${encodeURIComponent(videoId)}&excludeShorts=true`;
+        const sep = cleanBase.includes('?') ? '&' : (cleanBase.endsWith('/recommendations') ? '?' : '/?');
+        let targetUrl = `${cleanBase}${sep}videoId=${encodeURIComponent(videoId)}&excludeShorts=true`;
         if (workerToken) {
           targetUrl += `&token=${encodeURIComponent(workerToken)}`;
         }

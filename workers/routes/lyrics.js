@@ -1,25 +1,8 @@
 /**
- * Cloudflare Worker — Music Lyrics Extractor
- *
- * Endpoints:
- *   GET  /?videoId=ID&token=KEY       → fetch lyrics for YouTube videoId (or full YT/YTM URL)
- *   GET  /lyrics/ID                   → path-style lookup
- *   GET  /?title=TITLE&artist=ARTIST  → title/artist lookup (with LRCLIB search)
- *   GET  /?q=QUERY                    → general search query lookup
- *   POST / or /lyrics                 → JSON body: { videoId, title, artist, q }
- *   GET  /health                      → health check
- *   OPTIONS *                         → CORS preflight
- *
- * Multi-Source Fallback Strategy:
- *   1. YouTube Music InnerTube (browse with MPLYt browseId)
- *   2. LRCLIB database (synced & plain lyrics fallback by track/artist)
- *
- * Supported Auth (if API_KEY or TOKEN is set in Worker environment):
- *   - Header: Authorization: Bearer <TOKEN>
- *   - Header: X-API-Key: <TOKEN>
- *   - Query:  ?token=<TOKEN> or ?key=<TOKEN> or ?apiKey=<TOKEN>
- *   If no secret is set in Worker environment, requests are publicly allowed.
+ * Route Handler: Music Lyrics Extractor (/lyrics/*)
  */
+
+import { jsonResponse } from "../common.js";
 
 const YTM_BASE = "https://music.youtube.com/youtubei/v1";
 const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
@@ -28,10 +11,6 @@ const LRCLIB_BASE = "https://lrclib.net/api";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const VISITOR_ID = "CgtwclpTdlljOTc4VSjGzJzXBjIKCgJTRxIEGgAgaA%3D%3D";
-
-/* --------------------------------------------------------------------------
- * HTTP & YouTube Request Helpers
- * -------------------------------------------------------------------------- */
 
 async function ytmRequest(endpoint, payload, retries = 1) {
   const controller = new AbortController();
@@ -63,11 +42,9 @@ async function ytmRequest(endpoint, payload, retries = 1) {
     });
 
     clearTimeout(timeout);
-
     if (!response.ok) {
       throw new Error(`YouTube returned HTTP ${response.status}`);
     }
-
     return await response.json();
   } catch (err) {
     clearTimeout(timeout);
@@ -79,18 +56,11 @@ async function ytmRequest(endpoint, payload, retries = 1) {
   }
 }
 
-/* --------------------------------------------------------------------------
- * Tree & Node Parsers
- * -------------------------------------------------------------------------- */
-
-// Recursively find the lyrics browse ID (starts with "MPLYt").
 function findLyricsBrowseId(obj) {
   if (!obj || typeof obj !== "object") return null;
-
   if (typeof obj.browseId === "string" && obj.browseId.startsWith("MPLYt")) {
     return obj.browseId;
   }
-
   for (const value of Object.values(obj)) {
     const result = findLyricsBrowseId(value);
     if (result) return result;
@@ -98,16 +68,13 @@ function findLyricsBrowseId(obj) {
   return null;
 }
 
-// Find track title and artist name from watch-next data for LRCLIB fallback
 function findTrackInfo(obj) {
   if (!obj || typeof obj !== "object") return null;
-
   if (obj.videoDetails && typeof obj.videoDetails === "object") {
     const title = obj.videoDetails.title || null;
     const author = obj.videoDetails.author || null;
     if (title) return { title, author };
   }
-
   for (const value of Object.values(obj)) {
     const res = findTrackInfo(value);
     if (res) return res;
@@ -115,11 +82,9 @@ function findTrackInfo(obj) {
   return null;
 }
 
-// Extract lyrics from musicDescriptionShelfRenderer.
 function extractLyrics(obj) {
   if (!obj || typeof obj !== "object") return null;
 
-  // Search specifically for musicDescriptionShelfRenderer first
   function findShelf(node) {
     if (!node || typeof node !== "object") return null;
     if (node.musicDescriptionShelfRenderer) {
@@ -153,30 +118,9 @@ function extractLyrics(obj) {
     }
   }
 
-  // Check if YouTube returned a messageRenderer saying lyrics are unavailable
-  function findMessage(node) {
-    if (!node || typeof node !== "object") return null;
-    if (node.messageRenderer) {
-      const mr = node.messageRenderer;
-      const text = mr.text?.runs?.map(r => r.text || "").join("") || mr.text?.simpleText || "";
-      if (text) return text;
-    }
-    for (const val of Object.values(node)) {
-      const msg = findMessage(val);
-      if (msg) return msg;
-    }
-    return null;
-  }
-
-  const message = findMessage(obj);
-  if (message) {
-    return { lyrics: null, message };
-  }
-
   return null;
 }
 
-// Strip timestamps [mm:ss.xx] from synced LRC to obtain plain text
 function cleanSyncedLyrics(synced) {
   if (!synced) return "";
   return synced
@@ -185,7 +129,6 @@ function cleanSyncedLyrics(synced) {
     .trim();
 }
 
-// Clean title string for better LRCLIB matching
 function cleanSongTitle(str) {
   if (!str) return "";
   return str
@@ -199,10 +142,6 @@ function cleanSongTitle(str) {
     .trim();
 }
 
-/* --------------------------------------------------------------------------
- * LRCLIB Fallback Provider
- * -------------------------------------------------------------------------- */
-
 async function getLrclibLyrics(trackName, artistName, duration = null) {
   if (!trackName && !artistName) return null;
 
@@ -210,7 +149,6 @@ async function getLrclibLyrics(trackName, artistName, duration = null) {
     "User-Agent": "Trove-Media-Vault/1.0 (https://github.com/mnswa/trove)"
   };
 
-  // Attempt 1: Direct /api/get if both track and artist are known
   if (trackName && artistName) {
     try {
       const params = new URLSearchParams();
@@ -238,7 +176,6 @@ async function getLrclibLyrics(trackName, artistName, duration = null) {
     } catch (_) {}
   }
 
-  // Attempt 2: Search endpoint with track / combined query
   try {
     const cleanT = cleanSongTitle(trackName || "");
     const cleanA = cleanSongTitle(artistName || "");
@@ -249,7 +186,6 @@ async function getLrclibLyrics(trackName, artistName, duration = null) {
     if (res.ok) {
       const list = await res.json();
       if (Array.isArray(list) && list.length > 0) {
-        // Pick first item with lyrics
         const match = list.find(x => x.plainLyrics || x.syncedLyrics) || list[0];
         if (match && (match.plainLyrics || match.syncedLyrics)) {
           const plain = match.plainLyrics || cleanSyncedLyrics(match.syncedLyrics);
@@ -269,14 +205,9 @@ async function getLrclibLyrics(trackName, artistName, duration = null) {
   return null;
 }
 
-/* --------------------------------------------------------------------------
- * Main Lyrics Extraction Pipeline
- * -------------------------------------------------------------------------- */
-
 async function resolveLyrics({ videoId, title, artist, duration }) {
   let ytDetails = null;
 
-  // Step 1: If valid YouTube videoId, try YouTube Music InnerTube
   if (videoId && VIDEO_ID_RE.test(videoId)) {
     try {
       const nextData = await ytmRequest("next", { videoId });
@@ -306,7 +237,6 @@ async function resolveLyrics({ videoId, title, artist, duration }) {
     }
   }
 
-  // Step 2: Fallback to LRCLIB
   const queryTitle = title || ytDetails?.title || null;
   const queryArtist = artist || ytDetails?.author || null;
 
@@ -326,33 +256,11 @@ async function resolveLyrics({ videoId, title, artist, duration }) {
     }
   }
 
-  // Step 3: No lyrics found in either provider
   return {
     success: false,
     videoId: videoId || null,
     error: "Lyrics not available for this track."
   };
-}
-
-/* --------------------------------------------------------------------------
- * Response & CORS Helpers
- * -------------------------------------------------------------------------- */
-
-function jsonResponse(data, status = 200, cacheHours = 0) {
-  const headers = {
-    "Content-Type": "application/json; charset=utf-8",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key"
-  };
-
-  if (cacheHours > 0) {
-    headers["Cache-Control"] = `public, max-age=${cacheHours * 3600}, s-maxage=${cacheHours * 3600}`;
-  } else {
-    headers["Cache-Control"] = "no-store";
-  }
-
-  return new Response(JSON.stringify(data), { status, headers });
 }
 
 function extractVideoId(raw) {
@@ -367,113 +275,65 @@ function extractVideoId(raw) {
   return null;
 }
 
-/* --------------------------------------------------------------------------
- * Worker Entrypoint
- * -------------------------------------------------------------------------- */
+export async function handleLyrics(request, env, url) {
+  let videoId = null;
+  let title = null;
+  let artist = null;
+  let duration = null;
 
-export default {
-  async fetch(request, env) {
-    if (request.method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
-          "Access-Control-Max-Age": "86400"
-        }
-      });
+  if (request.method === "POST") {
+    try {
+      const body = await request.json();
+      videoId = extractVideoId(body.videoId || body.id || body.v || body.url);
+      title = body.title || body.trackName || body.name || null;
+      artist = body.artist || body.artistName || null;
+      duration = body.duration || null;
+    } catch (_) {
+      return jsonResponse({ success: false, error: "Invalid JSON body in POST request." }, 400);
+    }
+  } else if (request.method === "GET") {
+    if (url.pathname.startsWith("/lyrics/")) {
+      videoId = extractVideoId(url.pathname.slice("/lyrics/".length));
     }
 
-    const url = new URL(request.url);
-
-    if (request.method === "GET" && url.pathname === "/health") {
-      return jsonResponse({ ok: true, service: "trove-lyrics-worker" }, 200);
-    }
-
-    // Optional Authentication
-    const authSecret = env?.API_KEY || env?.TOKEN || env?.WORKER_TOKEN;
-    if (authSecret) {
-      const authHeader = request.headers.get("Authorization");
-      const apiKeyHeader = request.headers.get("X-API-Key");
-      const queryToken =
-        url.searchParams.get("token") ||
-        url.searchParams.get("key") ||
-        url.searchParams.get("apiKey");
-
-      const supplied =
-        (authHeader ? authHeader.replace(/^Bearer\s+/i, "") : null) ||
-        apiKeyHeader ||
-        queryToken;
-
-      if (supplied !== authSecret) {
-        return jsonResponse(
-          { success: false, error: "Unauthorized. Provide valid Bearer token or ?token= query parameter." },
-          401
-        );
-      }
-    }
-
-    let videoId = null;
-    let title = null;
-    let artist = null;
-    let duration = null;
-
-    if (request.method === "POST") {
-      try {
-        const body = await request.json();
-        videoId = extractVideoId(body.videoId || body.id || body.v || body.url);
-        title = body.title || body.trackName || body.name || null;
-        artist = body.artist || body.artistName || null;
-        duration = body.duration || null;
-      } catch (_) {
-        return jsonResponse({ success: false, error: "Invalid JSON body in POST request." }, 400);
-      }
-    } else if (request.method === "GET") {
-      // Path-style: /lyrics/<id> or /<id>
-      if (url.pathname.startsWith("/lyrics/")) {
-        videoId = extractVideoId(url.pathname.slice("/lyrics/".length));
-      }
-
-      if (!videoId) {
-        videoId = extractVideoId(
-          url.searchParams.get("videoId") ||
-          url.searchParams.get("v") ||
-          url.searchParams.get("id") ||
-          url.searchParams.get("url")
-        );
-      }
-
-      title = url.searchParams.get("title") || url.searchParams.get("track") || url.searchParams.get("name") || null;
-      artist = url.searchParams.get("artist") || url.searchParams.get("author") || null;
-      duration = url.searchParams.get("duration") || null;
-
-      // Single query search ?q=...
-      const q = url.searchParams.get("q");
-      if (q && !title) {
-        title = q;
-      }
-    } else {
-      return jsonResponse({ success: false, error: "Method not allowed. Use GET or POST." }, 405);
-    }
-
-    if (!videoId && !title && !artist) {
-      return jsonResponse(
-        {
-          success: false,
-          error: "Missing search criteria. Provide videoId (e.g. ?videoId=...) or title/artist (e.g. ?title=...&artist=...)."
-        },
-        400
+    if (!videoId) {
+      videoId = extractVideoId(
+        url.searchParams.get("videoId") ||
+        url.searchParams.get("v") ||
+        url.searchParams.get("id") ||
+        url.searchParams.get("url")
       );
     }
 
-    try {
-      const result = await resolveLyrics({ videoId, title, artist, duration });
-      const cacheHours = result.success ? 24 : 0;
-      return jsonResponse(result, result.success ? 200 : 404, cacheHours);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return jsonResponse({ success: false, error: message }, 502);
+    title = url.searchParams.get("title") || url.searchParams.get("track") || url.searchParams.get("name") || null;
+    artist = url.searchParams.get("artist") || url.searchParams.get("author") || null;
+    duration = url.searchParams.get("duration") || null;
+
+    const q = url.searchParams.get("q");
+    if (q && !title) {
+      title = q;
     }
+  } else {
+    return jsonResponse({ success: false, error: "Method not allowed. Use GET or POST." }, 405);
   }
-};
+
+  if (!videoId && !title && !artist) {
+    return jsonResponse(
+      {
+        success: false,
+        error: "Missing search criteria. Provide videoId (e.g. ?videoId=...) or title/artist (e.g. ?title=...&artist=...)."
+      },
+      400
+    );
+  }
+
+  try {
+    const result = await resolveLyrics({ videoId, title, artist, duration });
+    const cacheHours = result.success ? 24 : 0;
+    return jsonResponse(result, result.success ? 200 : 404, cacheHours);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return jsonResponse({ success: false, error: message }, 502);
+  }
+}
+

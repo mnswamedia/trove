@@ -141,9 +141,11 @@
     },
 
     updateQueue(clickedItem = null) {
-      const state = window.Trove.state || {};
-      const playable = (state.allItems || []).filter(i => !i.isDir && (i.category === 'music' || i.category === 'video'));
-      this.queue = playable;
+      if (!this.isCustomContextActive) {
+        const state = window.Trove.state || {};
+        const playable = (state.allItems || []).filter(i => !i.isDir && (i.category === 'music' || i.category === 'video'));
+        this.queue = playable;
+      }
 
       if (clickedItem) {
         this.currentIndex = this.queue.findIndex(i => i.path === clickedItem.path);
@@ -151,13 +153,87 @@
       this.updateQueueCounter();
     },
 
+    setCustomContext(items, startIndex = 0) {
+      this.isCustomContextActive = true;
+      this.queue = Array.isArray(items) ? items : [];
+      this.currentIndex = startIndex >= 0 && startIndex < this.queue.length ? startIndex : 0;
+      this.updateQueueCounter();
+      if (this.queue.length > 0) {
+        this.playTrack(this.queue[this.currentIndex]);
+      }
+    },
+
+    setCustomQueue(newQueue, startIndex = 0) {
+      this.setCustomContext(newQueue, startIndex);
+    },
+
     updateQueueCounter() {
       if (!this.elements.activeQueueCounter) return;
-      if (this.queue.length === 0 || this.currentIndex < 0) {
-        this.elements.activeQueueCounter.innerText = 'No media in queue';
+      const playlists = window.Trove.playlists;
+      const userQueue = (playlists && typeof playlists.getQueue === 'function') ? playlists.getQueue() : [];
+      if (userQueue.length > 0) {
+        this.elements.activeQueueCounter.innerText = `${userQueue.length} in queue`;
+      } else if (this.queue.length > 0 && this.currentIndex >= 0) {
+        this.elements.activeQueueCounter.innerText = `${this.currentIndex + 1} / ${this.queue.length} in folder`;
       } else {
-        this.elements.activeQueueCounter.innerText = `${this.currentIndex + 1} / ${this.queue.length} in queue`;
+        this.elements.activeQueueCounter.innerText = 'Queue empty';
       }
+    },
+
+    recordMetricsPlay(item, duration = 0) {
+      if (!item || !item.path) return;
+      try {
+        const config = window.APP_CONFIG || {};
+        const storage = config.storage || {};
+        const endpoint = (config.getWorkerEndpoint ? config.getWorkerEndpoint('/metrics/play') : null) ||
+          (localStorage.getItem(storage.workerMetricsUrlKey) ? localStorage.getItem(storage.workerMetricsUrlKey).replace(/\/+$/, '') + '/play' : null);
+        if (!endpoint) return;
+
+        const workerToken = localStorage.getItem(storage.workerTokenKey || 'trove_worker_token') || '';
+        const headers = { 'Content-Type': 'application/json' };
+        if (workerToken) {
+          headers['Authorization'] = `Bearer ${workerToken}`;
+          headers['X-API-Key'] = workerToken;
+        }
+
+        fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            path: item.path,
+            title: item.name || '',
+            artist: item.parentDir || '',
+            duration: Math.round(duration || item.duration || 0)
+          })
+        }).catch(() => {});
+      } catch (_) {}
+    },
+
+    recordMetricsComplete(item, secondsListened = 0) {
+      if (!item || !item.path) return;
+      try {
+        const config = window.APP_CONFIG || {};
+        const storage = config.storage || {};
+        const endpoint = (config.getWorkerEndpoint ? config.getWorkerEndpoint('/metrics/complete') : null) ||
+          (localStorage.getItem(storage.workerMetricsUrlKey) ? localStorage.getItem(storage.workerMetricsUrlKey).replace(/\/+$/, '') + '/complete' : null);
+        if (!endpoint) return;
+
+        const workerToken = localStorage.getItem(storage.workerTokenKey || 'trove_worker_token') || '';
+        const headers = { 'Content-Type': 'application/json' };
+        if (workerToken) {
+          headers['Authorization'] = `Bearer ${workerToken}`;
+          headers['X-API-Key'] = workerToken;
+        }
+
+        fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            path: item.path,
+            secondsListened: Math.round(secondsListened)
+          })
+        }).catch(() => {});
+      } catch (_) {}
     },
 
     async extractThumbnail(blob, item) {
@@ -424,6 +500,7 @@
           window.Trove.store.addRecentTrack(item, startAtSeconds, targetEl.duration || 0);
         }
         this.savePlaybackState();
+        this.recordMetricsPlay(item, targetEl.duration || 0);
       } catch (err) {
         console.error('Playback failed:', err);
         alert(`Failed to load ${item.name}: ${err.message}`);
@@ -500,6 +577,17 @@
     },
 
     playNext() {
+      // 1. Check if user explicitly queued tracks
+      const playlists = window.Trove.playlists;
+      if (playlists && typeof playlists.getNextQueuedTrack === 'function') {
+        const nextQueued = playlists.getNextQueuedTrack();
+        if (nextQueued) {
+          this.playTrack(nextQueued);
+          return;
+        }
+      }
+
+      // 2. Otherwise follow the folder/context sequence
       if (this.queue.length === 0) return;
 
       if (this.repeat === 'one') {
@@ -967,6 +1055,9 @@
 
       el.addEventListener('ended', () => {
         if (el === this.getActiveElement()) {
+          const endedTrack = this.currentTrack;
+          const duration = el.duration || 0;
+          this.recordMetricsComplete(endedTrack, duration);
           this.playNext();
           this.savePlaybackState();
         }
@@ -1030,6 +1121,14 @@
       }
       if (this.elements.btnMinimizePlayer) {
         this.elements.btnMinimizePlayer.addEventListener('click', () => this.minimize());
+      }
+
+      const btnQueueToggle = document.getElementById('btn-queue-toggle');
+      if (btnQueueToggle) {
+        btnQueueToggle.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (window.Trove.playlists) window.Trove.playlists.open('queue');
+        });
       }
 
       // Progress sliders

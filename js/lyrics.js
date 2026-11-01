@@ -189,8 +189,9 @@
 
         // 3. Prepare Cloudflare Worker request
         const workerUrl =
+          (CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/lyrics') : null) ||
           localStorage.getItem(storage.workerLyricsUrlKey) ||
-          localStorage.getItem(storage.workerRecsUrlKey) ||
+          localStorage.getItem(storage.workerBaseUrlKey) ||
           '';
         const workerToken = localStorage.getItem(storage.workerTokenKey) || '';
 

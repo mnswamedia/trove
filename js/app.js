@@ -155,7 +155,11 @@
 
       // Escape: Dismiss active panels in priority order
       if (e.key === 'Escape') {
-        if (window.Trove.recommendations?.isOpen) {
+        if (window.Trove.playlists?.isAddModalOpen) {
+          window.Trove.playlists.closeAddModal();
+        } else if (window.Trove.playlists?.isOpen) {
+          window.Trove.playlists.close();
+        } else if (window.Trove.recommendations?.isOpen) {
           window.Trove.recommendations.close();
         } else if (window.Trove.equalizer?.isOpen) {
           window.Trove.equalizer.hide();
@@ -188,7 +192,17 @@
       const player = window.Trove.player;
       const state = window.Trove.state || {};
 
-      // 0. If EQ or Related bottom sheet is open, close it
+      // 0. If Add Modal, Playlists, EQ or Related bottom sheet is open, close it
+      if (window.Trove.playlists?.isAddModalOpen) {
+        window.Trove.playlists.closeAddModal();
+        window.history.pushState({ trove: 'active' }, '');
+        return;
+      }
+      if (window.Trove.playlists?.isOpen) {
+        window.Trove.playlists.close();
+        window.history.pushState({ trove: 'active' }, '');
+        return;
+      }
       if (window.Trove.equalizer?.isOpen) {
         window.Trove.equalizer.hide();
         window.history.pushState({ trove: 'active' }, '');
@@ -276,6 +290,7 @@
     if (window.Trove.importer) window.Trove.importer.init();
     if (window.Trove.recommendations) window.Trove.recommendations.init();
     if (window.Trove.lyrics) window.Trove.lyrics.init();
+    if (window.Trove.playlists) window.Trove.playlists.init();
     if (window.Trove.explorer) window.Trove.explorer.init();
 
     if (MotionAnim) MotionAnim.playAppIntro();

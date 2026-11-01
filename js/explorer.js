@@ -515,9 +515,15 @@
           ? 'Folder' 
           : (isPlayable ? (isCurrentActive ? 'Playing Now' : 'Click to Play') : 'Click to Open ↗');
 
+        const actionBtnHtml = isPlayable ? `
+          <button type="button" class="btn-add-to-playlist p-1.5 rounded-lg hover:bg-almond-cream/60 dark:hover:bg-[#252b37] text-stone-brown/70 hover:text-jet-black dark:text-[#9aa4b2] dark:hover:text-[#f3f4f6] transition shrink-0 ml-1" title="Add to Playlist or Queue" data-path="${escapeHtml(item.path)}">
+            <i data-lucide="list-plus" class="w-4 h-4"></i>
+          </button>
+        ` : '';
+
         html += `
           <div class="file-row grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 transition text-sm cursor-pointer ${activeRowClass}" data-path="${escapeHtml(item.path)}" data-is-dir="${isFolder}" title="${escapeHtml(item.name)} (${isFolder ? 'Folder' : (isPlayable ? 'Click to play' : 'Click to open in new tab')})">
-            <div class="col-span-7 md:col-span-6 flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div class="col-span-6 md:col-span-6 flex items-center gap-2.5 sm:gap-3 min-w-0">
               ${thumbSlotHtml}
               <div class="flex flex-col min-w-0">
                 <span class="font-semibold text-black dark:text-[#f3f4f6] truncate ${isCurrentActive ? 'text-jet-black dark:text-white' : ''}">${escapeHtml(item.name)}</span>
@@ -529,11 +535,12 @@
                 ${escapeHtml(item.label)}
               </span>
             </div>
-            <div class="col-span-3 md:col-span-2 font-mono text-xs text-stone-brown dark:text-[#9aa4b2] text-right md:text-left">
+            <div class="col-span-3 md:col-span-2 font-mono text-xs text-stone-brown dark:text-[#9aa4b2] text-right md:text-left truncate">
               ${isFolder ? '--' : formatBytes(item.size)}
             </div>
-            <div class="hidden md:block col-span-2 text-xs ${isPlayable && isCurrentActive ? 'text-jet-black dark:text-[#c6ac8f] font-semibold' : 'text-stone-brown/70 dark:text-[#758092]'}">
-              ${statusText}
+            <div class="col-span-1 md:col-span-2 flex items-center justify-end md:justify-between text-xs ${isPlayable && isCurrentActive ? 'text-jet-black dark:text-[#c6ac8f] font-semibold' : 'text-stone-brown/70 dark:text-[#758092]'}">
+              <span class="hidden md:inline truncate">${statusText}</span>
+              ${actionBtnHtml}
             </div>
           </div>
         `;
@@ -848,6 +855,18 @@
 
           const row = e.target.closest('.file-row');
           if (!row) return;
+
+          // Quick Add to Playlist button click
+          const addBtn = e.target.closest('.btn-add-to-playlist');
+          if (addBtn) {
+            e.stopPropagation();
+            const filePath = addBtn.dataset.path;
+            const item = (state.allItems || []).find(i => i.path === filePath);
+            if (item && window.Trove.playlists) {
+              window.Trove.playlists.openAddModal(item);
+            }
+            return;
+          }
 
           const isDir = row.dataset.isDir === 'true';
           const path = row.dataset.path;
