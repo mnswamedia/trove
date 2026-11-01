@@ -70,6 +70,25 @@
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   }
 
+  // Format Relative Time (e.g., '2m ago', '3h ago', 'Yesterday', 'Oct 31')
+  function formatRelativeTime(timestamp) {
+    if (!timestamp) return '';
+    let ms = typeof timestamp === 'string' ? Date.parse(timestamp) : (timestamp < 1e11 ? timestamp * 1000 : timestamp);
+    if (!ms || isNaN(ms)) return '';
+    const diff = Math.floor((Date.now() - ms) / 1000);
+    if (diff < 60) return 'Just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    if (diff < 86400 * 2) return 'Yesterday';
+    if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d ago`;
+    const d = new Date(ms);
+    return d.toLocaleDateString(undefined, { 
+      month: 'short', 
+      day: 'numeric', 
+      year: d.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined 
+    });
+  }
+
   // Escape HTML helper
   function escapeHtml(str) {
     if (!str) return '';
@@ -545,6 +564,7 @@
     formatBytes,
     formatTime,
     formatDuration,
+    formatRelativeTime,
     escapeHtml,
     cleanYouTubeUrl,
     cleanAllInputUrls,

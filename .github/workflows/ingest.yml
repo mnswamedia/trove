@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       targets:
-        description: 'YouTube video URLs or IDs (space or line separated)'
-        required: true
+        description: 'YouTube video URLs or IDs (space or line separated; optional if backfilling)'
+        required: false
+        default: ''
         type: string
       format:
         description: 'Output format (m4a or mp4)'
@@ -15,6 +16,11 @@ on:
         options:
           - m4a
           - mp4
+      backfill:
+        description: 'Rebuild downloads.json from existing bucket metadata (true/false)'
+        required: false
+        default: false
+        type: boolean
       bucket_id:
         description: 'Target Hugging Face Bucket ID'
         required: false
@@ -104,6 +110,7 @@ jobs:
         env:
           TARGETS: ${{ github.event.inputs.targets }}
           MEDIA_FORMAT: ${{ github.event.inputs.format }}
+          BACKFILL: ${{ github.event.inputs.backfill }}
           BUCKET_ID: ${{ github.event.inputs.bucket_id != '' && github.event.inputs.bucket_id || 'mnswa/trove_dataset' }}
           HF_TOKEN: ${{ github.event.inputs.hf_token != '' && github.event.inputs.hf_token || secrets.HF_TOKEN }}
         run: |

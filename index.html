@@ -282,6 +282,60 @@
             </div>
           </div>
 
+          <!-- Sort Dropdown (Custom styled, floating) -->
+          <div class="relative shrink-0 z-40" id="sort-dropdown-container">
+            <button id="sort-dropdown-btn" type="button" class="h-8 inline-flex items-center gap-1.5 px-2.5 text-xs font-semibold rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm select-none" title="Sort files">
+              <i data-lucide="arrow-up-down" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f]" id="sort-active-icon"></i>
+              <span id="sort-active-label" class="hidden sm:inline">Name</span>
+              <i data-lucide="chevron-down" class="w-3 h-3 text-stone-brown dark:text-[#c6ac8f]"></i>
+            </button>
+            <div id="sort-dropdown-menu" class="absolute right-0 top-full mt-1.5 w-48 bg-white dark:bg-[#191d26] border border-almond-cream dark:border-[#2b3240] rounded-xl shadow-xl z-50 py-1.5 hidden animate-in fade-in slide-in-from-top-1 select-none">
+              <div class="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-brown/60 dark:text-[#758092] select-none">Sort by</div>
+              <button type="button" class="sort-option w-full px-3 py-1.5 text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] flex items-center justify-between transition text-left" data-sort="date" data-order="desc">
+                <div class="flex items-center gap-2">
+                  <i data-lucide="calendar-arrow-down" class="w-3.5 h-3.5 text-stone-brown dark:text-[#9aa4b2]"></i>
+                  <span class="font-medium">Recently Added</span>
+                </div>
+                <i data-lucide="check" class="w-3.5 h-3.5 sort-check-icon text-jet-black dark:text-[#c6ac8f] hidden"></i>
+              </button>
+              <button type="button" class="sort-option w-full px-3 py-1.5 text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] flex items-center justify-between transition text-left" data-sort="date" data-order="asc">
+                <div class="flex items-center gap-2">
+                  <i data-lucide="calendar-arrow-up" class="w-3.5 h-3.5 text-stone-brown dark:text-[#9aa4b2]"></i>
+                  <span class="font-medium">Oldest Added</span>
+                </div>
+                <i data-lucide="check" class="w-3.5 h-3.5 sort-check-icon text-jet-black dark:text-[#c6ac8f] hidden"></i>
+              </button>
+              <button type="button" class="sort-option w-full px-3 py-1.5 text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] flex items-center justify-between transition text-left" data-sort="name" data-order="asc">
+                <div class="flex items-center gap-2">
+                  <i data-lucide="arrow-down-a-z" class="w-3.5 h-3.5 text-stone-brown dark:text-[#9aa4b2]"></i>
+                  <span class="font-medium">Name (A &rarr; Z)</span>
+                </div>
+                <i data-lucide="check" class="w-3.5 h-3.5 sort-check-icon text-jet-black dark:text-[#c6ac8f]"></i>
+              </button>
+              <button type="button" class="sort-option w-full px-3 py-1.5 text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] flex items-center justify-between transition text-left" data-sort="name" data-order="desc">
+                <div class="flex items-center gap-2">
+                  <i data-lucide="arrow-down-z-a" class="w-3.5 h-3.5 text-stone-brown dark:text-[#9aa4b2]"></i>
+                  <span class="font-medium">Name (Z &rarr; A)</span>
+                </div>
+                <i data-lucide="check" class="w-3.5 h-3.5 sort-check-icon text-jet-black dark:text-[#c6ac8f] hidden"></i>
+              </button>
+              <button type="button" class="sort-option w-full px-3 py-1.5 text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] flex items-center justify-between transition text-left" data-sort="size" data-order="desc">
+                <div class="flex items-center gap-2">
+                  <i data-lucide="arrow-down-wide-narrow" class="w-3.5 h-3.5 text-stone-brown dark:text-[#9aa4b2]"></i>
+                  <span class="font-medium">Size (Largest)</span>
+                </div>
+                <i data-lucide="check" class="w-3.5 h-3.5 sort-check-icon text-jet-black dark:text-[#c6ac8f] hidden"></i>
+              </button>
+              <button type="button" class="sort-option w-full px-3 py-1.5 text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] flex items-center justify-between transition text-left" data-sort="size" data-order="asc">
+                <div class="flex items-center gap-2">
+                  <i data-lucide="arrow-down-narrow-wide" class="w-3.5 h-3.5 text-stone-brown dark:text-[#9aa4b2]"></i>
+                  <span class="font-medium">Size (Smallest)</span>
+                </div>
+                <i data-lucide="check" class="w-3.5 h-3.5 sort-check-icon text-jet-black dark:text-[#c6ac8f] hidden"></i>
+              </button>
+            </div>
+          </div>
+
           <!-- Single View Toggle Button (Tree / Flat) -->
           <button id="view-toggle-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm shrink-0" title="Current: Tree View. Click to switch to Flat View.">
             <i data-lucide="folder-tree" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]" id="view-toggle-icon"></i>
@@ -298,12 +352,19 @@
       <div class="flex-1 flex flex-col min-h-0 bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#262c38] rounded-xl shadow-sm overflow-hidden transition-colors">
         <!-- Table Header: Column name row (Always in place) -->
         <div class="shrink-0 grid grid-cols-12 px-3 py-2 sm:px-4 sm:py-2.5 bg-almond-cream/25 dark:bg-[#1a1e26] border-b border-almond-cream dark:border-[#262c38] text-[11px] font-bold uppercase tracking-wider text-stone-brown/70 dark:text-[#8b95a5] select-none">
-          <span class="col-span-6 md:col-span-6">Name</span>
-          <span class="col-span-2 md:col-span-2">Type</span>
-          <span class="col-span-3 md:col-span-2 text-right md:text-left">Size</span>
-          <span class="col-span-1 md:col-span-2 text-right md:text-left">
-            <span class="hidden md:inline">Status</span>
-          </span>
+          <div id="col-sort-name" class="col-span-6 md:col-span-6 flex items-center gap-1 cursor-pointer hover:text-jet-black dark:hover:text-[#f3f4f6] transition" title="Sort by Name">
+            <span>Name</span>
+            <span class="sort-indicator text-jet-black dark:text-[#c6ac8f]"></span>
+          </div>
+          <div class="col-span-2 md:col-span-2">Type</div>
+          <div id="col-sort-size" class="col-span-3 md:col-span-2 flex items-center justify-end md:justify-start gap-1 cursor-pointer hover:text-jet-black dark:hover:text-[#f3f4f6] transition text-right md:text-left" title="Sort by Size">
+            <span>Size</span>
+            <span class="sort-indicator text-jet-black dark:text-[#c6ac8f]"></span>
+          </div>
+          <div id="col-sort-date" class="col-span-1 md:col-span-2 flex items-center justify-end md:justify-start gap-1 cursor-pointer hover:text-jet-black dark:hover:text-[#f3f4f6] transition text-right md:text-left" title="Sort by Date Downloaded">
+            <span class="hidden md:inline">Date Added</span>
+            <span class="sort-indicator text-jet-black dark:text-[#c6ac8f] hidden md:inline"></span>
+          </div>
         </div>
 
         <!-- Files Container: ONLY THIS SCROLLS -->

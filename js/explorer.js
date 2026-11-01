@@ -8,7 +8,7 @@
   const CONFIG = window.APP_CONFIG || {};
   const repo = CONFIG.repo || {};
   const api = CONFIG.api || {};
-  const { getFileInfo, formatBytes, escapeHtml, MotionAnim, getIDB } = window.Trove.utils || {};
+  const { getFileInfo, formatBytes, formatRelativeTime, escapeHtml, MotionAnim, getIDB } = window.Trove.utils || {};
 
   const FILTER_CONFIG = {
     all: { label: 'All', fullLabel: 'All Files', icon: 'layers' },
@@ -37,6 +37,12 @@
         filterDropdownMenu: document.getElementById('filter-dropdown-menu'),
         filterActiveLabel: document.getElementById('filter-active-label'),
         filterActiveIcon: document.getElementById('filter-active-icon'),
+        sortDropdownBtn: document.getElementById('sort-dropdown-btn'),
+        sortDropdownMenu: document.getElementById('sort-dropdown-menu'),
+        sortActiveLabel: document.getElementById('sort-active-label'),
+        colSortName: document.getElementById('col-sort-name'),
+        colSortSize: document.getElementById('col-sort-size'),
+        colSortDate: document.getElementById('col-sort-date'),
         statTotalFiles: document.getElementById('stat-total-files'),
         statMusicCount: document.getElementById('stat-music-count'),
         statVideoCount: document.getElementById('stat-video-count'),
@@ -55,8 +61,68 @@
 
       this.updateViewToggleUI();
       this.updateFilterDropdownUI();
+      this.updateSortUI();
       this.setupEventListeners();
       this.loadStoredThumbnails();
+    },
+
+    updateSortUI() {
+      const state = window.Trove.state || {};
+      const sortBy = state.sortBy || 'name';
+      const sortOrder = state.sortOrder || 'asc';
+
+      // Update Toolbar Sort Button Label
+      if (this.elements.sortActiveLabel) {
+        let label = 'Name (A-Z)';
+        if (sortBy === 'date') {
+          label = sortOrder === 'desc' ? 'Recent' : 'Oldest';
+        } else if (sortBy === 'name') {
+          label = sortOrder === 'desc' ? 'Name (Z-A)' : 'Name (A-Z)';
+        } else if (sortBy === 'size') {
+          label = sortOrder === 'desc' ? 'Size (Large)' : 'Size (Small)';
+        }
+        this.elements.sortActiveLabel.innerText = label;
+      }
+
+      // Update checkmark in Sort Dropdown Menu
+      if (this.elements.sortDropdownMenu) {
+        const options = this.elements.sortDropdownMenu.querySelectorAll('.sort-option');
+        options.forEach(opt => {
+          const optSort = opt.dataset.sort;
+          const optOrder = opt.dataset.order;
+          const checkIcon = opt.querySelector('.sort-check-icon');
+          if (checkIcon) {
+            if (optSort === sortBy && optOrder === sortOrder) {
+              checkIcon.classList.remove('hidden');
+            } else {
+              checkIcon.classList.add('hidden');
+            }
+          }
+        });
+      }
+
+      // Update Table Column Headers indicators
+      const colHeaders = [
+        { el: this.elements.colSortName, key: 'name' },
+        { el: this.elements.colSortSize, key: 'size' },
+        { el: this.elements.colSortDate, key: 'date' }
+      ];
+
+      colHeaders.forEach(({ el, key }) => {
+        if (!el) return;
+        const indicator = el.querySelector('.sort-indicator');
+        if (!indicator) return;
+
+        if (sortBy === key) {
+          indicator.innerHTML = `<i data-lucide="${sortOrder === 'asc' ? 'chevron-up' : 'chevron-down'}" class="w-3.5 h-3.5 inline"></i>`;
+          el.classList.add('text-jet-black', 'dark:text-[#c6ac8f]', 'font-extrabold');
+        } else {
+          indicator.innerHTML = '';
+          el.classList.remove('text-jet-black', 'dark:text-[#c6ac8f]', 'font-extrabold');
+        }
+      });
+
+      if (window.lucide) window.lucide.createIcons();
     },
 
     updateFooterStatus(text) {
@@ -196,6 +262,35 @@
       return [];
     },
 
+    async fetchDownloadsManifest(token) {
+      const isBucket = repo.isBucket !== false;
+      const candidateUrls = isBucket ? [
+        `https://huggingface.co/buckets/${repo.id}/raw/downloads.json`,
+        `https://huggingface.co/buckets/${repo.id}/resolve/downloads.json`,
+        `${api.bucketsBase}/${repo.id}/raw/downloads.json`,
+        `${api.bucketsBase}/${repo.id}/resolve/downloads.json`,
+        `https://huggingface.co/api/buckets/${repo.id}/raw/downloads.json`
+      ] : [
+        `https://huggingface.co/datasets/${repo.id}/raw/${repo.branch || 'main'}/downloads.json`,
+        `https://huggingface.co/datasets/${repo.id}/resolve/${repo.branch || 'main'}/downloads.json`,
+        `${api.datasetsBase}/${repo.id}/raw/${repo.branch || 'main'}/downloads.json`
+      ];
+
+      for (const url of candidateUrls) {
+        try {
+          const res = await fetch(url, {
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data)) return data;
+            if (data && Array.isArray(data.downloads)) return data.downloads;
+          }
+        } catch (_) {}
+      }
+      return [];
+    },
+
     async loadRepository(forceRefresh = false) {
       const state = window.Trove.state || {};
       const player = window.Trove.player || {};
@@ -209,8 +304,21 @@
 
       if (!forceRefresh && window.Trove.store) {
         const cached = window.Trove.store.getCachedFSTree();
-        if (cached && Array.isArray(cached) && cached.length > 0) {
-          state.allItems = this.normalizeFileEntries(cached);
+        const cachedItems = cached ? (Array.isArray(cached) ? cached : cached.items) : null;
+        if (cachedItems && Array.isArray(cachedItems) && cachedItems.length > 0) {
+          const cachedManifest = (cached && cached.manifest) ? cached.manifest : [];
+          state.downloadsManifest = cachedManifest;
+          state.downloadsMap = new Map();
+          if (Array.isArray(cachedManifest)) {
+            cachedManifest.forEach(entry => {
+              if (!entry) return;
+              if (entry.filename) state.downloadsMap.set(entry.filename, entry);
+              if (entry.path) state.downloadsMap.set(entry.path, entry);
+              if (entry.id) state.downloadsMap.set(entry.id, entry);
+            });
+          }
+
+          state.allItems = this.normalizeFileEntries(cachedItems);
           this.updateStats();
           const fileCount = state.allItems.filter(i => !i.isDir).length;
           this.updateFooterStatus(`Loaded ${fileCount} files (cached)`);
@@ -228,6 +336,7 @@
       this.render();
 
       try {
+        const manifestPromise = this.fetchDownloadsManifest(state.token);
         let rawItems = [];
         try {
           rawItems = await this.fetchHFTree(state.token);
@@ -237,9 +346,21 @@
           rawItems = await this.fetchHFSiblingsFallback(state.token);
         }
 
+        const manifest = await manifestPromise;
+        state.downloadsManifest = manifest;
+        state.downloadsMap = new Map();
+        if (Array.isArray(manifest)) {
+          manifest.forEach(entry => {
+            if (!entry) return;
+            if (entry.filename) state.downloadsMap.set(entry.filename, entry);
+            if (entry.path) state.downloadsMap.set(entry.path, entry);
+            if (entry.id) state.downloadsMap.set(entry.id, entry);
+          });
+        }
+
         state.allItems = this.normalizeFileEntries(rawItems);
         if (window.Trove.store) {
-          window.Trove.store.setCachedFSTree(rawItems);
+          window.Trove.store.setCachedFSTree(rawItems, manifest);
         }
 
         this.updateStats();
@@ -290,6 +411,7 @@
     },
 
     normalizeFileEntries(rawItems) {
+      const state = window.Trove.state || {};
       const itemsMap = new Map();
 
       rawItems.forEach(item => {
@@ -307,6 +429,11 @@
         const name = pathParts[pathParts.length - 1];
         const parentDir = pathParts.slice(0, -1).join('/');
 
+        const manifestEntry = state.downloadsMap?.get(name) || state.downloadsMap?.get(cleanPath);
+        const ingestedAt = manifestEntry?.ingested_at 
+          ? (manifestEntry.ingested_at < 1e11 ? manifestEntry.ingested_at * 1000 : manifestEntry.ingested_at) 
+          : null;
+
         itemsMap.set(cleanPath, {
           path: cleanPath,
           name: name,
@@ -316,7 +443,16 @@
           category: fileInfo.category,
           label: fileInfo.label,
           ext: fileInfo.ext,
-          icon: fileInfo.icon
+          icon: fileInfo.icon,
+          ingestedAt: ingestedAt,
+          ingestedAtIso: manifestEntry?.ingested_at_iso || null,
+          artist: manifestEntry?.artist || '',
+          duration: manifestEntry?.duration || '',
+          durationSeconds: manifestEntry?.duration_seconds || 0,
+          youtubeUrl: manifestEntry?.youtube_url || '',
+          thumbnailUrl: manifestEntry?.thumbnail_url || '',
+          tags: manifestEntry?.tags || [],
+          genre: manifestEntry?.genre || ''
         });
 
         for (let i = 0; i < pathParts.length - 1; i++) {
@@ -343,6 +479,37 @@
       return Array.from(itemsMap.values());
     },
 
+    sortItems(items) {
+      const state = window.Trove.state || {};
+      const sortBy = state.sortBy || 'name';
+      const isDesc = state.sortOrder === 'desc';
+
+      return items.slice().sort((a, b) => {
+        // In Tree mode, folders always appear on top unless searching
+        if (state.viewMode === 'tree' && !state.searchQuery) {
+          if (a.isDir && !b.isDir) return -1;
+          if (!a.isDir && b.isDir) return 1;
+          if (a.isDir && b.isDir) return a.name.localeCompare(b.name);
+        }
+
+        let diff = 0;
+        if (sortBy === 'size') {
+          diff = (a.size || 0) - (b.size || 0);
+          if (diff === 0) diff = a.name.localeCompare(b.name);
+        } else if (sortBy === 'date') {
+          const aTime = a.ingestedAt || 0;
+          const bTime = b.ingestedAt || 0;
+          diff = aTime - bTime;
+          if (diff === 0) diff = a.name.localeCompare(b.name);
+        } else {
+          // Default: name
+          diff = a.name.localeCompare(b.name);
+        }
+
+        return isDesc ? -diff : diff;
+      });
+    },
+
     updateStats() {
       const state = window.Trove.state || {};
       const filesOnly = (state.allItems || []).filter(item => !item.isDir && item.name !== '.gitattributes' && item.name !== '.trove_status.json');
@@ -366,7 +533,7 @@
         if (state.filterType !== 'all') {
           items = items.filter(i => i.category === state.filterType || (i.ext && i.ext.toLowerCase() === state.filterType));
         }
-        return items.sort((a, b) => a.name.localeCompare(b.name));
+        return this.sortItems(items);
       }
 
       if (state.viewMode === 'flat') {
@@ -374,7 +541,7 @@
         if (state.filterType !== 'all') {
           items = items.filter(i => i.category === state.filterType || (i.ext && i.ext.toLowerCase() === state.filterType));
         }
-        return items.sort((a, b) => a.name.localeCompare(b.name));
+        return this.sortItems(items);
       }
 
       // Tree mode
@@ -386,11 +553,7 @@
         filteredChildren = directChildren.filter(i => i.isDir || i.category === state.filterType || (i.ext && i.ext.toLowerCase() === state.filterType));
       }
 
-      return filteredChildren.sort((a, b) => {
-        if (a.isDir && !b.isDir) return -1;
-        if (!a.isDir && b.isDir) return 1;
-        return a.name.localeCompare(b.name);
-      });
+      return this.sortItems(filteredChildren);
     },
 
     render() {
@@ -515,6 +678,15 @@
           ? 'Folder' 
           : (isPlayable ? (isCurrentActive ? 'Playing Now' : 'Click to Play') : 'Click to Open ↗');
 
+        let displayStatus = statusText;
+        let dateTooltip = '';
+        if (isCurrentActive && isPlayable) {
+          displayStatus = 'Playing Now';
+        } else if (!isFolder && item.ingestedAt) {
+          displayStatus = formatRelativeTime(item.ingestedAt);
+          dateTooltip = `Downloaded: ${item.ingestedAtIso || new Date(item.ingestedAt).toLocaleString()}`;
+        }
+
         const actionBtnHtml = isPlayable ? `
           <button type="button" class="btn-add-to-playlist p-1.5 rounded-lg hover:bg-almond-cream/60 dark:hover:bg-[#252b37] text-stone-brown/70 hover:text-jet-black dark:text-[#9aa4b2] dark:hover:text-[#f3f4f6] transition shrink-0 ml-1" title="Add to Playlist or Queue" data-path="${escapeHtml(item.path)}">
             <i data-lucide="list-plus" class="w-4 h-4"></i>
@@ -539,7 +711,7 @@
               ${isFolder ? '--' : formatBytes(item.size)}
             </div>
             <div class="col-span-1 md:col-span-2 flex items-center justify-end md:justify-between text-xs ${isPlayable && isCurrentActive ? 'text-jet-black dark:text-[#c6ac8f] font-semibold' : 'text-stone-brown/70 dark:text-[#758092]'}">
-              <span class="hidden md:inline truncate">${statusText}</span>
+              <span class="hidden md:inline truncate" ${dateTooltip ? `title="${escapeHtml(dateTooltip)}"` : ''}>${escapeHtml(displayStatus)}</span>
               ${actionBtnHtml}
             </div>
           </div>
@@ -827,6 +999,64 @@
           }
         });
       }
+
+      // Sort dropdown
+      if (this.elements.sortDropdownBtn && this.elements.sortDropdownMenu) {
+        this.elements.sortDropdownBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const willOpen = this.elements.sortDropdownMenu.classList.contains('hidden');
+          this.elements.sortDropdownMenu.classList.toggle('hidden');
+          if (willOpen && MotionAnim?.isAvailable()) {
+            try {
+              window.Motion.animate(
+                this.elements.sortDropdownMenu,
+                { opacity: [0, 1], transform: ['scale(0.96) translateY(-6px)', 'scale(1) translateY(0px)'] },
+                { duration: 0.16, easing: 'ease-out' }
+              );
+            } catch (_) {}
+          }
+        });
+
+        this.elements.sortDropdownMenu.addEventListener('click', (e) => {
+          const option = e.target.closest('.sort-option');
+          if (!option) return;
+          state.sortBy = option.dataset.sort || 'name';
+          state.sortOrder = option.dataset.order || 'asc';
+          this.updateSortUI();
+          this.elements.sortDropdownMenu.classList.add('hidden');
+          if (window.Trove.store) window.Trove.store.saveViewSettings();
+          this.render();
+        });
+
+        document.addEventListener('click', (e) => {
+          if (!this.elements.sortDropdownMenu.classList.contains('hidden')) {
+            const container = document.getElementById('sort-dropdown-container');
+            if (container && !container.contains(e.target)) {
+              this.elements.sortDropdownMenu.classList.add('hidden');
+            }
+          }
+        });
+      }
+
+      // Column Header Clicks for Sorting
+      const bindColHeaderSort = (el, sortField, defaultOrder = 'asc') => {
+        if (!el) return;
+        el.addEventListener('click', () => {
+          if (state.sortBy === sortField) {
+            state.sortOrder = state.sortOrder === 'asc' ? 'desc' : 'asc';
+          } else {
+            state.sortBy = sortField;
+            state.sortOrder = defaultOrder;
+          }
+          this.updateSortUI();
+          if (window.Trove.store) window.Trove.store.saveViewSettings();
+          this.render();
+        });
+      };
+
+      bindColHeaderSort(this.elements.colSortName, 'name', 'asc');
+      bindColHeaderSort(this.elements.colSortSize, 'size', 'desc');
+      bindColHeaderSort(this.elements.colSortDate, 'date', 'desc');
 
       // Breadcrumbs
       if (this.elements.breadcrumbs) {

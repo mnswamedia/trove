@@ -13,9 +13,11 @@
   const state = {
     token: localStorage.getItem(storage.tokenKey) || null,
     allItems: [],
+    downloadsManifest: [], // Manifest array loaded from downloads.json
+    downloadsMap: new Map(), // Lookup map by filename, path, and video id
     currentDirectory: '',
     viewMode: 'tree', // 'tree' | 'flat'
-    sortBy: 'name',   // 'name' | 'size' | 'time'
+    sortBy: 'name',   // 'name' | 'size' | 'date'
     sortOrder: 'asc', // 'asc' | 'desc'
     filterType: 'all', // 'all' | 'video' | 'music' | 'document' | 'image' | 'other'
     searchQuery: '',
@@ -35,6 +37,8 @@
         const saved = JSON.parse(raw);
         if (saved.viewMode) state.viewMode = saved.viewMode;
         if (saved.filterType) state.filterType = saved.filterType;
+        if (saved.sortBy) state.sortBy = saved.sortBy;
+        if (saved.sortOrder) state.sortOrder = saved.sortOrder;
         if (typeof saved.currentDirectory === 'string') state.currentDirectory = saved.currentDirectory;
       }
     } catch (e) {
@@ -47,6 +51,8 @@
       localStorage.setItem(VIEW_SETTINGS_KEY, JSON.stringify({
         viewMode: state.viewMode,
         filterType: state.filterType,
+        sortBy: state.sortBy,
+        sortOrder: state.sortOrder,
         currentDirectory: state.currentDirectory
       }));
     } catch (e) {}
@@ -64,7 +70,7 @@
       if (!raw) return null;
       const data = JSON.parse(raw);
       if (data && data.timestamp && (Date.now() - data.timestamp < FS_CACHE_TTL) && Array.isArray(data.items)) {
-        return data.items;
+        return data;
       }
     } catch (e) {
       console.warn('Could not read cached FS tree:', e);
@@ -72,11 +78,12 @@
     return null;
   }
 
-  function setCachedFSTree(items) {
+  function setCachedFSTree(items, manifest = []) {
     try {
       localStorage.setItem(getFsCacheKey(), JSON.stringify({
         timestamp: Date.now(),
-        items: items
+        items: items,
+        manifest: manifest
       }));
     } catch (e) {
       console.warn('Could not write cached FS tree:', e);
