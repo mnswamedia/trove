@@ -1,0 +1,49 @@
+name: Build Ingest Image
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'   # weekly on Monday 03:00 UTC, keeps yt-dlp fresh
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - docker/**
+      - .github/workflows/build-image.yml
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: Build & Push GHCR Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Compute lowercase image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/trove-ingest" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}:latest
+          # Scheduled runs skip the layer cache so yt-dlp/wireproxy/deno really update
+          no-cache: ${{ github.event_name == 'schedule' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
