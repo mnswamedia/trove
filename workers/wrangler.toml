@@ -1,0 +1,8 @@
+name = "trove"
+main = "index.js"
+compatibility_date = "2024-09-23"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "trove-db"
+database_id = "2f9f0096-9621-42ff-abcd-859b58ddeeb5"
