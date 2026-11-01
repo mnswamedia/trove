@@ -242,6 +242,24 @@ body.dark input[type="range"] {
   accent-color: #c6ac8f !important;
 }
 
+/* Vertical Range Sliders (Volume Popover & Audio Equalizer) */
+.vertical-slider {
+  -webkit-appearance: slider-vertical;
+  appearance: slider-vertical;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  padding: 0;
+}
+
+/* Utility to hide scrollbars for presets row */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* SVG icon stroke inheritance */
 html.dark svg,
 body.dark svg {

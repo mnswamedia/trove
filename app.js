@@ -174,7 +174,20 @@
     activeQueueCounter: document.getElementById('active-queue-counter'),
     btnMute: document.getElementById('btn-mute'),
     volumeIcon: document.getElementById('volume-icon'),
-    volumeSlider: document.getElementById('volume-slider')
+    volumeSlider: document.getElementById('volume-slider'),
+    volumeWrapper: document.getElementById('volume-wrapper'),
+    btnVolumePill: document.getElementById('btn-volume-pill'),
+    volumePercentageLabel: document.getElementById('volume-percentage-label'),
+    volumePopover: document.getElementById('volume-popover'),
+    volumePopoverPct: document.getElementById('volume-popover-pct'),
+    popoverMuteIcon: document.getElementById('popover-mute-icon'),
+    btnEqToggle: document.getElementById('btn-eq-toggle'),
+    eqBadge: document.getElementById('eq-badge'),
+    eqBottomSheet: document.getElementById('eq-bottom-sheet'),
+    eqBackdrop: document.getElementById('eq-backdrop'),
+    btnCloseEq: document.getElementById('btn-close-eq'),
+    btnEqBypass: document.getElementById('btn-eq-bypass'),
+    btnResetEq: document.getElementById('btn-reset-eq')
   };
 
   // =========================================================================
@@ -339,6 +352,42 @@
           anim.finished.then(() => { if (onDone) onDone(); }).catch(() => { if (onDone) onDone(); });
         } else {
           setTimeout(() => { if (onDone) onDone(); }, 160);
+        }
+      } catch (_) {
+        if (onDone) onDone();
+      }
+    },
+
+    // 10. Bottom Sheet Entrance (Slide up from bottom)
+    animateSheetIn(sheetEl) {
+      if (!this.isAvailable() || !sheetEl) return;
+      try {
+        const { animate } = window.Motion;
+        const card = sheetEl.querySelector('.relative');
+        animate(sheetEl, { opacity: [0, 1] }, { duration: 0.16, easing: 'ease-out' });
+        if (card) {
+          animate(card, { transform: ['translateY(100%)', 'translateY(0%)'] }, { duration: 0.28, easing: [0.32, 0.72, 0, 1] });
+        }
+      } catch (_) {}
+    },
+
+    // 11. Bottom Sheet Exit (Slide down into bottom)
+    animateSheetOut(sheetEl, onDone) {
+      if (!this.isAvailable() || !sheetEl) {
+        if (onDone) onDone();
+        return;
+      }
+      try {
+        const { animate } = window.Motion;
+        const card = sheetEl.querySelector('.relative');
+        if (card) {
+          animate(card, { transform: ['translateY(0%)', 'translateY(100%)'] }, { duration: 0.2, easing: [0.32, 0.72, 0, 1] });
+        }
+        const anim = animate(sheetEl, { opacity: [1, 0] }, { duration: 0.18, easing: 'ease-in' });
+        if (anim && anim.finished) {
+          anim.finished.then(() => { if (onDone) onDone(); }).catch(() => { if (onDone) onDone(); });
+        } else {
+          setTimeout(() => { if (onDone) onDone(); }, 200);
         }
       } catch (_) {
         if (onDone) onDone();
@@ -675,9 +724,9 @@
 
       // Update volume and speed UI
       if (elements.btnSpeed) elements.btnSpeed.innerText = `${player.playbackRates[player.speedIndex]}x`;
-      if (elements.volumeSlider) elements.volumeSlider.value = player.volume;
       if (elements.playerAudio) elements.playerAudio.volume = player.volume;
       if (elements.playerVideo) elements.playerVideo.volume = player.volume;
+      updateVolumeUI(player.volume, false);
 
       // Shuffle UI
       if (player.shuffle && elements.btnShuffle) {
@@ -2068,6 +2117,251 @@
     return null;
   }
 
+  // =========================================================================
+  // VOLUME & EQUALIZER CONTROLLER (Native Web Audio API DSP)
+  // =========================================================================
+  function updateVolumeUI(vol, isMuted = false) {
+    const effectiveVol = isMuted ? 0 : vol;
+    const pctText = isMuted ? 'Muted' : `${Math.round(vol * 100)}%`;
+
+    if (elements.volumePercentageLabel) {
+      elements.volumePercentageLabel.innerText = pctText;
+    }
+    if (elements.volumePopoverPct) {
+      elements.volumePopoverPct.innerText = pctText;
+    }
+    if (elements.volumeSlider) {
+      elements.volumeSlider.value = effectiveVol;
+    }
+
+    const iconName = isMuted || effectiveVol === 0 ? 'volume-x' : (effectiveVol < 0.5 ? 'volume-1' : 'volume-2');
+    if (elements.volumeIcon) {
+      elements.volumeIcon.setAttribute('data-lucide', iconName);
+    }
+    if (elements.popoverMuteIcon) {
+      elements.popoverMuteIcon.setAttribute('data-lucide', iconName);
+    }
+    if (window.lucide) window.lucide.createIcons();
+  }
+
+  const Equalizer = {
+    ctx: null,
+    sourceAudio: null,
+    sourceVideo: null,
+    compressor: null,
+    filters: [],
+    enabled: true,
+    currentPreset: 'flat',
+    gains: [0, 0, 0, 0, 0],
+    frequencies: [
+      { freq: 60, type: 'lowshelf' },
+      { freq: 230, type: 'peaking' },
+      { freq: 910, type: 'peaking' },
+      { freq: 3600, type: 'peaking' },
+      { freq: 14000, type: 'highshelf' }
+    ],
+    presets: {
+      flat: [0, 0, 0, 0, 0],
+      bass: [6, 4, 0, 0, -1],
+      vocal: [-2, 1, 4, 3, 0],
+      rock: [4, 2, -1, 2, 4],
+      electronic: [5, 3, 0, 2, 4],
+      acoustic: [2, 1, 0, 2, 3],
+      treble: [-2, 0, 1, 3, 6]
+    },
+
+    init() {
+      if (this.ctx) return;
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        this.ctx = new AudioCtx();
+
+        // Build 5-band filter chain
+        this.filters = this.frequencies.map((f, idx) => {
+          const filter = this.ctx.createBiquadFilter();
+          filter.type = f.type;
+          filter.frequency.value = f.freq;
+          filter.gain.value = this.enabled ? (this.gains[idx] || 0) : 0;
+          if (f.type === 'peaking') {
+            filter.Q.value = 1.0;
+          }
+          return filter;
+        });
+
+        // Connect filter chain: 0 -> 1 -> 2 -> 3 -> 4
+        for (let i = 0; i < this.filters.length - 1; i++) {
+          this.filters[i].connect(this.filters[i + 1]);
+        }
+
+        // Protective compressor to prevent digital clipping/distortion when boosting frequencies
+        this.compressor = this.ctx.createDynamicsCompressor();
+        this.compressor.threshold.value = -24;
+        this.compressor.knee.value = 30;
+        this.compressor.ratio.value = 12;
+        this.compressor.attack.value = 0.003;
+        this.compressor.release.value = 0.25;
+
+        this.filters[this.filters.length - 1].connect(this.compressor);
+        this.compressor.connect(this.ctx.destination);
+
+        // Connect player elements
+        if (elements.playerAudio && !this.sourceAudio) {
+          try {
+            this.sourceAudio = this.ctx.createMediaElementSource(elements.playerAudio);
+            this.sourceAudio.connect(this.filters[0]);
+          } catch (err) {
+            console.warn('Could not connect playerAudio to AudioContext:', err);
+          }
+        }
+        if (elements.playerVideo && !this.sourceVideo) {
+          try {
+            this.sourceVideo = this.ctx.createMediaElementSource(elements.playerVideo);
+            this.sourceVideo.connect(this.filters[0]);
+          } catch (_) {}
+        }
+      } catch (err) {
+        console.warn('Web Audio API not supported or initialization error:', err);
+      }
+    },
+
+    resume() {
+      if (this.ctx && this.ctx.state === 'suspended') {
+        this.ctx.resume().catch(() => {});
+      }
+    },
+
+    applyGains() {
+      if (!this.filters || !this.filters.length || !this.ctx) return;
+      this.filters.forEach((filter, idx) => {
+        const target = this.enabled ? (this.gains[idx] || 0) : 0;
+        filter.gain.setTargetAtTime(target, this.ctx.currentTime, 0.02);
+      });
+    },
+
+    setBand(bandIdx, val) {
+      const parsed = Math.max(-12, Math.min(12, parseFloat(val) || 0));
+      this.gains[bandIdx] = parsed;
+      this.currentPreset = 'custom';
+      this.applyGains();
+      this.save();
+      this.updateUI();
+    },
+
+    setPreset(presetKey) {
+      if (!this.presets[presetKey]) return;
+      this.currentPreset = presetKey;
+      this.gains = [...this.presets[presetKey]];
+      this.applyGains();
+      this.save();
+      this.updateUI();
+    },
+
+    toggleBypass() {
+      this.enabled = !this.enabled;
+      this.applyGains();
+      this.save();
+      this.updateUI();
+    },
+
+    save() {
+      try {
+        localStorage.setItem('trove_eq', JSON.stringify({
+          enabled: this.enabled,
+          preset: this.currentPreset,
+          gains: this.gains
+        }));
+      } catch (_) {}
+    },
+
+    load() {
+      try {
+        const raw = localStorage.getItem('trove_eq');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (typeof parsed.enabled === 'boolean') this.enabled = parsed.enabled;
+          if (typeof parsed.preset === 'string') this.currentPreset = parsed.preset;
+          if (Array.isArray(parsed.gains) && parsed.gains.length === 5) this.gains = parsed.gains;
+        }
+      } catch (_) {}
+    },
+
+    updateUI() {
+      // 1. Update EQ badge on volume row button
+      if (elements.eqBadge) {
+        if (!this.enabled) {
+          elements.eqBadge.innerText = 'Off';
+          elements.eqBadge.className = 'px-1.5 py-0.5 rounded text-[10px] font-mono bg-stone-brown/20 dark:bg-[#252a36] text-stone-brown/60 dark:text-[#758092]';
+        } else {
+          const label = this.currentPreset === 'custom' ? 'Custom' : (this.currentPreset.charAt(0).toUpperCase() + this.currentPreset.slice(1));
+          elements.eqBadge.innerText = label;
+          elements.eqBadge.className = 'px-1.5 py-0.5 rounded text-[10px] font-mono bg-almond-cream/60 dark:bg-[#252a36] text-stone-brown dark:text-[#c6ac8f]';
+        }
+      }
+
+      // 2. Update active preset tag in sheet header
+      const presetTag = document.getElementById('eq-active-preset-tag');
+      if (presetTag) {
+        presetTag.innerText = this.currentPreset.charAt(0).toUpperCase() + this.currentPreset.slice(1);
+      }
+
+      // 3. Update bypass button
+      const bypassBtn = document.getElementById('btn-eq-bypass');
+      const bypassDot = document.getElementById('eq-bypass-dot');
+      const bypassLabel = document.getElementById('eq-bypass-label');
+      if (bypassBtn && bypassDot && bypassLabel) {
+        if (this.enabled) {
+          bypassBtn.className = 'px-2.5 py-1 rounded-lg text-xs font-semibold font-mono border transition flex items-center gap-1.5 bg-emerald-500/15 border-emerald-500/30 text-emerald-900 dark:text-emerald-300';
+          bypassDot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500';
+          bypassLabel.innerText = 'ON';
+        } else {
+          bypassBtn.className = 'px-2.5 py-1 rounded-lg text-xs font-semibold font-mono border transition flex items-center gap-1.5 bg-stone-brown/10 border-stone-brown/20 text-stone-brown dark:text-[#9aa4b2]';
+          bypassDot.className = 'w-1.5 h-1.5 rounded-full bg-stone-brown/50';
+          bypassLabel.innerText = 'BYPASS';
+        }
+      }
+
+      // 4. Update preset buttons active state
+      document.querySelectorAll('.eq-preset-btn').forEach(btn => {
+        const p = btn.dataset.preset;
+        if (p === this.currentPreset) {
+          btn.className = 'eq-preset-btn px-2.5 py-1 rounded-lg text-xs font-medium shrink-0 transition bg-jet-black text-white dark:bg-[#f3f4f6] dark:text-[#0e1116] shadow-sm';
+        } else {
+          btn.className = 'eq-preset-btn px-2.5 py-1 rounded-lg text-xs font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40';
+        }
+      });
+
+      // 5. Update sliders and gain values
+      this.gains.forEach((val, idx) => {
+        const slider = document.querySelector(`.eq-band-slider[data-band="${idx}"]`);
+        if (slider) slider.value = val;
+        const valText = document.getElementById(`eq-val-${idx}`);
+        if (valText) {
+          valText.innerText = (val > 0 ? `+${val}` : `${val}`) + 'dB';
+        }
+      });
+    }
+  };
+
+  function showEqualizerSheet() {
+    Equalizer.init();
+    Equalizer.resume();
+    Equalizer.updateUI();
+    if (elements.eqBottomSheet) {
+      elements.eqBottomSheet.style.display = 'flex';
+      if (window.lucide) window.lucide.createIcons();
+      MotionAnim.animateSheetIn(elements.eqBottomSheet);
+    }
+  }
+
+  function hideEqualizerSheet() {
+    if (elements.eqBottomSheet && elements.eqBottomSheet.style.display === 'flex') {
+      MotionAnim.animateSheetOut(elements.eqBottomSheet, () => {
+        elements.eqBottomSheet.style.display = 'none';
+      });
+    }
+  }
+
   const player = {
     currentTrack: null,
     queue: [],
@@ -2388,6 +2682,9 @@
           this.savedStartTime = 0;
         }
 
+        Equalizer.init();
+        Equalizer.resume();
+
         await targetEl.play();
         this.isPlaying = true;
         this.updatePlayStateUI();
@@ -2436,6 +2733,8 @@
       }
 
       if (activeEl.paused) {
+        Equalizer.init();
+        Equalizer.resume();
         activeEl.play().then(() => {
           this.isPlaying = true;
           this.updatePlayStateUI();
@@ -2571,6 +2870,8 @@
     minimize() {
       this.isExpanded = false;
       savePlaybackState();
+      if (elements.volumePopover) elements.volumePopover.classList.add('hidden');
+      hideEqualizerSheet();
       MotionAnim.animateExpandedClose(() => {
         elements.expandedPlayer.classList.remove('translate-y-0');
         elements.expandedPlayer.classList.add('translate-y-full');
@@ -3060,29 +3361,85 @@
     // Playback Speed
     elements.btnSpeed.addEventListener('click', () => player.cycleSpeed());
 
-    // Volume & Mute
-    elements.volumeSlider.addEventListener('input', (e) => {
-      const vol = parseFloat(e.target.value);
-      elements.playerAudio.volume = vol;
-      elements.playerVideo.volume = vol;
-      player.volume = vol;
-      if (vol === 0) {
-        elements.volumeIcon.setAttribute('data-lucide', 'volume-x');
-      } else if (vol < 0.5) {
-        elements.volumeIcon.setAttribute('data-lucide', 'volume-1');
-      } else {
-        elements.volumeIcon.setAttribute('data-lucide', 'volume-2');
-      }
-      if (window.lucide) window.lucide.createIcons();
-      savePlaybackState();
+    // Volume Controls & Vertical Popover
+    if (elements.btnVolumePill && elements.volumePopover) {
+      elements.btnVolumePill.addEventListener('click', (e) => {
+        e.stopPropagation();
+        elements.volumePopover.classList.toggle('hidden');
+        if (window.lucide) window.lucide.createIcons();
+      });
+
+      // Dismiss volume popover when clicking anywhere outside
+      document.addEventListener('click', (e) => {
+        if (elements.volumeWrapper && !elements.volumeWrapper.contains(e.target)) {
+          elements.volumePopover.classList.add('hidden');
+        }
+      });
+    }
+
+    if (elements.volumeSlider) {
+      elements.volumeSlider.addEventListener('input', (e) => {
+        const vol = parseFloat(e.target.value);
+        const activeEl = player.getActiveElement();
+        if (activeEl) activeEl.muted = false;
+        elements.playerAudio.volume = vol;
+        elements.playerVideo.volume = vol;
+        player.volume = vol;
+        updateVolumeUI(vol, false);
+        savePlaybackState();
+      });
+    }
+
+    if (elements.btnMute) {
+      elements.btnMute.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const activeEl = player.getActiveElement();
+        activeEl.muted = !activeEl.muted;
+        updateVolumeUI(player.volume, activeEl.muted);
+        savePlaybackState();
+      });
+    }
+
+    // Audio Equalizer Bottom Sheet Listeners
+    if (elements.btnEqToggle) {
+      elements.btnEqToggle.addEventListener('click', () => {
+        showEqualizerSheet();
+      });
+    }
+
+    if (elements.btnCloseEq) {
+      elements.btnCloseEq.addEventListener('click', hideEqualizerSheet);
+    }
+
+    if (elements.eqBackdrop) {
+      elements.eqBackdrop.addEventListener('click', hideEqualizerSheet);
+    }
+
+    if (elements.btnEqBypass) {
+      elements.btnEqBypass.addEventListener('click', () => {
+        Equalizer.toggleBypass();
+      });
+    }
+
+    if (elements.btnResetEq) {
+      elements.btnResetEq.addEventListener('click', () => {
+        Equalizer.setPreset('flat');
+      });
+    }
+
+    // Equalizer Preset Buttons
+    document.querySelectorAll('.eq-preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        Equalizer.setPreset(btn.dataset.preset);
+      });
     });
 
-    elements.btnMute.addEventListener('click', () => {
-      const activeEl = player.getActiveElement();
-      activeEl.muted = !activeEl.muted;
-      elements.volumeIcon.setAttribute('data-lucide', activeEl.muted ? 'volume-x' : 'volume-2');
-      if (window.lucide) window.lucide.createIcons();
-      savePlaybackState();
+    // Equalizer Sliders
+    document.querySelectorAll('.eq-band-slider').forEach(slider => {
+      slider.addEventListener('input', (e) => {
+        const band = parseInt(e.target.dataset.band, 10);
+        Equalizer.setBand(band, e.target.value);
+      });
     });
 
     // Picture-in-Picture Toggle for Video
@@ -3405,6 +3762,13 @@
     window.addEventListener('popstate', () => {
       if (isExiting) return;
 
+      // 0. If EQ bottom sheet is open, close it
+      if (elements.eqBottomSheet && elements.eqBottomSheet.style.display === 'flex') {
+        hideEqualizerSheet();
+        window.history.pushState({ trove: 'active' }, '');
+        return;
+      }
+
       // 1. If play bar expanded full-screen player is open, close it (do not exit or go back)
       if (player.isExpanded) {
         player.minimize();
@@ -3467,6 +3831,8 @@
     initHistoryNavigation();
     loadSavedViewSettings();
     loadStoredThumbnails();
+    Equalizer.load();
+    Equalizer.updateUI();
     setupEventListeners();
     MotionAnim.playAppIntro();
 

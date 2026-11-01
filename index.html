@@ -315,7 +315,7 @@
   </div>
 
   <!-- Global Audio Element (for background playback & MediaSession) -->
-  <audio id="player-audio" preload="metadata" playsinline class="hidden"></audio>
+  <audio id="player-audio" preload="metadata" playsinline crossorigin="anonymous" class="hidden"></audio>
 
   <!-- Persistent Floating Bottom Play Bar (Floating Island tightly hugging bottom edge) -->
   <aside id="bottom-play-bar" class="fixed bottom-2 sm:bottom-3.5 inset-x-0 mx-auto w-[calc(100%-1.25rem)] sm:w-[calc(100%-2rem)] max-w-4xl bg-white/95 dark:bg-[#15181f]/95 backdrop-blur-md border border-almond-cream dark:border-[#2b3240] rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.6)] z-40 px-3 sm:px-4 md:px-5 py-2 sm:py-2.5 transition-all duration-300 translate-y-28 opacity-0 pointer-events-none" style="display: none;">
@@ -410,26 +410,26 @@
     <div class="flex-1 max-w-4xl w-full mx-auto px-4 md:px-6 flex flex-col items-center justify-center min-h-0 overflow-hidden">
       
       <!-- Music Stage (When playing audio) - Direct Album Cover Card with Dynamic Fitting -->
-      <div id="stage-music" class="flex flex-col items-center justify-center text-center gap-5 max-w-xl w-full my-auto px-4">
+      <div id="stage-music" class="flex flex-col items-center justify-center text-center gap-3.5 sm:gap-4 max-w-xl w-full my-auto px-4">
         <div class="relative group flex items-center justify-center w-full">
-          <div id="expanded-cover-art" class="max-w-full max-h-[46vh] rounded-2xl shadow-2xl overflow-hidden border border-almond-cream dark:border-[#2b3240] bg-almond-cream/20 dark:bg-[#15181f] flex items-center justify-center transition-all duration-300">
-            <img id="expanded-cover-img" class="max-w-full max-h-[46vh] w-auto h-auto object-contain rounded-2xl hidden" alt="Album Art">
-            <div id="expanded-cover-fallback" class="w-60 h-60 flex flex-col items-center justify-center text-stone-brown/60 dark:text-[#758092] gap-3 p-6">
-              <i data-lucide="music" id="expanded-cover-icon" class="w-16 h-16"></i>
+          <div id="expanded-cover-art" class="max-w-full max-h-[38vh] sm:max-h-[42vh] rounded-2xl shadow-2xl overflow-hidden border border-almond-cream dark:border-[#2b3240] bg-almond-cream/20 dark:bg-[#15181f] flex items-center justify-center transition-all duration-300">
+            <img id="expanded-cover-img" class="max-w-full max-h-[38vh] sm:max-h-[42vh] w-auto h-auto object-contain rounded-2xl hidden" alt="Album Art">
+            <div id="expanded-cover-fallback" class="w-52 h-52 sm:w-60 sm:h-60 flex flex-col items-center justify-center text-stone-brown/60 dark:text-[#758092] gap-3 p-6">
+              <i data-lucide="music" id="expanded-cover-icon" class="w-14 h-14 sm:w-16 sm:h-16"></i>
               <span class="text-xs font-mono font-medium">Audio Track</span>
             </div>
           </div>
         </div>
         
         <div class="w-full px-4">
-          <h2 id="expanded-track-title" class="text-xl md:text-2xl font-bold text-black dark:text-[#f3f4f6] truncate">--</h2>
-          <p id="expanded-track-meta" class="text-xs font-mono text-stone-brown/70 dark:text-[#9aa4b2] mt-1">--</p>
+          <h2 id="expanded-track-title" class="text-lg sm:text-xl md:text-2xl font-bold text-black dark:text-[#f3f4f6] truncate">--</h2>
+          <p id="expanded-track-meta" class="text-xs font-mono text-stone-brown/70 dark:text-[#9aa4b2] mt-0.5">--</p>
         </div>
       </div>
 
       <!-- Video Stage (When playing video) -->
       <div id="stage-video" class="w-full h-full max-h-[70vh] flex flex-col items-center justify-center bg-black rounded-2xl overflow-hidden shadow-2xl relative hidden">
-        <video id="player-video" class="w-full h-full object-contain" playsinline preload="metadata"></video>
+        <video id="player-video" class="w-full h-full object-contain" playsinline preload="metadata" crossorigin="anonymous"></video>
         <div id="video-loading-overlay" class="absolute inset-0 bg-black/60 flex items-center justify-center hidden">
           <i data-lucide="loader-2" class="w-10 h-10 text-white animate-spin"></i>
         </div>
@@ -438,7 +438,7 @@
     </div>
 
     <!-- Bottom Controls Area -->
-    <div class="max-w-2xl w-full mx-auto p-4 md:p-8 flex flex-col gap-4">
+    <div class="max-w-2xl w-full mx-auto px-4 pb-5 pt-1 sm:pb-7 md:pb-8 flex flex-col gap-3 sm:gap-4">
       <!-- Scrubber -->
       <div class="flex flex-col gap-1.5">
         <input 
@@ -455,8 +455,8 @@
         </div>
       </div>
 
-      <!-- Controls Buttons Row -->
-      <div class="flex items-center justify-between gap-2 px-2">
+      <!-- Controls Buttons Row (Shifted upward with compact vertical profile) -->
+      <div class="flex items-center justify-between gap-2 px-2 my-0.5">
         <!-- Shuffle -->
         <button id="btn-shuffle" class="p-2.5 rounded-full text-stone-brown/50 dark:text-[#6b7688] hover:text-black dark:hover:text-white transition" title="Shuffle Off">
           <i data-lucide="shuffle" class="w-5 h-5"></i>
@@ -468,8 +468,8 @@
         </button>
 
         <!-- Master Play / Pause Button -->
-        <button id="btn-expanded-play" class="w-16 h-16 rounded-full bg-jet-black text-white hover:bg-black dark:bg-[#f3f4f6] dark:text-[#0e1116] dark:hover:bg-white flex items-center justify-center transition shadow-lg" title="Play/Pause (Space)">
-          <i data-lucide="play" id="expanded-play-icon" class="w-7 h-7 ml-0.5"></i>
+        <button id="btn-expanded-play" class="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-jet-black text-white hover:bg-black dark:bg-[#f3f4f6] dark:text-[#0e1116] dark:hover:bg-white flex items-center justify-center transition shadow-lg shrink-0" title="Play/Pause (Space)">
+          <i data-lucide="play" id="expanded-play-icon" class="w-6 h-6 sm:w-7 sm:h-7 ml-0.5"></i>
         </button>
 
         <!-- Next Track -->
@@ -483,25 +483,190 @@
         </button>
       </div>
 
-      <!-- Bottom Audio Volume Utility -->
-      <div class="flex items-center justify-between text-xs text-stone-brown dark:text-[#9aa4b2] pt-2 border-t border-almond-cream/60 dark:border-[#252a36]">
-        <span id="active-queue-counter" class="font-mono text-stone-brown/60 dark:text-[#758092]">1 / 1 in queue</span>
+      <!-- Bottom Audio Volume & Utility Row (Generous vertical space with Queue, EQ and Volume Pill) -->
+      <div class="flex items-center justify-between text-xs text-stone-brown dark:text-[#9aa4b2] pt-2.5 sm:pt-3 border-t border-almond-cream/60 dark:border-[#252a36]">
+        <!-- Queue Counter -->
+        <div class="flex items-center gap-1.5 font-mono text-xs text-stone-brown/70 dark:text-[#8b95a5]">
+          <i data-lucide="list-music" class="w-3.5 h-3.5 text-stone-brown/50 dark:text-[#6b7688]"></i>
+          <span id="active-queue-counter">1 / 1 in queue</span>
+        </div>
+
+        <!-- Right Utilities: EQ Button & Vertical Volume Pill -->
         <div class="flex items-center gap-2">
-          <button id="btn-mute" class="hover:text-black dark:hover:text-white text-stone-brown dark:text-[#9aa4b2]">
-            <i data-lucide="volume-2" id="volume-icon" class="w-4 h-4"></i>
+          <!-- Equalizer Bottom Sheet Trigger Button -->
+          <button id="btn-eq-toggle" type="button" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-white/80 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition text-stone-brown dark:text-[#c6ac8f] text-xs font-semibold select-none shadow-sm" title="Audio Equalizer">
+            <i data-lucide="sliders" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f]"></i>
+            <span class="hidden xs:inline">EQ</span>
+            <span id="eq-badge" class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-almond-cream/60 dark:bg-[#252a36] text-stone-brown dark:text-[#c6ac8f]">Flat</span>
           </button>
-          <input 
-            type="range" 
-            id="volume-slider" 
-            min="0" 
-            max="1" 
-            step="0.05" 
-            value="1" 
-            class="w-20 md:w-28 h-1.5 bg-almond-cream dark:bg-[#2b3240] rounded-lg appearance-none cursor-pointer accent-jet-black dark:accent-[#c6ac8f]"
-          >
+
+          <!-- Volume Pill & Vertical Popover -->
+          <div class="relative" id="volume-wrapper">
+            <!-- Closed Position Pill: shows volume icon + percentage -->
+            <button id="btn-volume-pill" type="button" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-white/80 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition text-stone-brown dark:text-[#c6ac8f] text-xs font-semibold select-none shadow-sm" title="Adjust Volume">
+              <i data-lucide="volume-2" id="volume-icon" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f]"></i>
+              <span id="volume-percentage-label" class="font-mono text-xs">100%</span>
+            </button>
+
+            <!-- Vertical Volume Popover -->
+            <div id="volume-popover" class="absolute bottom-full mb-2.5 right-0 bg-white dark:bg-[#191d26] border border-almond-cream dark:border-[#2b3240] rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,0.28)] p-3.5 flex flex-col items-center gap-2.5 z-50 hidden select-none animate-in fade-in slide-in-from-bottom-2">
+              <span id="volume-popover-pct" class="text-xs font-mono font-bold text-jet-black dark:text-[#f3f4f6]">100%</span>
+              <div class="h-28 flex items-center justify-center py-1">
+                <input 
+                  type="range" 
+                  id="volume-slider" 
+                  min="0" 
+                  max="1" 
+                  step="0.01" 
+                  value="1" 
+                  class="vertical-slider h-24 w-2 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]"
+                >
+              </div>
+              <button type="button" id="btn-mute" class="p-1.5 rounded-lg hover:bg-almond-cream/50 dark:hover:bg-[#252a36] text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white transition" title="Toggle Mute">
+                <i data-lucide="volume-2" id="popover-mute-icon" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Equalizer Bottom Sheet Drawer (Native Web Audio API DSP) -->
+  <div id="eq-bottom-sheet" class="fixed inset-0 bg-jet-black/50 dark:bg-black/70 backdrop-blur-sm z-[115] flex flex-col justify-end p-0 sm:p-4 select-none" style="display: none;">
+    <!-- Backdrop Click to dismiss -->
+    <div id="eq-backdrop" class="absolute inset-0"></div>
+
+    <!-- Sheet Container -->
+    <div class="relative w-full max-w-lg mx-auto bg-white dark:bg-[#15181f] border-t sm:border border-almond-cream dark:border-[#2b3240] rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh] animate-in slide-in-from-bottom duration-200">
+      
+      <!-- Drag Handle (Mobile) -->
+      <div class="pt-2.5 pb-1 flex justify-center sm:hidden">
+        <div class="w-10 h-1 rounded-full bg-stone-brown/20 dark:bg-white/20"></div>
+      </div>
+
+      <!-- Sheet Header -->
+      <div class="px-5 py-3 border-b border-almond-cream dark:border-[#262c38] flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-almond-cream/50 dark:bg-[#222734] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0">
+            <i data-lucide="sliders" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="text-sm font-bold text-black dark:text-[#f3f4f6]">Audio Equalizer</h3>
+              <span id="eq-active-preset-tag" class="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">Flat</span>
+            </div>
+            <p class="text-[11px] font-mono text-stone-brown/70 dark:text-[#9aa4b2]">5-band hardware-accelerated DSP</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <!-- Toggle EQ Enabled / Bypass -->
+          <button type="button" id="btn-eq-bypass" class="px-2.5 py-1 rounded-lg text-xs font-semibold font-mono border transition flex items-center gap-1.5 bg-emerald-500/15 border-emerald-500/30 text-emerald-900 dark:text-emerald-300" title="Toggle EQ Bypass">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" id="eq-bypass-dot"></span>
+            <span id="eq-bypass-label">ON</span>
+          </button>
+
+          <!-- Close Sheet Button -->
+          <button type="button" id="btn-close-eq" class="p-1.5 rounded-lg text-stone-brown dark:text-[#9aa4b2] hover:bg-almond-cream/50 dark:hover:bg-[#202532] hover:text-black dark:hover:text-white transition" title="Close Equalizer">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Presets Scroll Row -->
+      <div class="px-4 sm:px-5 py-2.5 border-b border-almond-cream/60 dark:border-[#222734] bg-almond-cream/15 dark:bg-[#1a1e26] overflow-x-auto flex items-center gap-1.5 no-scrollbar">
+        <span class="text-[10px] font-bold uppercase tracking-wider text-stone-brown/60 dark:text-[#758092] mr-1 shrink-0">Presets</span>
+        <button type="button" class="eq-preset-btn px-2.5 py-1 rounded-lg text-xs font-medium shrink-0 transition bg-jet-black text-white dark:bg-[#f3f4f6] dark:text-[#0e1116] shadow-sm" data-preset="flat">Flat</button>
+        <button type="button" class="eq-preset-btn px-2.5 py-1 rounded-lg text-xs font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="bass">Bass Boost</button>
+        <button type="button" class="eq-preset-btn px-2.5 py-1 rounded-lg text-xs font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="vocal">Vocal</button>
+        <button type="button" class="eq-preset-btn px-2.5 py-1 rounded-lg text-xs font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="rock">Rock</button>
+        <button type="button" class="eq-preset-btn px-2.5 py-1 rounded-lg text-xs font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="electronic">Electronic</button>
+        <button type="button" class="eq-preset-btn px-2.5 py-1 rounded-lg text-xs font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="acoustic">Acoustic</button>
+        <button type="button" class="eq-preset-btn px-2.5 py-1 rounded-lg text-xs font-medium shrink-0 transition bg-white dark:bg-[#222734] border border-almond-cream dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40" data-preset="treble">Treble</button>
+      </div>
+
+      <!-- 5-Band Slider Stage -->
+      <div class="px-4 sm:px-6 py-4 flex items-center justify-between gap-2 sm:gap-4 overflow-hidden">
+        <!-- Range guide markers (+12dB, 0dB, -12dB) -->
+        <div class="h-36 flex flex-col justify-between text-[10px] font-mono text-stone-brown/50 dark:text-[#6a7585] py-0.5 shrink-0 select-none">
+          <span>+12</span>
+          <span>0</span>
+          <span>-12</span>
+        </div>
+
+        <!-- 5 Sliders Columns -->
+        <!-- Band 0: 60Hz -->
+        <div class="flex-1 flex flex-col items-center gap-2 min-w-0">
+          <span class="eq-band-val font-mono text-[10px] font-bold text-jet-black dark:text-[#c6ac8f]" id="eq-val-0">0dB</span>
+          <div class="h-36 flex items-center justify-center">
+            <input type="range" class="eq-band-slider vertical-slider h-32 w-2.5 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]" data-band="0" min="-12" max="12" step="0.5" value="0">
+          </div>
+          <div class="text-center">
+            <div class="font-mono text-[11px] font-bold text-black dark:text-[#f3f4f6]">60</div>
+            <div class="text-[9px] font-mono uppercase text-stone-brown/60 dark:text-[#758092]">Bass</div>
+          </div>
+        </div>
+
+        <!-- Band 1: 230Hz -->
+        <div class="flex-1 flex flex-col items-center gap-2 min-w-0">
+          <span class="eq-band-val font-mono text-[10px] font-bold text-jet-black dark:text-[#c6ac8f]" id="eq-val-1">0dB</span>
+          <div class="h-36 flex items-center justify-center">
+            <input type="range" class="eq-band-slider vertical-slider h-32 w-2.5 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]" data-band="1" min="-12" max="12" step="0.5" value="0">
+          </div>
+          <div class="text-center">
+            <div class="font-mono text-[11px] font-bold text-black dark:text-[#f3f4f6]">230</div>
+            <div class="text-[9px] font-mono uppercase text-stone-brown/60 dark:text-[#758092]">Low</div>
+          </div>
+        </div>
+
+        <!-- Band 2: 910Hz -->
+        <div class="flex-1 flex flex-col items-center gap-2 min-w-0">
+          <span class="eq-band-val font-mono text-[10px] font-bold text-jet-black dark:text-[#c6ac8f]" id="eq-val-2">0dB</span>
+          <div class="h-36 flex items-center justify-center">
+            <input type="range" class="eq-band-slider vertical-slider h-32 w-2.5 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]" data-band="2" min="-12" max="12" step="0.5" value="0">
+          </div>
+          <div class="text-center">
+            <div class="font-mono text-[11px] font-bold text-black dark:text-[#f3f4f6]">910</div>
+            <div class="text-[9px] font-mono uppercase text-stone-brown/60 dark:text-[#758092]">Mid</div>
+          </div>
+        </div>
+
+        <!-- Band 3: 3.6kHz -->
+        <div class="flex-1 flex flex-col items-center gap-2 min-w-0">
+          <span class="eq-band-val font-mono text-[10px] font-bold text-jet-black dark:text-[#c6ac8f]" id="eq-val-3">0dB</span>
+          <div class="h-36 flex items-center justify-center">
+            <input type="range" class="eq-band-slider vertical-slider h-32 w-2.5 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]" data-band="3" min="-12" max="12" step="0.5" value="0">
+          </div>
+          <div class="text-center">
+            <div class="font-mono text-[11px] font-bold text-black dark:text-[#f3f4f6]">3.6k</div>
+            <div class="text-[9px] font-mono uppercase text-stone-brown/60 dark:text-[#758092]">Upper</div>
+          </div>
+        </div>
+
+        <!-- Band 4: 14kHz -->
+        <div class="flex-1 flex flex-col items-center gap-2 min-w-0">
+          <span class="eq-band-val font-mono text-[10px] font-bold text-jet-black dark:text-[#c6ac8f]" id="eq-val-4">0dB</span>
+          <div class="h-36 flex items-center justify-center">
+            <input type="range" class="eq-band-slider vertical-slider h-32 w-2.5 cursor-pointer accent-jet-black dark:accent-[#c6ac8f]" data-band="4" min="-12" max="12" step="0.5" value="0">
+          </div>
+          <div class="text-center">
+            <div class="font-mono text-[11px] font-bold text-black dark:text-[#f3f4f6]">14k</div>
+            <div class="text-[9px] font-mono uppercase text-stone-brown/60 dark:text-[#758092]">Treble</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer Action -->
+      <div class="px-5 py-3 border-t border-almond-cream dark:border-[#262c38] bg-almond-cream/10 dark:bg-[#1a1e26] flex items-center justify-between text-xs">
+        <button type="button" id="btn-reset-eq" class="px-3 py-1 font-semibold rounded-lg bg-white dark:bg-[#202532] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] transition">
+          Reset to Flat
+        </button>
+        <span class="text-[11px] font-mono text-stone-brown/60 dark:text-[#758092]">Auto-saved</span>
+      </div>
+
+    </div>
+  </div>
   </div>
 
   <!-- Live Ingestion Activity Modal -->
