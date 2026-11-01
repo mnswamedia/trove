@@ -42,6 +42,10 @@ on:
         default: ''
         type: string
 
+concurrency:
+  group: trove-ingest-lock
+  cancel-in-progress: false
+
 jobs:
   ingest:
     name: Download & Ingest Media
