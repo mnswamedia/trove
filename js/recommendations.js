@@ -18,6 +18,9 @@
     cache: new Map(), // track.path -> { videoId, videos: [], sourceTitle }
     selectedVideos: new Map(), // videoId -> video object
     isLoading: false,
+    continuationToken: null,
+    allVideos: [],
+    isLoadingMore: false,
     elements: {},
 
     init() {
@@ -97,6 +100,7 @@
       document.addEventListener('click', (e) => {
         if (!e.target.closest('.item-menu-wrapper')) {
           document.querySelectorAll('.item-menu-dropdown').forEach(d => d.classList.add('hidden'));
+          document.querySelectorAll('#related-list-container > div').forEach(c => c.classList.remove('z-30'));
         }
       });
     },
@@ -235,6 +239,9 @@
 
       if (!forceFresh && this.cache.has(track.path)) {
         const cached = this.cache.get(track.path);
+        this.currentVideoId = cached.videoId;
+        this.continuationToken = cached.continuationToken || null;
+        this.allVideos = [...(cached.videos || [])];
         this.renderVideos(cached.videos, cleanTitle);
         return;
       }
@@ -282,8 +289,10 @@
 
         const data = await res.json();
         const videos = Array.isArray(data.videos) ? data.videos : [];
+        this.continuationToken = data.continuation_token || null;
+        this.allVideos = [...videos];
 
-        this.cache.set(track.path, { videoId, videos, sourceTitle: cleanTitle });
+        this.cache.set(track.path, { videoId, videos, continuationToken: this.continuationToken, sourceTitle: cleanTitle });
         this.setLoading(false);
         this.renderVideos(videos, cleanTitle);
 
@@ -349,123 +358,274 @@
       }
 
       videos.forEach((video) => {
-        const card = document.createElement('div');
-        card.className = 'p-2 sm:p-2.5 rounded-xl hover:bg-almond-cream/30 dark:hover:bg-[#1e232e] transition flex items-center gap-3 group select-none relative';
-
-        const thumbUrl = video.thumbnail || (video.thumbnails && video.thumbnails[0]) || `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`;
-        const titleEscaped = (video.title || 'Untitled Track').replace(/"/g, '&quot;');
-        const channelEscaped = (video.channel || 'YouTube').replace(/"/g, '&quot;');
-        const durationText = video.duration || '';
-        const tags = Array.isArray(video.tags) ? video.tags : [];
-
-        card.innerHTML = `
-          <!-- Checkbox -->
-          <input type="checkbox" class="related-item-checkbox rounded border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#c6ac8f] shrink-0 cursor-pointer w-4 h-4" data-video-id="${video.id}">
-
-          <!-- Thumbnail with duration badge -->
-          <div class="relative w-16 h-12 sm:w-20 sm:h-14 rounded-lg overflow-hidden bg-almond-cream/40 dark:bg-[#12151c] shrink-0 shadow-sm border border-almond-cream/60 dark:border-[#262c38]">
-            <img src="${thumbUrl}" alt="" class="w-full h-full object-cover" loading="lazy">
-            ${durationText ? `<span class="absolute bottom-0.5 right-0.5 px-1 py-0.5 rounded text-[9px] sm:text-[10px] font-mono font-bold bg-black/85 text-white leading-none shadow-sm">${durationText}</span>` : ''}
-          </div>
-
-          <!-- Title & Channel Info -->
-          <div class="flex-1 min-w-0 pr-1">
-            <div class="text-xs sm:text-sm font-semibold text-black dark:text-[#f3f4f6] truncate group-hover:text-accent-brown dark:group-hover:text-[#c6ac8f] transition" title="${titleEscaped}">
-              ${video.title || 'Untitled'}
-            </div>
-            ${tags.length > 0 ? `
-              <div class="flex items-center gap-1 mt-0.5 flex-wrap">
-                ${tags.slice(0, 3).map(tag => `
-                  <span class="px-1.5 py-0.5 text-[9px] font-medium rounded-md bg-almond-cream/50 dark:bg-[#1f2430] text-stone-brown/80 dark:text-[#c6ac8f] border border-almond-cream/70 dark:border-[#2b3342] leading-none">
-                    ${tag.replace(/"/g, '&quot;')}
-                  </span>
-                `).join('')}
-              </div>
-            ` : ''}
-            <div class="flex items-center gap-1.5 mt-1 text-[10px] sm:text-[11px] font-mono text-stone-brown/70 dark:text-[#9aa4b2]">
-              <span class="truncate max-w-[120px] sm:max-w-[180px]">${channelEscaped}</span>
-              ${durationText ? `<span class="text-accent-brown dark:text-[#c6ac8f] font-semibold">• ${durationText}</span>` : ''}
-              ${video.view_count || video.views ? `<span>• ${video.view_count || video.views}</span>` : ''}
-            </div>
-          </div>
-
-          <!-- Actions -->
-          <div class="flex items-center gap-1 shrink-0">
-            <!-- Play Next (Download & Auto-play) -->
-            <button type="button" class="btn-play-related p-2 rounded-lg hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] text-stone-brown dark:text-[#c6ac8f] hover:text-black dark:hover:text-white transition" title="Download & Play Next" data-video-id="${video.id}">
-              <i data-lucide="play-circle" class="w-5 h-5"></i>
-            </button>
-
-            <!-- Item Menu Dropdown Wrapper -->
-            <div class="relative item-menu-wrapper">
-              <button type="button" class="btn-item-menu p-1.5 sm:p-2 rounded-lg hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] text-stone-brown/60 dark:text-[#8b95a5] hover:text-black dark:hover:text-white transition" title="Options">
-                <i data-lucide="more-vertical" class="w-4 h-4"></i>
-              </button>
-              <div class="item-menu-dropdown absolute right-0 bottom-full mb-1 w-44 bg-white dark:bg-[#1a1e27] border border-almond-cream dark:border-[#2f3747] rounded-xl shadow-xl py-1.5 z-30 hidden">
-                <button type="button" class="btn-action-download w-full px-3 py-1.5 text-left text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] flex items-center gap-2">
-                  <i data-lucide="download" class="w-3.5 h-3.5"></i>
-                  <span>Download to Vault</span>
-                </button>
-                <button type="button" class="btn-action-copy w-full px-3 py-1.5 text-left text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] flex items-center gap-2">
-                  <i data-lucide="copy" class="w-3.5 h-3.5"></i>
-                  <span>Copy URL</span>
-                </button>
-                <a href="${video.url}" target="_blank" rel="noopener noreferrer" class="w-full px-3 py-1.5 text-left text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] flex items-center gap-2">
-                  <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
-                  <span>Open on YouTube</span>
-                </a>
-              </div>
-            </div>
-          </div>
-        `;
-
-        const cb = card.querySelector('.related-item-checkbox');
-        cb.addEventListener('change', (e) => {
-          if (e.target.checked) {
-            this.selectedVideos.set(video.id, video);
-          } else {
-            this.selectedVideos.delete(video.id);
-          }
-          this.updateSelectionUI();
-        });
-
-        const btnPlay = card.querySelector('.btn-play-related');
-        btnPlay.addEventListener('click', () => {
-          this.downloadAndPlay(video);
-        });
-
-        const btnMenu = card.querySelector('.btn-item-menu');
-        const dropdown = card.querySelector('.item-menu-dropdown');
-        btnMenu.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const isHidden = dropdown.classList.contains('hidden');
-          document.querySelectorAll('.item-menu-dropdown').forEach(d => d.classList.add('hidden'));
-          if (isHidden) dropdown.classList.remove('hidden');
-        });
-
-        const btnDl = card.querySelector('.btn-action-download');
-        btnDl.addEventListener('click', (e) => {
-          e.stopPropagation();
-          dropdown.classList.add('hidden');
-          this.downloadTracks([video]);
-        });
-
-        const btnCopy = card.querySelector('.btn-action-copy');
-        btnCopy.addEventListener('click', (e) => {
-          e.stopPropagation();
-          dropdown.classList.add('hidden');
-          navigator.clipboard?.writeText(video.url);
-          showToast('Copied YouTube URL to clipboard');
-        });
-
+        const card = this.createVideoCard(video);
         this.elements.listContainer.appendChild(card);
       });
+
+      if (this.continuationToken) {
+        this.appendLoadMoreButton();
+      }
 
       if (window.lucide) window.lucide.createIcons();
     },
 
+    createVideoCard(video) {
+      const card = document.createElement('div');
+      card.className = 'p-2 sm:p-2.5 rounded-xl hover:bg-almond-cream/30 dark:hover:bg-[#1e232e] transition flex items-center gap-2.5 sm:gap-3 group select-none relative';
+
+      const thumbUrl = video.thumbnail || (video.thumbnails && video.thumbnails[0]) || `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`;
+      const titleEscaped = (video.title || 'Untitled Track').replace(/"/g, '&quot;');
+      const channelEscaped = (video.channel || 'YouTube').replace(/"/g, '&quot;');
+      const durationText = video.duration || '';
+      const tags = Array.isArray(video.tags) ? video.tags : [];
+
+      card.innerHTML = `
+        <!-- Checkbox -->
+        <input type="checkbox" class="related-item-checkbox rounded border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#c6ac8f] shrink-0 cursor-pointer w-4 h-4" data-video-id="${video.id}">
+
+        <!-- Thumbnail with duration badge -->
+        <div class="relative w-16 h-12 sm:w-20 sm:h-14 rounded-lg overflow-hidden bg-almond-cream/40 dark:bg-[#12151c] shrink-0 shadow-sm border border-almond-cream/60 dark:border-[#262c38]">
+          <img src="${thumbUrl}" alt="" class="w-full h-full object-cover" loading="lazy">
+          ${durationText ? `<span class="absolute bottom-0.5 right-0.5 px-1 py-0.5 rounded text-[9px] sm:text-[10px] font-mono font-bold bg-black/85 text-white leading-none shadow-sm">${durationText}</span>` : ''}
+        </div>
+
+        <!-- Title, Tags & Channel Info -->
+        <div class="flex-1 min-w-0 pr-1">
+          <div class="text-xs sm:text-sm font-semibold text-black dark:text-[#f3f4f6] truncate group-hover:text-accent-brown dark:group-hover:text-[#c6ac8f] transition" title="${titleEscaped}">
+            ${video.title || 'Untitled'}
+          </div>
+          ${tags.length > 0 ? `
+            <div class="flex items-center gap-1 mt-0.5 flex-wrap">
+              ${tags.slice(0, 3).map(tag => `
+                <span class="px-1.5 py-0.5 text-[9px] font-medium rounded-md bg-almond-cream/50 dark:bg-[#1f2430] text-stone-brown/80 dark:text-[#c6ac8f] border border-almond-cream/70 dark:border-[#2b3342] leading-none">
+                  ${(tag || '').replace(/"/g, '&quot;')}
+                </span>
+              `).join('')}
+            </div>
+          ` : ''}
+          <div class="flex items-center gap-1.5 mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] font-mono text-stone-brown/70 dark:text-[#9aa4b2]">
+            <span class="truncate max-w-[120px] sm:max-w-[200px]">${channelEscaped}</span>
+            ${video.view_count || video.views ? `<span class="shrink-0">• ${video.view_count || video.views}</span>` : ''}
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex items-center gap-1 shrink-0">
+          <!-- Play Next: hidden on mobile to avoid cramming, visible on desktop -->
+          <button type="button" class="btn-play-related hidden sm:inline-flex p-2 rounded-lg hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] text-stone-brown dark:text-[#c6ac8f] hover:text-black dark:hover:text-white transition" title="Download & Play Next" data-video-id="${video.id}">
+            <i data-lucide="play-circle" class="w-5 h-5"></i>
+          </button>
+
+          <!-- Item Menu Dropdown Wrapper -->
+          <div class="relative item-menu-wrapper">
+            <button type="button" class="btn-item-menu p-1.5 sm:p-2 rounded-lg hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] text-stone-brown/60 dark:text-[#8b95a5] hover:text-black dark:hover:text-white transition" title="Options">
+              <i data-lucide="more-vertical" class="w-4 h-4"></i>
+            </button>
+            <div class="item-menu-dropdown absolute right-0 w-48 bg-white dark:bg-[#1a1e27] border border-almond-cream dark:border-[#2f3747] rounded-xl shadow-2xl py-1.5 z-40 hidden">
+              <!-- Mobile only: Download & Play Next -->
+              <button type="button" class="btn-action-play-next w-full px-3 py-2 text-left text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] flex items-center gap-2 sm:hidden font-medium">
+                <i data-lucide="play-circle" class="w-4 h-4 text-accent-brown dark:text-[#c6ac8f]"></i>
+                <span>Download & Play Next</span>
+              </button>
+              <button type="button" class="btn-action-download w-full px-3 py-1.5 text-left text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] flex items-center gap-2">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                <span>Download to Vault</span>
+              </button>
+              <button type="button" class="btn-action-copy w-full px-3 py-1.5 text-left text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] flex items-center gap-2">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                <span>Copy URL</span>
+              </button>
+              <a href="${video.url}" target="_blank" rel="noopener noreferrer" class="w-full px-3 py-1.5 text-left text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] flex items-center gap-2">
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                <span>Open on YouTube</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const cb = card.querySelector('.related-item-checkbox');
+      cb.addEventListener('change', (e) => {
+        if (e.target.checked) {
+          this.selectedVideos.set(video.id, video);
+        } else {
+          this.selectedVideos.delete(video.id);
+        }
+        this.updateSelectionUI();
+      });
+
+      const btnPlay = card.querySelector('.btn-play-related');
+      if (btnPlay) {
+        btnPlay.addEventListener('click', () => {
+          this.downloadAndPlay(video);
+        });
+      }
+
+      const btnMenu = card.querySelector('.btn-item-menu');
+      const dropdown = card.querySelector('.item-menu-dropdown');
+      btnMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isHidden = dropdown.classList.contains('hidden');
+        document.querySelectorAll('.item-menu-dropdown').forEach(d => d.classList.add('hidden'));
+        document.querySelectorAll('#related-list-container > div').forEach(c => c.classList.remove('z-30'));
+
+        if (isHidden) {
+          const btnRect = btnMenu.getBoundingClientRect();
+          const containerRect = this.elements.listContainer.getBoundingClientRect();
+          const spaceBelow = containerRect.bottom - btnRect.bottom;
+
+          dropdown.classList.remove('top-full', 'mt-1', 'bottom-full', 'mb-1');
+          if (spaceBelow < 180) {
+            dropdown.classList.add('bottom-full', 'mb-1');
+          } else {
+            dropdown.classList.add('top-full', 'mt-1');
+          }
+
+          card.classList.add('z-30');
+          dropdown.classList.remove('hidden');
+        }
+      });
+
+      const btnPlayNext = card.querySelector('.btn-action-play-next');
+      if (btnPlayNext) {
+        btnPlayNext.addEventListener('click', (e) => {
+          e.stopPropagation();
+          dropdown.classList.add('hidden');
+          card.classList.remove('z-30');
+          this.downloadAndPlay(video);
+        });
+      }
+
+      const btnDl = card.querySelector('.btn-action-download');
+      btnDl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown.classList.add('hidden');
+        card.classList.remove('z-30');
+        this.downloadTracks([video]);
+      });
+
+      const btnCopy = card.querySelector('.btn-action-copy');
+      btnCopy.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown.classList.add('hidden');
+        card.classList.remove('z-30');
+        navigator.clipboard?.writeText(video.url);
+        showToast('Copied YouTube URL to clipboard');
+      });
+
+      return card;
+    },
+
+    appendLoadMoreButton() {
+      const existing = document.getElementById('related-load-more-wrap');
+      if (existing) existing.remove();
+
+      if (!this.continuationToken) return;
+
+      const loadMoreContainer = document.createElement('div');
+      loadMoreContainer.id = 'related-load-more-wrap';
+      loadMoreContainer.className = 'py-3.5 px-2 flex justify-center shrink-0 border-t border-almond-cream/40 dark:border-[#222734]';
+      loadMoreContainer.innerHTML = `
+        <button type="button" id="btn-related-load-more" class="w-full sm:w-auto px-5 py-2.5 text-xs font-semibold rounded-xl bg-white dark:bg-[#1a1e27] border border-khaki-beige dark:border-[#353c4d] text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40 dark:hover:bg-[#252b38] hover:text-black dark:hover:text-white transition shadow-sm inline-flex items-center justify-center gap-2 select-none">
+          <i data-lucide="plus-circle" class="w-4 h-4"></i>
+          <span id="load-more-btn-text">Load More Recommendations</span>
+        </button>
+      `;
+      this.elements.listContainer.appendChild(loadMoreContainer);
+
+      const btnLoadMore = loadMoreContainer.querySelector('#btn-related-load-more');
+      btnLoadMore.addEventListener('click', () => {
+        this.loadMore();
+      });
+      if (window.lucide) window.lucide.createIcons();
+    },
+
+    async loadMore() {
+      if (this.isLoadingMore || !this.continuationToken) return;
+      this.isLoadingMore = true;
+
+      const btn = document.getElementById('btn-related-load-more');
+      const btnText = document.getElementById('load-more-btn-text');
+      if (btn) {
+        btn.disabled = true;
+        btn.classList.add('opacity-75', 'pointer-events-none');
+        if (btnText) btnText.innerHTML = '<span class="inline-flex items-center gap-2"><i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Loading more...</span>';
+        if (window.lucide) window.lucide.createIcons();
+      }
+
+      const storage = CONFIG.storage || {};
+      const workerUrl = CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('recommendations') : null;
+      const workerToken = localStorage.getItem(storage.workerTokenKey) || '';
+
+      try {
+        const cleanBase = workerUrl ? workerUrl.replace(/\/+$/, '') : '';
+        const sep = cleanBase.includes('?') ? '&' : (cleanBase.endsWith('/recommendations') ? '?' : '/?');
+        let targetUrl = `${cleanBase}${sep}continuation=${encodeURIComponent(this.continuationToken)}&excludeShorts=true`;
+        if (this.currentVideoId) {
+          targetUrl += `&videoId=${encodeURIComponent(this.currentVideoId)}`;
+        }
+        if (workerToken) {
+          targetUrl += `&token=${encodeURIComponent(workerToken)}`;
+        }
+
+        const headers = { 'Accept': 'application/json' };
+        if (workerToken) {
+          headers['Authorization'] = `Bearer ${workerToken}`;
+          headers['X-API-Key'] = workerToken;
+        }
+
+        const res = await fetch(targetUrl, { headers });
+        if (!res.ok) {
+          throw new Error(`Worker returned status ${res.status}`);
+        }
+
+        const data = await res.json();
+        const newVideos = Array.isArray(data.videos) ? data.videos : [];
+        this.continuationToken = data.continuation_token || null;
+
+        if (newVideos.length > 0) {
+          const existingIds = new Set(this.allVideos.map(v => v.id));
+          const uniqueNewVideos = newVideos.filter(v => !existingIds.has(v.id));
+
+          this.allVideos.push(...uniqueNewVideos);
+          if (this.elements.countBadge) {
+            this.elements.countBadge.innerText = `${this.allVideos.length} found`;
+          }
+          if (this.elements.footerStatus) {
+            this.elements.footerStatus.innerText = `${this.allVideos.length} tracks ready`;
+          }
+
+          const loadMoreWrap = document.getElementById('related-load-more-wrap');
+          if (loadMoreWrap) loadMoreWrap.remove();
+
+          uniqueNewVideos.forEach(v => {
+            const card = this.createVideoCard(v);
+            this.elements.listContainer.appendChild(card);
+          });
+
+          if (this.continuationToken) {
+            this.appendLoadMoreButton();
+          }
+          if (window.lucide) window.lucide.createIcons();
+        } else {
+          const loadMoreWrap = document.getElementById('related-load-more-wrap');
+          if (loadMoreWrap) loadMoreWrap.remove();
+        }
+      } catch (err) {
+        console.error('Failed to load more recommendations:', err);
+        if (showToast) showToast('Could not load more recommendations.');
+        if (btn) {
+          btn.disabled = false;
+          btn.classList.remove('opacity-75', 'pointer-events-none');
+          if (btnText) btnText.innerText = 'Retry Loading More';
+        }
+      } finally {
+        this.isLoadingMore = false;
+      }
+    },
+
     handleSelectAll(checked) {
-      const currentList = this.cache.get(this.currentTrackPath)?.videos || [];
+      const currentList = this.allVideos.length > 0 ? this.allVideos : (this.cache.get(this.currentTrackPath)?.videos || []);
       const checkboxes = this.elements.listContainer?.querySelectorAll('.related-item-checkbox') || [];
       checkboxes.forEach((cb) => {
         cb.checked = checked;

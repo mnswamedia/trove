@@ -366,7 +366,16 @@ function parseRecommendations(data, seedVideoId) {
     getPath(data, "contents", "twoColumnWatchNextResults", "secondaryResults", "results") ||
     [];
 
-  const itemsToParse = sec.length > 0 ? sec : (Array.isArray(data) ? data : [data]);
+  // Look for continuation items in onResponseReceivedEndpoints
+  const contItems = [];
+  const eps = data?.onResponseReceivedEndpoints || [];
+  for (const ep of eps) {
+    const items = ep?.appendContinuationItemsAction?.continuationItems ||
+      ep?.reloadContinuationItemsCommand?.continuationItems || [];
+    for (const it of items) contItems.push(it);
+  }
+
+  const itemsToParse = sec.length > 0 ? sec : (contItems.length > 0 ? contItems : (Array.isArray(data) ? data : [data]));
 
   for (const item of itemsToParse) {
     if (!item || typeof item !== "object") continue;
@@ -438,7 +447,7 @@ function parseRecommendations(data, seedVideoId) {
 }
 
 function findContinuation(data) {
-  // Restrict continuation search strictly to secondaryResults (avoid comments section)
+  // 1. Restrict continuation search strictly to secondaryResults (avoid comments section)
   const sec = getPath(data, "contents", "twoColumnWatchNextResults", "secondaryResults");
   if (sec) {
     for (const [node] of walk(sec)) {
@@ -451,6 +460,21 @@ function findContinuation(data) {
       }
     }
   }
+
+  // 2. Check onResponseReceivedEndpoints (for continuation page responses)
+  const eps = data?.onResponseReceivedEndpoints || [];
+  for (const ep of eps) {
+    const items = ep?.appendContinuationItemsAction?.continuationItems ||
+      ep?.reloadContinuationItemsCommand?.continuationItems || [];
+    for (const item of items) {
+      const token = item?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token ||
+        item?.continuationEndpoint?.continuationCommand?.token;
+      if (typeof token === "string" && token) {
+        return token;
+      }
+    }
+  }
+
   return null;
 }
 
@@ -573,6 +597,7 @@ export async function handleRecommendations(request, env, url) {
   let pages = 0;
   let includeRaw = false;
   let excludeShorts = false;
+  let continuation = null;
 
   if (request.method === "GET") {
     rawInput =
@@ -585,6 +610,7 @@ export async function handleRecommendations(request, env, url) {
       rawInput = url.pathname.split("/recommendations/")[1];
     }
 
+    continuation = url.searchParams.get("continuation") || url.searchParams.get("continuation_token");
     pages = parseInt(url.searchParams.get("pages") || "0", 10);
     includeRaw = url.searchParams.get("includeRaw") === "true";
     excludeShorts = url.searchParams.get("excludeShorts") === "true";
@@ -597,11 +623,56 @@ export async function handleRecommendations(request, env, url) {
     }
 
     rawInput = body?.videoId ?? body?.video_id ?? body?.v ?? body?.url;
+    continuation = body?.continuation ?? body?.continuation_token;
     pages = body?.pages ?? 0;
     includeRaw = body?.includeRaw === true;
     excludeShorts = body?.excludeShorts === true;
   } else {
     return jsonResponse({ success: false, error: "Method not allowed. Use GET or POST." }, 405);
+  }
+
+  // If a continuation cursor is provided, load the next page directly
+  if (continuation) {
+    try {
+      const pageData = await fetchNext({
+        context: {
+          client: {
+            clientName: "WEB",
+            clientVersion: CLIENT_VERSION,
+            hl: "en",
+            gl: "US",
+            visitorData: VISITOR_ID,
+          },
+        },
+        continuation,
+      });
+
+      const seedVideoId = extractVideoId(rawInput);
+      const parsed = parseRecommendations(pageData, seedVideoId);
+      const nextContinuation = findContinuation(pageData);
+      const finalVideos = excludeShorts
+        ? parsed.videos.filter((v) => !v.is_short)
+        : parsed.videos;
+
+      return jsonResponse(
+        {
+          success: true,
+          videoId: seedVideoId || null,
+          is_continuation: true,
+          video_count: finalVideos.length,
+          playlist_count: parsed.playlists.length,
+          videos: finalVideos,
+          playlists: parsed.playlists,
+          tags: parsed.tags,
+          continuation_token: nextContinuation,
+        },
+        200,
+        "no-store"
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return jsonResponse({ success: false, error: message }, 502);
+    }
   }
 
   const videoId = extractVideoId(rawInput);
