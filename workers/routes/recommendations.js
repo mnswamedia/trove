@@ -1,5 +1,6 @@
 /**
  * Route Handler: YouTube Recommendations Extractor (/recommendations/*)
+ * Supports modern InnerTube `lockupViewModel`, `shortsLockupViewModel`, and legacy renderers.
  */
 
 import { jsonResponse } from "../common.js";
@@ -10,6 +11,14 @@ const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const VISITOR_ID = "CgtwclpTdlljOTc4VSjGzJzXBjIKCgJTRxIEGgAgaA%3D%3D";
 const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
+
+const KNOWN_GENRES = new Set([
+  "acoustic", "ambient", "blues", "classical", "country", "electronic", "folk",
+  "hip hop", "house", "indie", "instrumental", "jazz", "latin", "lofi", "lo-fi",
+  "metal", "orchestral", "piano", "pop", "punk", "r&b", "reggae", "rock", "sitar",
+  "soul", "synthwave", "techno", "trap", "vocal", "chill", "meditation", "healing",
+  "live", "remix", "cover", "unplugged", "soundtrack", "ost", "devotional"
+]);
 
 const VIDEO_RENDERERS = new Set([
   "videoRenderer",
@@ -26,6 +35,10 @@ const PLAYLIST_RENDERERS = new Set([
   "gridPlaylistRenderer",
   "radioRenderer",
 ]);
+
+/* --------------------------------------------------------------------------
+ * Tree & Node Traversal Helpers
+ * -------------------------------------------------------------------------- */
 
 function* walk(value, path = "$", depth = 0) {
   if (depth > 100 || value === null || typeof value !== "object") return;
@@ -70,6 +83,7 @@ function asText(value) {
 }
 
 function firstText(obj, ...keys) {
+  if (!obj || typeof obj !== "object") return null;
   for (const key of keys) {
     const result = asText(obj[key]);
     if (result) return result;
@@ -85,7 +99,7 @@ function getThumbnails(value) {
         if (t && typeof t.url === "string") found.add(t.url);
       }
     }
-    if (typeof node.url === "string" && node.url.includes("ytimg.com/")) {
+    if (typeof node.url === "string" && (node.url.includes("ytimg.com/") || node.url.includes("ggpht.com/"))) {
       found.add(node.url);
     }
   }
@@ -94,8 +108,8 @@ function getThumbnails(value) {
 
 function isShorts(node) {
   for (const [sub] of walk(node)) {
-    for (const key of ["url", "webPageType", "iconType"]) {
-      if (typeof sub[key] === "string" && sub[key].toLowerCase().includes("shorts")) {
+    for (const key of ["url", "webPageType", "iconType", "contentType"]) {
+      if (typeof sub[key] === "string" && sub[key].toLowerCase().includes("short")) {
         return true;
       }
     }
@@ -103,52 +117,210 @@ function isShorts(node) {
   return false;
 }
 
-function normalizeVideo(node, rendererName) {
-  const videoId =
-    node.videoId ??
-    getPath(node, "navigationEndpoint", "watchEndpoint", "videoId") ??
-    getPath(node, "onTap", "innertubeCommand", "watchEndpoint", "videoId");
+function parseDurationSeconds(durationStr) {
+  if (!durationStr || typeof durationStr !== "string") return null;
+  const parts = durationStr.trim().split(":").map((p) => parseInt(p, 10));
+  if (parts.some(isNaN)) return null;
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  return null;
+}
 
-  if (!videoId || typeof videoId !== "string" || !VIDEO_ID_RE.test(videoId)) {
+function extractVideoTags(title, badges = []) {
+  const tags = new Set();
+
+  for (const b of badges) {
+    if (b && typeof b === "string" && b.length <= 20) {
+      const cleanBadge = b.trim();
+      if (!/^\d+:\d+$/.test(cleanBadge) && !cleanBadge.toLowerCase().includes("now playing")) {
+        tags.add(cleanBadge);
+      }
+    }
+  }
+
+  if (typeof title === "string") {
+    const hashMatches = title.match(/#([a-zA-Z0-9_-]+)/g);
+    if (hashMatches) {
+      for (const h of hashMatches) {
+        tags.add(h.slice(1));
+      }
+    }
+
+    const bracketMatches = title.match(/[(\[{]([^)\]}]+)[)\]}]/g);
+    if (bracketMatches) {
+      for (const m of bracketMatches) {
+        const inner = m.slice(1, -1).trim();
+        if (inner.length >= 3 && inner.length <= 22 && !/^\d+$/.test(inner)) {
+          if (!inner.toLowerCase().startsWith("feat") && !inner.toLowerCase().startsWith("ft")) {
+            tags.add(inner);
+          }
+        }
+      }
+    }
+
+    const lower = title.toLowerCase();
+    for (const genre of KNOWN_GENRES) {
+      const regex = new RegExp(`\\b${genre}\\b`, "i");
+      if (regex.test(lower)) {
+        const formatted = genre.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+        tags.add(formatted);
+      }
+    }
+  }
+
+  return Array.from(tags).slice(0, 3);
+}
+
+/* --------------------------------------------------------------------------
+ * Card Parsers: Lockup, Shorts & Legacy Renderers
+ * -------------------------------------------------------------------------- */
+
+function extractLockupVideo(lockup, seedVideoId) {
+  if (!lockup || typeof lockup !== "object") return null;
+
+  let videoId = lockup.contentId;
+  if (!videoId || !VIDEO_ID_RE.test(videoId)) {
+    videoId = getPath(lockup, "rendererContext", "commandContext", "onTap", "innertubeCommand", "watchEndpoint", "videoId");
+  }
+  if (!videoId || !VIDEO_ID_RE.test(videoId)) {
+    videoId = getPath(lockup, "contentImage", "thumbnailViewModel", "overlays", 0, "thumbnailBottomOverlayViewModel", "badges", 0, "thumbnailBadgeViewModel", "animationActivationTargetId");
+  }
+
+  if (!videoId || !VIDEO_ID_RE.test(videoId) || videoId === seedVideoId) {
     return null;
   }
 
-  const title =
-    firstText(node, "title", "headline") ??
-    firstText(getPath(node, "title") ?? {}, "runs", "simpleText");
+  const title = getPath(lockup, "metadata", "lockupMetadataViewModel", "title", "content") ||
+    firstText(lockup.metadata?.lockupMetadataViewModel?.title) ||
+    "Untitled Track";
 
-  const channel =
-    firstText(
-      node,
-      "ownerText",
-      "shortBylineText",
-      "longBylineText",
-      "subtitle",
-    ) ?? getPath(node, "channelTitle");
+  const metaRows = getPath(lockup, "metadata", "lockupMetadataViewModel", "metadata", "contentMetadataViewModel", "metadataRows") || [];
+  let channel = null;
+  let views = null;
+  let published = null;
+  const badges = [];
 
-  const views = firstText(node, "viewCountText", "shortViewCountText");
-  const duration = firstText(
-    node,
-    "lengthText",
-    "thumbnailOverlays",
-    "durationText",
-  );
-  const published = firstText(node, "publishedTimeText");
-  const thumbs = getThumbnails(node);
+  for (const row of metaRows) {
+    const parts = row.metadataParts || [];
+    for (const p of parts) {
+      const txt = p?.text?.content || "";
+      const a11y = p?.accessibilityLabel || "";
+      if (!txt && !a11y) continue;
+
+      if (!channel && txt) {
+        channel = txt;
+        const attach = p?.text?.attachmentRuns || [];
+        for (const at of attach) {
+          const imgName = at?.element?.type?.imageType?.image?.sources?.[0]?.clientResource?.imageName;
+          if (imgName === "AUDIO_BADGE") badges.push("Music");
+        }
+      } else if (a11y && a11y.toLowerCase().includes("view")) {
+        views = a11y;
+      } else if (txt.toLowerCase().includes("view") || p?.leadingIcon?.name === "PLAY_ARROW_OUTLINED") {
+        views = txt.includes("view") ? txt : `${txt} views`;
+      } else if (txt.toLowerCase().includes("ago") || a11y.toLowerCase().includes("ago") || txt.toLowerCase().includes("streamed")) {
+        published = a11y || txt;
+      }
+    }
+  }
+
+  const tvm = getPath(lockup, "contentImage", "thumbnailViewModel") || {};
+  let duration = null;
+  const overlays = tvm.overlays || [];
+  for (const ov of overlays) {
+    const bList = ov?.thumbnailBottomOverlayViewModel?.badges || [];
+    for (const b of bList) {
+      const dur = b?.thumbnailBadgeViewModel?.text;
+      if (dur && /^\d+:\d+(:\d+)?$/.test(dur.trim())) {
+        duration = dur.trim();
+        break;
+      }
+      const icon = b?.thumbnailBadgeViewModel?.icon?.sources?.[0]?.clientResource?.imageName;
+      if (icon === "MUSIC") badges.push("Music");
+    }
+    if (duration) break;
+  }
+
+  if (!duration) {
+    for (const [node] of walk(overlays)) {
+      if (typeof node?.text === "string" && /^\d+:\d+(:\d+)?$/.test(node.text.trim())) {
+        duration = node.text.trim();
+        break;
+      }
+    }
+  }
+
+  const sources = tvm.image?.sources || [];
+  const thumbs = sources.map((s) => s.url).filter(Boolean);
+  const bestThumbnail = thumbs[thumbs.length - 1] || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+
+  const isShort = lockup.contentType === "LOCKUP_CONTENT_TYPE_SHORTS" || isShorts(lockup);
+  const videoTags = extractVideoTags(title, badges);
 
   return {
     type: "video",
     id: videoId,
-    title: title ?? null,
-    channel: channel ?? null,
-    view_count: views ?? null,
-    duration: duration ?? null,
-    published: published ?? null,
+    title,
+    channel: channel || "YouTube",
+    duration: duration || null,
+    duration_seconds: parseDurationSeconds(duration),
+    views: views || null,
+    published: published || null,
     url: `https://www.youtube.com/watch?v=${videoId}`,
-    thumbnails: thumbs,
-    best_thumbnail: thumbs[thumbs.length - 1] ?? null,
-    renderer: rendererName,
-    is_short: isShorts(node),
+    thumbnails: thumbs.length > 0 ? thumbs : [bestThumbnail],
+    thumbnail: bestThumbnail,
+    best_thumbnail: bestThumbnail,
+    tags: videoTags,
+    is_short: isShort,
+  };
+}
+
+function extractLegacyVideo(renderer, rendererName, seedVideoId) {
+  let videoId = renderer.videoId;
+  if (!videoId || typeof videoId !== "string") {
+    videoId = getPath(renderer, "navigationEndpoint", "watchEndpoint", "videoId");
+  }
+  if (!videoId || !VIDEO_ID_RE.test(videoId) || videoId === seedVideoId) return null;
+
+  const title = firstText(renderer, "title", "headline") || "Untitled Track";
+  const channel = firstText(renderer, "shortBylineText", "longBylineText", "ownerText") || "YouTube";
+  let duration = firstText(renderer, "lengthText");
+
+  if (!duration && renderer.thumbnailOverlays) {
+    for (const [node] of walk(renderer.thumbnailOverlays)) {
+      if (node?.thumbnailOverlayTimeStatusRenderer?.text) {
+        duration = asText(node.thumbnailOverlayTimeStatusRenderer.text);
+        if (duration) break;
+      }
+      if (typeof node?.text === "string" && /^\d+:\d+/.test(node.text.trim())) {
+        duration = node.text.trim();
+        break;
+      }
+    }
+  }
+
+  const views = firstText(renderer, "viewCountText", "shortViewCountText");
+  const published = firstText(renderer, "publishedTimeText");
+  const thumbs = getThumbnails(renderer);
+  const bestThumbnail = thumbs[thumbs.length - 1] || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+  const isShort = isShorts(renderer);
+  const videoTags = extractVideoTags(title);
+
+  return {
+    type: "video",
+    id: videoId,
+    title,
+    channel,
+    duration: duration || null,
+    duration_seconds: parseDurationSeconds(duration),
+    views: views || null,
+    published: published || null,
+    url: `https://www.youtube.com/watch?v=${videoId}`,
+    thumbnails: thumbs.length > 0 ? thumbs : [bestThumbnail],
+    thumbnail: bestThumbnail,
+    best_thumbnail: bestThumbnail,
+    tags: videoTags,
+    is_short: isShort,
   };
 }
 
@@ -172,46 +344,111 @@ function normalizePlaylist(node, rendererName) {
     video_count: videoCount ?? null,
     url: `https://www.youtube.com/playlist?list=${playlistId}`,
     thumbnails: thumbs,
+    thumbnail: thumbs[thumbs.length - 1] ?? null,
     best_thumbnail: thumbs[thumbs.length - 1] ?? null,
     renderer: rendererName,
   };
 }
 
-function parseRecommendations(data) {
+/* --------------------------------------------------------------------------
+ * Main Recommendations Parser
+ * -------------------------------------------------------------------------- */
+
+function parseRecommendations(data, seedVideoId) {
   const seenIds = new Set();
   const videos = [];
   const playlists = [];
+  const globalTags = new Map();
 
-  for (const [node] of walk(data)) {
-    for (const [key, val] of Object.entries(node)) {
+  // Specifically scope to secondaryResults (the recommendation sidebar)
+  const sec =
+    getPath(data, "contents", "twoColumnWatchNextResults", "secondaryResults", "secondaryResults", "results") ||
+    getPath(data, "contents", "twoColumnWatchNextResults", "secondaryResults", "results") ||
+    [];
+
+  const itemsToParse = sec.length > 0 ? sec : (Array.isArray(data) ? data : [data]);
+
+  for (const item of itemsToParse) {
+    if (!item || typeof item !== "object") continue;
+
+    // 1. Modern lockupViewModel
+    if (item.lockupViewModel) {
+      const v = extractLockupVideo(item.lockupViewModel, seedVideoId);
+      if (v && !seenIds.has(v.id)) {
+        seenIds.add(v.id);
+        videos.push(v);
+        v.tags.forEach((t) => globalTags.set(t, (globalTags.get(t) || 0) + 1));
+      }
+      continue;
+    }
+
+    // 2. Legacy renderers inside item
+    for (const [key, val] of Object.entries(item)) {
       if (val === null || typeof val !== "object") continue;
 
       if (VIDEO_RENDERERS.has(key)) {
-        const item = normalizeVideo(val, key);
-        if (item && !seenIds.has(item.id)) {
-          seenIds.add(item.id);
-          videos.push(item);
+        const v = extractLegacyVideo(val, key, seedVideoId);
+        if (v && !seenIds.has(v.id)) {
+          seenIds.add(v.id);
+          videos.push(v);
+          v.tags.forEach((t) => globalTags.set(t, (globalTags.get(t) || 0) + 1));
         }
       } else if (PLAYLIST_RENDERERS.has(key)) {
-        const item = normalizePlaylist(val, key);
-        if (item && !seenIds.has(item.id)) {
-          seenIds.add(item.id);
-          playlists.push(item);
+        const p = normalizePlaylist(val, key);
+        if (p && !seenIds.has(p.id)) {
+          seenIds.add(p.id);
+          playlists.push(p);
         }
       }
     }
   }
 
-  return { videos, playlists };
+  // Fallback: if secondaryResults was empty, walk the whole response
+  if (videos.length === 0) {
+    for (const [node] of walk(data)) {
+      if (!node || typeof node !== "object") continue;
+      if (node.lockupViewModel) {
+        const v = extractLockupVideo(node.lockupViewModel, seedVideoId);
+        if (v && !seenIds.has(v.id)) {
+          seenIds.add(v.id);
+          videos.push(v);
+          v.tags.forEach((t) => globalTags.set(t, (globalTags.get(t) || 0) + 1));
+        }
+      } else {
+        for (const [key, val] of Object.entries(node)) {
+          if (VIDEO_RENDERERS.has(key)) {
+            const v = extractLegacyVideo(val, key, seedVideoId);
+            if (v && !seenIds.has(v.id)) {
+              seenIds.add(v.id);
+              videos.push(v);
+              v.tags.forEach((t) => globalTags.set(t, (globalTags.get(t) || 0) + 1));
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const sortedTags = Array.from(globalTags.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([t]) => t)
+    .slice(0, 8);
+
+  return { videos, playlists, tags: sortedTags };
 }
 
 function findContinuation(data) {
-  for (const [node] of walk(data)) {
-    if (node.continuationCommand && typeof node.continuationCommand.token === "string") {
-      return node.continuationCommand.token;
-    }
-    if (typeof node.continuation === "string") {
-      return node.continuation;
+  // Restrict continuation search strictly to secondaryResults (avoid comments section)
+  const sec = getPath(data, "contents", "twoColumnWatchNextResults", "secondaryResults");
+  if (sec) {
+    for (const [node] of walk(sec)) {
+      const token =
+        node?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token ||
+        node?.continuationEndpoint?.continuationCommand?.token ||
+        node?.nextContinuationData?.continuation;
+      if (typeof token === "string" && token) {
+        return token;
+      }
     }
   }
   return null;
@@ -219,7 +456,7 @@ function findContinuation(data) {
 
 async function fetchNext(payload, retries = 2) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
+  const timer = setTimeout(() => controller.abort(), 12000);
 
   try {
     const res = await fetch(API_URL, {
@@ -265,7 +502,9 @@ async function runExtractor(videoId, pages = 0, includeRaw = false, options = {}
   };
 
   const initial = await fetchNext(basePayload);
-  const { videos, playlists } = parseRecommendations(initial);
+  const parsed = parseRecommendations(initial, videoId);
+  const videos = [...parsed.videos];
+  const playlists = [...parsed.playlists];
   let continuation = findContinuation(initial);
   const rawPages = includeRaw ? [initial] : [];
 
@@ -277,12 +516,17 @@ async function runExtractor(videoId, pages = 0, includeRaw = false, options = {}
       });
       if (includeRaw) rawPages.push(pageData);
 
-      const parsed = parseRecommendations(pageData);
+      const nextParsed = parseRecommendations(pageData, videoId);
       const existingIds = new Set(videos.map((v) => v.id));
-      for (const v of parsed.videos) {
+      for (const v of nextParsed.videos) {
         if (!existingIds.has(v.id)) {
           existingIds.add(v.id);
           videos.push(v);
+        }
+      }
+      for (const p of nextParsed.playlists) {
+        if (!playlists.some((pl) => pl.id === p.id)) {
+          playlists.push(p);
         }
       }
       continuation = findContinuation(pageData);
@@ -291,11 +535,14 @@ async function runExtractor(videoId, pages = 0, includeRaw = false, options = {}
     }
   }
 
-  const finalVideos = options.excludeShorts ? videos.filter((v) => !v.is_short) : videos;
+  const finalVideos = options.excludeShorts
+    ? videos.filter((v) => !v.is_short)
+    : videos;
 
   return {
     success: true,
     videoId,
+    tags: parsed.tags,
     video_count: finalVideos.length,
     playlist_count: playlists.length,
     videos: finalVideos,
@@ -381,4 +628,3 @@ export async function handleRecommendations(request, env, url) {
     return jsonResponse({ success: false, error: message }, 502);
   }
 }
-

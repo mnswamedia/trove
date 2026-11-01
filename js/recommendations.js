@@ -355,6 +355,8 @@
         const thumbUrl = video.thumbnail || (video.thumbnails && video.thumbnails[0]) || `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`;
         const titleEscaped = (video.title || 'Untitled Track').replace(/"/g, '&quot;');
         const channelEscaped = (video.channel || 'YouTube').replace(/"/g, '&quot;');
+        const durationText = video.duration || '';
+        const tags = Array.isArray(video.tags) ? video.tags : [];
 
         card.innerHTML = `
           <!-- Checkbox -->
@@ -363,7 +365,7 @@
           <!-- Thumbnail with duration badge -->
           <div class="relative w-16 h-12 sm:w-20 sm:h-14 rounded-lg overflow-hidden bg-almond-cream/40 dark:bg-[#12151c] shrink-0 shadow-sm border border-almond-cream/60 dark:border-[#262c38]">
             <img src="${thumbUrl}" alt="" class="w-full h-full object-cover" loading="lazy">
-            ${video.duration ? `<span class="absolute bottom-0.5 right-0.5 px-1 py-0.2 rounded text-[9px] sm:text-[10px] font-mono font-bold bg-black/80 text-white leading-tight">${video.duration}</span>` : ''}
+            ${durationText ? `<span class="absolute bottom-0.5 right-0.5 px-1 py-0.5 rounded text-[9px] sm:text-[10px] font-mono font-bold bg-black/85 text-white leading-none shadow-sm">${durationText}</span>` : ''}
           </div>
 
           <!-- Title & Channel Info -->
@@ -371,9 +373,19 @@
             <div class="text-xs sm:text-sm font-semibold text-black dark:text-[#f3f4f6] truncate group-hover:text-accent-brown dark:group-hover:text-[#c6ac8f] transition" title="${titleEscaped}">
               ${video.title || 'Untitled'}
             </div>
-            <div class="flex items-center gap-1.5 mt-0.5 text-[10px] sm:text-[11px] font-mono text-stone-brown/70 dark:text-[#9aa4b2]">
-              <span class="truncate max-w-[120px] sm:max-w-[200px]">${channelEscaped}</span>
-              ${video.view_count ? `<span>• ${video.view_count}</span>` : ''}
+            ${tags.length > 0 ? `
+              <div class="flex items-center gap-1 mt-0.5 flex-wrap">
+                ${tags.slice(0, 3).map(tag => `
+                  <span class="px-1.5 py-0.5 text-[9px] font-medium rounded-md bg-almond-cream/50 dark:bg-[#1f2430] text-stone-brown/80 dark:text-[#c6ac8f] border border-almond-cream/70 dark:border-[#2b3342] leading-none">
+                    ${tag.replace(/"/g, '&quot;')}
+                  </span>
+                `).join('')}
+              </div>
+            ` : ''}
+            <div class="flex items-center gap-1.5 mt-1 text-[10px] sm:text-[11px] font-mono text-stone-brown/70 dark:text-[#9aa4b2]">
+              <span class="truncate max-w-[120px] sm:max-w-[180px]">${channelEscaped}</span>
+              ${durationText ? `<span class="text-accent-brown dark:text-[#c6ac8f] font-semibold">• ${durationText}</span>` : ''}
+              ${video.view_count || video.views ? `<span>• ${video.view_count || video.views}</span>` : ''}
             </div>
           </div>
 
