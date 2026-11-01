@@ -4,7 +4,25 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trove · Media Vault</title>
-  <link rel="icon" type="image/png" href="./assets/favicon.png">
+
+  <!-- PWA Web App Manifest & Colors -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#22333b">
+  <meta name="description" content="Personal media vault and streaming audio/video player">
+
+  <!-- Apple iOS Mobile Web App Meta & Touch Icons -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Trove">
+  <link rel="apple-touch-icon" href="./assets/icons/icon-180x180.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="./assets/icons/icon-152x152.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/icon-180x180.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="./assets/icons/icon-192x192.png">
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/icons/icon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./assets/icons/icon-16x16.png">
+  <link rel="shortcut icon" href="./assets/icons/icon-32x32.png">
 
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -77,6 +95,11 @@
 
       <!-- Right: Action Buttons (Clean Icons Only) -->
       <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        <!-- Install PWA App Button (Shown when browser detects installability) -->
+        <button id="pwa-install-btn" class="hidden h-8 px-2 sm:px-2.5 inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-900 hover:bg-emerald-500/25 transition shadow-sm select-none" title="Install Trove App">
+          <i data-lucide="download-cloud" class="w-3.5 h-3.5 text-emerald-700"></i>
+          <span class="text-xs font-semibold font-mono hidden sm:inline">Install</span>
+        </button>
         <!-- Live Ingestion Activity Button (Beside Import Button) -->
         <button id="activity-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white border border-khaki-beige text-jet-black hover:bg-almond-cream/40 transition shadow-sm select-none" title="Ingestion Activity">
           <i data-lucide="activity" class="w-4 h-4 text-stone-brown" id="activity-btn-icon"></i>

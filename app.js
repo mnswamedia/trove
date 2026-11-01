@@ -59,6 +59,7 @@
     filterActiveIcon: document.getElementById('filter-active-icon'),
     refreshBtn: document.getElementById('refresh-btn'),
     importBtn: document.getElementById('import-btn'),
+    pwaInstallBtn: document.getElementById('pwa-install-btn'),
     activityBtn: document.getElementById('activity-btn'),
     activityBtnIcon: document.getElementById('activity-btn-icon'),
     activityBtnLabel: document.getElementById('activity-btn-label'),
@@ -1956,6 +1957,11 @@
       }
 
       if (window.lucide) window.lucide.createIcons();
+
+      // Keep native Lock Screen / Notification MediaSession artwork in sync
+      if (thumbUrl && this.currentTrack && item && this.currentTrack.path === item.path) {
+        this.updateMediaSession(thumbUrl);
+      }
     },
 
     // Fetch media file: Memory Cache -> Persistent IndexedDB -> Hugging Face Network Fetch
@@ -2329,30 +2335,48 @@
       savePlaybackState();
     },
 
-    // Android Lock Screen & Notification Shade (MediaSession API with Album Art)
+    // Native Lock Screen, Notification Shade & Media Controls (MediaSession API with High-Res Artwork)
     updateMediaSession(thumbUrl = null) {
       if (!('mediaSession' in navigator) || !this.currentTrack) return;
 
       const track = this.currentTrack;
+      let cleanTitle = track.name.replace(/\.[a-zA-Z0-9]+$/, '');
+      let cleanArtist = repo.id ? `Trove (${repo.id})` : 'Trove Vault';
+      let cleanAlbum = track.parentDir || 'Trove Media Vault';
+
+      // Parse "Artist - Title" if formatted with dash
+      if (cleanTitle.includes(' - ')) {
+        const parts = cleanTitle.split(' - ');
+        cleanArtist = parts[0].trim();
+        cleanTitle = parts.slice(1).join(' - ').trim();
+      }
+
       const artworkList = thumbUrl ? [
         { src: thumbUrl, sizes: '512x512', type: 'image/jpeg' },
-        { src: thumbUrl, sizes: '256x256', type: 'image/jpeg' }
+        { src: thumbUrl, sizes: '256x256', type: 'image/jpeg' },
+        { src: './assets/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' }
       ] : [
-        { src: './assets/favicon.png', sizes: '96x96', type: 'image/png' },
-        { src: './assets/favicon.png', sizes: '192x192', type: 'image/png' },
-        { src: './assets/favicon.png', sizes: '512x512', type: 'image/png' }
+        { src: './assets/icons/icon-96x96.png', sizes: '96x96', type: 'image/png' },
+        { src: './assets/icons/icon-128x128.png', sizes: '128x128', type: 'image/png' },
+        { src: './assets/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+        { src: './assets/icons/icon-384x384.png', sizes: '384x384', type: 'image/png' },
+        { src: './assets/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' }
       ];
 
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: track.name,
-        artist: repo.id,
-        album: track.parentDir || 'Trove Media Vault',
+        title: cleanTitle,
+        artist: cleanArtist,
+        album: cleanAlbum,
         artwork: artworkList
       });
+
+      // Synchronize native playback state
+      navigator.mediaSession.playbackState = this.isPlaying ? 'playing' : 'paused';
 
       try {
         navigator.mediaSession.setActionHandler('play', () => this.resume());
         navigator.mediaSession.setActionHandler('pause', () => this.pause());
+        navigator.mediaSession.setActionHandler('stop', () => this.pause());
         navigator.mediaSession.setActionHandler('previoustrack', () => this.playPrev());
         navigator.mediaSession.setActionHandler('nexttrack', () => this.playNext());
         navigator.mediaSession.setActionHandler('seekto', (details) => {
@@ -2394,7 +2418,7 @@
         elements.expandedTimeDuration.innerText = formatTime(dur);
       }
 
-      // Android background playback position sync
+      // Android/Desktop background playback position sync
       if ('mediaSession' in navigator && dur > 0 && !isNaN(dur)) {
         try {
           navigator.mediaSession.setPositionState({
@@ -2417,6 +2441,9 @@
       if (el === player.getActiveElement()) {
         player.isPlaying = true;
         player.updatePlayStateUI();
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.playbackState = 'playing';
+        }
         savePlaybackState();
       }
     });
@@ -2425,6 +2452,9 @@
       if (el === player.getActiveElement()) {
         player.isPlaying = false;
         player.updatePlayStateUI();
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.playbackState = 'paused';
+        }
         savePlaybackState();
       }
     });
@@ -2848,6 +2878,36 @@
       saveViewSettings();
     });
 
+    // PWA Install Button & BeforeInstallPrompt Listener
+    let deferredInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      if (elements.pwaInstallBtn) {
+        elements.pwaInstallBtn.classList.remove('hidden');
+        if (window.lucide) window.lucide.createIcons();
+      }
+    });
+
+    if (elements.pwaInstallBtn) {
+      elements.pwaInstallBtn.addEventListener('click', async () => {
+        if (!deferredInstallPrompt) return;
+        deferredInstallPrompt.prompt();
+        const choice = await deferredInstallPrompt.userChoice;
+        if (choice && choice.outcome === 'accepted') {
+          console.log('User accepted Trove PWA install');
+        }
+        deferredInstallPrompt = null;
+        elements.pwaInstallBtn.classList.add('hidden');
+      });
+    }
+
+    window.addEventListener('appinstalled', () => {
+      console.log('Trove PWA installed successfully');
+      if (elements.pwaInstallBtn) elements.pwaInstallBtn.classList.add('hidden');
+      deferredInstallPrompt = null;
+    });
+
     // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
       // Ignore if user is typing in search or input fields
@@ -2909,6 +2969,19 @@
     loadSavedViewSettings();
     loadStoredThumbnails();
     setupEventListeners();
+
+    // Register Service Worker for PWA (Offline Shell & Fast Launch)
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js', { scope: './' })
+          .then((reg) => {
+            console.log('Trove ServiceWorker active with scope:', reg.scope);
+          })
+          .catch((err) => {
+            console.warn('Trove ServiceWorker registration note:', err);
+          });
+      });
+    }
 
     // Sync restored view mode & filters with UI
     updateViewToggleUI();
