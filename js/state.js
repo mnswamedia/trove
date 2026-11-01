@@ -53,12 +53,14 @@
   }
 
   // 2. File System Tree Cache (1-Hour TTL or manual reload)
-  const FS_CACHE_KEY = `${storage.fsCacheKey || 'trove_fs_cache'}_${repo.id}`;
+  function getFsCacheKey() {
+    return `${storage.fsCacheKey || 'trove_fs_cache'}_${repo.id || 'default'}`;
+  }
   const FS_CACHE_TTL = storage.fsCacheTTL || (60 * 60 * 1000); // 1 hour in ms
 
   function getCachedFSTree() {
     try {
-      const raw = localStorage.getItem(FS_CACHE_KEY);
+      const raw = localStorage.getItem(getFsCacheKey());
       if (!raw) return null;
       const data = JSON.parse(raw);
       if (data && data.timestamp && (Date.now() - data.timestamp < FS_CACHE_TTL) && Array.isArray(data.items)) {
@@ -72,7 +74,7 @@
 
   function setCachedFSTree(items) {
     try {
-      localStorage.setItem(FS_CACHE_KEY, JSON.stringify({
+      localStorage.setItem(getFsCacheKey(), JSON.stringify({
         timestamp: Date.now(),
         items: items
       }));

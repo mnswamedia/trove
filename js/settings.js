@@ -26,10 +26,10 @@
         btnSave: document.getElementById('btn-save-settings'),
         errorMsg: document.getElementById('settings-error-msg'),
         hfTokenInput: document.getElementById('hf-token-input'),
+        hfRepoInput: document.getElementById('hf-repo-input'),
         ghTokenInput: document.getElementById('gh-token-input'),
         ghRepoInput: document.getElementById('gh-repo-input'),
-        workerUrlInput: document.getElementById('worker-url-input'),
-        workerLyricsUrlInput: document.getElementById('worker-lyrics-url-input'),
+        workerBaseUrlInput: document.getElementById('worker-base-url-input'),
         workerTokenInput: document.getElementById('worker-token-input'),
         authSettingsBtn: document.getElementById('auth-settings-btn'),
         authBtnLabel: document.getElementById('auth-btn-label'),
@@ -70,18 +70,23 @@
       if (this.elements.hfTokenInput) {
         this.elements.hfTokenInput.value = state.token || localStorage.getItem(storage.tokenKey) || '';
       }
+      if (this.elements.hfRepoInput) {
+        const defaultHfRepo = CONFIG.repo?.id || 'mnswa/trove_dataset';
+        this.elements.hfRepoInput.value = localStorage.getItem(storage.hfRepoKey) || defaultHfRepo;
+      }
       if (this.elements.ghTokenInput) {
         this.elements.ghTokenInput.value = localStorage.getItem(storage.ghTokenKey) || '';
       }
       if (this.elements.ghRepoInput) {
-        const defaultRepo = (CONFIG.github?.owner && CONFIG.github?.repo) ? `${CONFIG.github.owner}/${CONFIG.github.repo}` : 'mnswa/trove';
+        const defaultRepo = (CONFIG.github?.owner && CONFIG.github?.repo) ? `${CONFIG.github.owner}/${CONFIG.github.repo}` : 'mnswamedia/trove';
         this.elements.ghRepoInput.value = localStorage.getItem(storage.ghRepoKey) || defaultRepo;
       }
-      if (this.elements.workerUrlInput) {
-        this.elements.workerUrlInput.value = localStorage.getItem(storage.workerRecsUrlKey) || '';
-      }
-      if (this.elements.workerLyricsUrlInput) {
-        this.elements.workerLyricsUrlInput.value = localStorage.getItem(storage.workerLyricsUrlKey) || '';
+      if (this.elements.workerBaseUrlInput) {
+        this.elements.workerBaseUrlInput.value =
+          localStorage.getItem(storage.workerBaseUrlKey) ||
+          localStorage.getItem(storage.workerRecsUrlKey) ||
+          localStorage.getItem(storage.workerPlaylistsUrlKey) ||
+          '';
       }
       if (this.elements.workerTokenInput) {
         this.elements.workerTokenInput.value = localStorage.getItem(storage.workerTokenKey) || '';
@@ -121,19 +126,44 @@
     saveAll() {
       const state = window.Trove.state || {};
       const hfToken = (this.elements.hfTokenInput?.value || '').trim();
+      const hfRepo = (this.elements.hfRepoInput?.value || '').trim();
       const ghToken = (this.elements.ghTokenInput?.value || '').trim();
       const ghRepo = (this.elements.ghRepoInput?.value || '').trim();
-      const workerUrl = (this.elements.workerUrlInput?.value || '').trim();
-      const workerLyricsUrl = (this.elements.workerLyricsUrlInput?.value || '').trim();
+      const workerBaseUrl = (this.elements.workerBaseUrlInput?.value || '').trim();
       const workerToken = (this.elements.workerTokenInput?.value || '').trim();
 
-      // 1. HF Token
+      // 1. HF Token & Dataset Repo
       const oldHfToken = state.token;
+      const oldHfRepo = CONFIG.repo?.id;
       state.token = hfToken;
       if (hfToken) {
         localStorage.setItem(storage.tokenKey, hfToken);
       } else {
         localStorage.removeItem(storage.tokenKey);
+      }
+
+      if (hfRepo) {
+        localStorage.setItem(storage.hfRepoKey, hfRepo);
+        if (CONFIG.repo) {
+          CONFIG.repo.id = hfRepo;
+          const parts = hfRepo.split('/').map(s => s.trim());
+          if (parts.length >= 2) {
+            CONFIG.repo.owner = parts[0];
+            CONFIG.repo.name = parts.slice(1).join('/');
+          } else {
+            CONFIG.repo.name = hfRepo;
+          }
+        }
+      } else {
+        localStorage.removeItem(storage.hfRepoKey);
+      }
+
+      if (this.elements.modalRepoId) {
+        this.elements.modalRepoId.innerText = CONFIG.repo?.id || '--';
+      }
+      const repoIdDisplay = document.getElementById('repo-id-display');
+      if (repoIdDisplay) {
+        repoIdDisplay.innerText = CONFIG.repo?.id || '--';
       }
 
       // 2. GH Token & Repo
@@ -144,20 +174,22 @@
       }
       if (ghRepo) {
         localStorage.setItem(storage.ghRepoKey, ghRepo);
+        if (CONFIG.github) {
+          const ghParts = ghRepo.split('/').map(s => s.trim());
+          if (ghParts.length >= 2) {
+            CONFIG.github.owner = ghParts[0];
+            CONFIG.github.repo = ghParts.slice(1).join('/');
+          }
+        }
       } else {
         localStorage.removeItem(storage.ghRepoKey);
       }
 
       // 3. Cloudflare Worker URL & Secret
-      if (workerUrl) {
-        localStorage.setItem(storage.workerRecsUrlKey, workerUrl);
+      if (workerBaseUrl) {
+        localStorage.setItem(storage.workerBaseUrlKey, workerBaseUrl);
       } else {
-        localStorage.removeItem(storage.workerRecsUrlKey);
-      }
-      if (workerLyricsUrl) {
-        localStorage.setItem(storage.workerLyricsUrlKey, workerLyricsUrl);
-      } else {
-        localStorage.removeItem(storage.workerLyricsUrlKey);
+        localStorage.removeItem(storage.workerBaseUrlKey);
       }
       if (workerToken) {
         localStorage.setItem(storage.workerTokenKey, workerToken);
@@ -169,8 +201,9 @@
       this.close();
       if (showToast) showToast('Settings & credentials saved!');
 
-      // If HF Token changed or dataset empty, reload repository
-      if (hfToken && (hfToken !== oldHfToken || (state.allItems && state.allItems.length === 0))) {
+      const repoChanged = Boolean(hfRepo && oldHfRepo && hfRepo !== oldHfRepo);
+      // If HF Token changed or dataset repo changed or dataset empty, reload repository
+      if (hfToken && (hfToken !== oldHfToken || repoChanged || (state.allItems && state.allItems.length === 0))) {
         if (window.Trove.explorer && typeof window.Trove.explorer.loadRepository === 'function') {
           window.Trove.explorer.loadRepository(true);
         }
@@ -225,6 +258,12 @@
           e.stopPropagation();
           if (this.elements.mobileNavMenu) this.elements.mobileNavMenu.classList.add('hidden');
           this.open();
+        });
+      }
+
+      if (this.elements.hfRepoInput && this.elements.modalRepoId) {
+        this.elements.hfRepoInput.addEventListener('input', (e) => {
+          this.elements.modalRepoId.innerText = (e.target.value || '').trim() || '--';
         });
       }
 

@@ -138,6 +138,11 @@
           <i data-lucide="refresh-cw" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]"></i>
         </button>
 
+        <button id="playlists-btn" class="hidden sm:inline-flex w-8 h-8 items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm" title="Custom Playlists & Queue">
+          <i data-lucide="list-music" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]"></i>
+          <span class="sr-only">Playlists</span>
+        </button>
+
         <button id="auth-settings-btn" class="hidden sm:inline-flex w-8 h-8 items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm" title="Settings & Access Tokens">
           <i data-lucide="settings" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]" id="auth-settings-icon"></i>
           <span id="auth-btn-label" class="sr-only">Settings</span>
@@ -170,6 +175,14 @@
                 <span class="font-medium">Activity</span>
               </div>
               <div class="w-2 h-2 rounded-full bg-amber-500 animate-pulse hidden" id="mobile-activity-dot"></div>
+            </button>
+
+            <!-- Playlists & Queue -->
+            <button type="button" id="mobile-playlists-btn" class="w-full px-3 py-2 text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] flex items-center justify-between transition text-left">
+              <div class="flex items-center gap-2.5">
+                <i data-lucide="list-music" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]"></i>
+                <span class="font-medium">Playlists & Queue</span>
+              </div>
             </button>
 
             <!-- Refresh / Resync Vault -->
@@ -285,10 +298,12 @@
       <div class="flex-1 flex flex-col min-h-0 bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#262c38] rounded-xl shadow-sm overflow-hidden transition-colors">
         <!-- Table Header: Column name row (Always in place) -->
         <div class="shrink-0 grid grid-cols-12 px-3 py-2 sm:px-4 sm:py-2.5 bg-almond-cream/25 dark:bg-[#1a1e26] border-b border-almond-cream dark:border-[#262c38] text-[11px] font-bold uppercase tracking-wider text-stone-brown/70 dark:text-[#8b95a5] select-none">
-          <span class="col-span-7 md:col-span-6">Name</span>
+          <span class="col-span-6 md:col-span-6">Name</span>
           <span class="col-span-2 md:col-span-2">Type</span>
           <span class="col-span-3 md:col-span-2 text-right md:text-left">Size</span>
-          <span class="hidden md:block col-span-2">Status</span>
+          <span class="col-span-1 md:col-span-2 text-right md:text-left">
+            <span class="hidden md:inline">Status</span>
+          </span>
         </div>
 
         <!-- Files Container: ONLY THIS SCROLLS -->
@@ -535,14 +550,20 @@
 
       <!-- Bottom Audio Volume & Utility Row (Generous vertical space with Queue, EQ and Volume Pill) -->
       <div class="flex items-center justify-between text-xs text-stone-brown dark:text-[#9aa4b2] pt-2.5 sm:pt-3 border-t border-almond-cream/60 dark:border-[#252a36]">
-        <!-- Queue Counter -->
-        <div class="flex items-center gap-1.5 font-mono text-xs text-stone-brown/70 dark:text-[#8b95a5]">
-          <i data-lucide="list-music" class="w-3.5 h-3.5 text-stone-brown/50 dark:text-[#6b7688]"></i>
+        <!-- Queue Counter (Clickable Trigger for Queue & Playlists Drawer) -->
+        <button id="btn-queue-toggle" type="button" class="flex items-center gap-1.5 font-mono text-xs text-stone-brown/70 dark:text-[#8b95a5] hover:text-black dark:hover:text-white transition px-2 py-1 rounded-xl border border-almond-cream/60 dark:border-[#282e3b] bg-white/50 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] cursor-pointer select-none" title="View Queue & Playlists">
+          <i data-lucide="list-music" class="w-3.5 h-3.5 text-stone-brown/60 dark:text-[#8b95a5]"></i>
           <span id="active-queue-counter">1 / 1 in queue</span>
-        </div>
+        </button>
 
-        <!-- Right Utilities: Related Tracks, EQ Button & Vertical Volume Pill -->
+        <!-- Right Utilities: Add to Playlist, Related Tracks, EQ Button & Vertical Volume Pill -->
         <div class="flex items-center gap-1.5 sm:gap-2">
+          <!-- Add Current Track to Playlist Button -->
+          <button id="btn-player-add-playlist" type="button" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-white/80 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition text-stone-brown dark:text-[#c6ac8f] text-xs font-semibold select-none shadow-sm" title="Add Track to Playlist or Queue">
+            <i data-lucide="bookmark-plus" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f]"></i>
+            <span class="hidden xs:inline">Save</span>
+          </button>
+
           <!-- Related Recommendations Trigger Button -->
           <button id="btn-related-toggle" type="button" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-white/80 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition text-stone-brown dark:text-[#c6ac8f] text-xs font-semibold select-none shadow-sm" title="Related Recommendations">
             <i data-lucide="sparkles" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f]"></i>
@@ -889,7 +910,173 @@
     </div>
   </div>
 
-  <!-- Live Ingestion Activity Modal -->
+  <!-- Custom Playlists & Queue Bottom Sheet Drawer (Powered by Cloudflare D1) -->
+  <div id="playlists-bottom-sheet" class="fixed inset-0 bg-jet-black/50 dark:bg-black/70 backdrop-blur-sm z-[115] flex flex-col justify-end p-0 sm:p-4 select-none" style="display: none;">
+    <!-- Backdrop Click to dismiss -->
+    <div id="playlists-backdrop" class="absolute inset-0"></div>
+
+    <!-- Sheet Container -->
+    <div class="relative w-full max-w-xl sm:max-w-2xl md:max-w-3xl mx-auto bg-white dark:bg-[#15181f] border-t sm:border border-almond-cream dark:border-[#2b3240] rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[85vh] animate-in slide-in-from-bottom duration-200">
+      
+      <!-- Drag Handle (Mobile) -->
+      <div class="pt-3 pb-1.5 flex justify-center sm:hidden">
+        <div class="w-12 h-1.5 rounded-full bg-stone-brown/20 dark:bg-white/20"></div>
+      </div>
+
+      <!-- Sheet Header -->
+      <div class="px-5 sm:px-7 py-3.5 sm:py-4 border-b border-almond-cream dark:border-[#262c38] flex items-center justify-between">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-9 h-9 rounded-xl bg-almond-cream/50 dark:bg-[#222734] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0 shadow-sm">
+            <i data-lucide="list-music" class="w-4 h-4 sm:w-5 sm:h-5"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <h3 class="text-sm sm:text-base font-bold text-black dark:text-[#f3f4f6]">Music Queue & Playlists</h3>
+              <span id="playlists-sync-badge" class="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-800 dark:text-emerald-300">D1 Ready</span>
+            </div>
+            <p class="text-[11px] sm:text-xs font-mono text-stone-brown/70 dark:text-[#9aa4b2] truncate">Persistent cross-device playlists & active playback queue</p>
+          </div>
+        </div>
+
+        <button type="button" id="btn-close-playlists" class="p-2 rounded-xl text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition" title="Close">
+          <i data-lucide="x" class="w-4 h-4 sm:w-5 sm:h-5"></i>
+        </button>
+      </div>
+
+      <!-- Tab Switcher: [Up Next (Queue)] | [Playlists] -->
+      <div class="px-5 sm:px-7 pt-3 pb-2 flex items-center justify-between border-b border-almond-cream/40 dark:border-[#242a38] bg-almond-cream/10 dark:bg-[#13161c]">
+        <div class="inline-flex items-center p-1 bg-almond-cream/40 dark:bg-[#1c212c] rounded-xl border border-almond-cream/80 dark:border-[#2d3444] text-xs font-medium">
+          <button id="tab-btn-queue" type="button" class="px-3 py-1 rounded-lg text-xs font-semibold transition bg-white dark:bg-[#282f3e] text-jet-black dark:text-[#f3f4f6] shadow-xs flex items-center gap-1.5">
+            <i data-lucide="play-circle" class="w-3.5 h-3.5"></i>
+            <span>Up Next</span>
+            <span id="queue-count-pill" class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-almond-cream/60 dark:bg-[#1a1e27]">0</span>
+          </button>
+          <button id="tab-btn-playlists" type="button" class="px-3 py-1 rounded-lg text-xs font-medium transition text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white flex items-center gap-1.5">
+            <i data-lucide="folder-heart" class="w-3.5 h-3.5"></i>
+            <span>Playlists</span>
+            <span id="playlists-count-pill" class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-almond-cream/60 dark:bg-[#1a1e27]">0</span>
+          </button>
+        </div>
+
+        <!-- Right Quick Actions -->
+        <div id="queue-actions-bar" class="flex items-center gap-1.5">
+          <button id="btn-save-queue-as-playlist" type="button" class="px-2.5 py-1 text-xs font-medium rounded-lg text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition flex items-center gap-1" title="Save current queue as a playlist">
+            <i data-lucide="bookmark-plus" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Save Queue</span>
+          </button>
+          <button id="btn-clear-queue" type="button" class="px-2.5 py-1 text-xs font-medium rounded-lg text-red-600/80 dark:text-red-400 hover:bg-red-500/10 transition flex items-center gap-1" title="Clear queue">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Clear</span>
+          </button>
+        </div>
+
+        <div id="playlists-actions-bar" class="flex items-center gap-1.5 hidden">
+          <button id="btn-backup-playlists-hf" type="button" class="px-2.5 py-1 text-xs font-medium rounded-lg text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition flex items-center gap-1" title="Backup all playlists to Hugging Face dataset">
+            <i data-lucide="cloud-upload" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Backup to HF</span>
+          </button>
+          <button id="btn-new-playlist" type="button" class="px-3 py-1 text-xs font-semibold rounded-lg bg-jet-black text-white dark:bg-[#f3f4f6] dark:text-[#0e1116] transition shadow-xs flex items-center gap-1">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span>New Playlist</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab Content 1: Up Next (Queue) -->
+      <div id="tab-pane-queue" class="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col gap-2 min-h-[300px]">
+        <div id="queue-list" class="flex flex-col gap-1.5"></div>
+        <div id="queue-empty" class="py-12 flex flex-col items-center justify-center text-center gap-2 text-stone-brown/60 dark:text-[#8b95a5] hidden">
+          <i data-lucide="list-music" class="w-10 h-10 text-stone-brown/40 dark:text-[#525d70]"></i>
+          <p class="text-sm font-semibold">Queue is empty</p>
+          <p class="text-xs">Add songs from your vault or play a playlist.</p>
+        </div>
+      </div>
+
+      <!-- Tab Content 2: My Playlists -->
+      <div id="tab-pane-playlists" class="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col gap-4 min-h-[300px] hidden">
+        <div id="playlists-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+        <div id="playlists-empty" class="py-12 flex flex-col items-center justify-center text-center gap-2 text-stone-brown/60 dark:text-[#8b95a5] hidden">
+          <i data-lucide="folder-plus" class="w-10 h-10 text-stone-brown/40 dark:text-[#525d70]"></i>
+          <p class="text-sm font-semibold">No custom playlists yet</p>
+          <p class="text-xs">Create your first playlist or save your current playback queue.</p>
+          <button id="btn-create-first-playlist" type="button" class="mt-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-jet-black text-white dark:bg-[#f3f4f6] dark:text-[#0e1116] transition shadow-sm">
+            Create Playlist
+          </button>
+        </div>
+      </div>
+
+      <!-- Playlist Details Subview (When a playlist card is clicked) -->
+      <div id="playlist-detail-view" class="absolute inset-0 bg-white dark:bg-[#15181f] z-20 flex flex-col hidden animate-in slide-in-from-right duration-150">
+        <div class="px-5 sm:px-7 py-3.5 border-b border-almond-cream dark:border-[#262c38] flex items-center justify-between">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <button id="btn-back-to-playlists" type="button" class="p-1.5 rounded-lg text-stone-brown dark:text-[#9aa4b2] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition">
+              <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            </button>
+            <div class="min-w-0">
+              <h4 id="detail-playlist-title" class="text-sm sm:text-base font-bold text-black dark:text-[#f3f4f6] truncate">Playlist Name</h4>
+              <p id="detail-playlist-meta" class="text-xs font-mono text-stone-brown/70 dark:text-[#9aa4b2]">0 tracks</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button id="btn-play-all-playlist" type="button" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-jet-black text-white dark:bg-[#f3f4f6] dark:text-[#0e1116] transition shadow-xs flex items-center gap-1.5">
+              <i data-lucide="play" class="w-3.5 h-3.5"></i>
+              <span>Play All</span>
+            </button>
+            <button id="btn-delete-playlist" type="button" class="p-1.5 rounded-lg text-red-500 hover:bg-red-500/10 transition" title="Delete playlist">
+              <i data-lucide="trash" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <div id="detail-track-list" class="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col gap-1.5"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Add Track to Playlist / Queue Modal -->
+  <div id="add-to-playlist-modal" class="fixed inset-0 bg-black/40 dark:bg-black/70 backdrop-blur-sm z-[120] flex items-center justify-center p-4" style="display: none;">
+    <div class="bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#2b3240] rounded-2xl shadow-2xl w-full max-w-sm p-5 flex flex-col gap-3.5 max-h-[85vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div class="flex items-center justify-between pb-2 border-b border-almond-cream/60 dark:border-[#262c38]">
+        <div class="flex items-center gap-2 min-w-0">
+          <i data-lucide="plus-circle" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]"></i>
+          <h3 class="text-sm font-bold text-black dark:text-[#f3f4f6] truncate">Add to Playlist / Queue</h3>
+        </div>
+        <button id="close-add-playlist-modal" type="button" class="p-1 rounded-lg text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white transition">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <p id="add-modal-track-name" class="text-xs font-mono text-stone-brown/80 dark:text-[#9aa4b2] truncate">Track Name</p>
+
+      <!-- Quick Add to Queue Option -->
+      <button id="btn-quick-add-to-queue" type="button" class="w-full px-3 py-2 text-xs font-semibold rounded-xl bg-almond-cream/40 dark:bg-[#202532] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/70 dark:hover:bg-[#282f3e] transition flex items-center justify-between">
+        <span class="flex items-center gap-2">
+          <i data-lucide="play-circle" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]"></i>
+          <span>Play Next / Add to Queue</span>
+        </span>
+        <span class="text-[10px] font-mono text-stone-brown/60 dark:text-[#758092]">Up Next</span>
+      </button>
+
+      <div class="text-[10px] font-bold uppercase tracking-wider text-stone-brown/60 dark:text-[#758092] pt-1">Select Playlist</div>
+
+      <!-- Scrollable Playlists list -->
+      <div id="add-modal-playlists-list" class="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1"></div>
+
+      <!-- Create New Playlist Form inside modal -->
+      <div class="pt-2 border-t border-almond-cream/60 dark:border-[#262c38] flex items-center gap-1.5">
+        <input 
+          type="text" 
+          id="input-new-playlist-inline" 
+          placeholder="New playlist name..." 
+          class="flex-1 px-3 py-1.5 text-xs bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-xl text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20"
+        >
+        <button id="btn-create-playlist-inline" type="button" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-jet-black text-white dark:bg-[#f3f4f6] dark:text-[#0e1116] transition shrink-0">
+          Create
+        </button>
+      </div>
+    </div>
+  </div>
   <div id="activity-modal" class="fixed inset-0 bg-jet-black/50 dark:bg-black/70 backdrop-blur-sm z-[110] flex items-center justify-center p-3 sm:p-4" style="display: none;">
     <div class="bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#2b3240] rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
       
@@ -1080,28 +1267,42 @@
             <code id="modal-repo-id" class="px-2 py-0.5 bg-almond-cream/40 dark:bg-[#242a38] rounded text-[11px] font-mono text-jet-black dark:text-[#c6ac8f]">--</code>
           </div>
 
-          <div class="flex flex-col gap-1.5">
-            <label for="hf-token-input" class="text-xs font-semibold text-stone-brown dark:text-[#9aa4b2] flex items-center justify-between">
-              <span>Hugging Face Read Token</span>
-              <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" class="text-accent-brown hover:underline text-[11px] dark:text-[#c6ac8f]">Get Read Token &nearr;</a>
-            </label>
-            <div class="relative flex items-center">
-              <input 
-                type="password" 
-                id="hf-token-input" 
-                name="hf_token" 
-                autocomplete="current-password" 
-                placeholder="hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
-                class="w-full px-3 py-2 pr-10 font-mono text-xs bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-xl text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 transition"
-              >
-              <button type="button" class="btn-toggle-token-eye absolute right-2.5 text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white p-1" data-target="hf-token-input" title="Toggle visibility">
-                <i data-lucide="eye" class="w-4 h-4"></i>
-              </button>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1.5">
+              <label for="hf-token-input" class="text-xs font-semibold text-stone-brown dark:text-[#9aa4b2] flex items-center justify-between">
+                <span>Hugging Face Read Token</span>
+                <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" class="text-accent-brown hover:underline text-[10px] dark:text-[#c6ac8f]">Get Read Token &nearr;</a>
+              </label>
+              <div class="relative flex items-center">
+                <input 
+                  type="password" 
+                  id="hf-token-input" 
+                  name="hf_token" 
+                  autocomplete="current-password" 
+                  placeholder="hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
+                  class="w-full px-3 py-2 pr-10 font-mono text-xs bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-xl text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 transition"
+                >
+                <button type="button" class="btn-toggle-token-eye absolute right-2.5 text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white p-1" data-target="hf-token-input" title="Toggle visibility">
+                  <i data-lucide="eye" class="w-4 h-4"></i>
+                </button>
+              </div>
             </div>
-            <span class="text-[11px] text-stone-brown/70 dark:text-[#758092]">
-              Required to read dataset directory tree & stream media files.
-            </span>
+
+            <div class="flex flex-col gap-1.5">
+              <label for="hf-repo-input" class="text-xs font-semibold text-stone-brown dark:text-[#9aa4b2]">Dataset / Bucket (owner/name)</label>
+              <input 
+                type="text" 
+                id="hf-repo-input" 
+                name="hf_repo" 
+                placeholder="mnswa/trove_dataset" 
+                value="mnswa/trove_dataset"
+                class="w-full px-3 py-2 font-mono text-xs bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-xl text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 transition"
+              >
+            </div>
           </div>
+          <span class="text-[11px] text-stone-brown/70 dark:text-[#758092]">
+            Required to read dataset directory tree &amp; stream media files.
+          </span>
         </div>
 
         <!-- Section 2: GitHub Actions Runner (Ingestion / Downloads) -->
@@ -1158,30 +1359,20 @@
               <span class="w-2 h-2 rounded-full bg-blue-500"></span>
               <h3 class="text-xs font-bold uppercase tracking-wider text-black dark:text-[#f3f4f6]">Cloudflare Workers</h3>
             </div>
-            <span class="text-[11px] font-mono text-stone-brown/60 dark:text-[#758092]">Recommendations & Lyrics</span>
+            <span class="text-[11px] font-mono text-stone-brown/60 dark:text-[#758092]">Recommendations, Lyrics & D1 Playlists</span>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div class="flex flex-col gap-1.5">
-              <label for="worker-url-input" class="text-xs font-semibold text-stone-brown dark:text-[#9aa4b2]">Recommendations Worker</label>
+              <label for="worker-base-url-input" class="text-xs font-semibold text-stone-brown dark:text-[#9aa4b2]">Trove Worker API URL (Optional)</label>
               <input 
                 type="url" 
-                id="worker-url-input" 
-                name="cf_url" 
-                placeholder="https://recs.workers.dev" 
+                id="worker-base-url-input" 
+                name="cf_base_url" 
+                placeholder="https://trove-worker.yourname.workers.dev" 
                 class="w-full px-3 py-2 font-mono text-xs bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-xl text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 transition"
               >
-            </div>
-
-            <div class="flex flex-col gap-1.5">
-              <label for="worker-lyrics-url-input" class="text-xs font-semibold text-stone-brown dark:text-[#9aa4b2]">Lyrics Worker (Optional)</label>
-              <input 
-                type="url" 
-                id="worker-lyrics-url-input" 
-                name="cf_lyrics_url" 
-                placeholder="https://lyrics.workers.dev" 
-                class="w-full px-3 py-2 font-mono text-xs bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-xl text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 transition"
-              >
+              <span class="text-[10px] text-stone-brown/60 dark:text-[#758092]">One unified worker for Playlists, Metrics, Lyrics, and Recommendations.</span>
             </div>
 
             <div class="flex flex-col gap-1.5">
@@ -1191,18 +1382,16 @@
                   type="password" 
                   id="worker-token-input" 
                   name="cf_token" 
-                  placeholder="Optional Secret Token" 
+                  placeholder="Optional Secret Token (API_KEY)" 
                   class="w-full px-3 py-2 pr-10 font-mono text-xs bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-xl text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 transition"
                 >
                 <button type="button" class="btn-toggle-token-eye absolute right-2.5 text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white p-1" data-target="worker-token-input" title="Toggle visibility">
                   <i data-lucide="eye" class="w-4 h-4"></i>
                 </button>
               </div>
+              <span class="text-[10px] text-stone-brown/60 dark:text-[#758092]">Shared secret token for Bearer authentication.</span>
             </div>
           </div>
-          <span class="text-[11px] text-stone-brown/70 dark:text-[#758092]">
-            Connects to your Cloudflare Workers for CORS-free recommendations and song lyrics (falls back to Recommendations URL or LRCLIB if unset).
-          </span>
         </div>
 
         <div id="settings-error-msg" class="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 text-xs hidden"></div>
@@ -1241,6 +1430,7 @@
   <script src="./js/importer.js"></script>
   <script src="./js/recommendations.js"></script>
   <script src="./js/lyrics.js"></script>
+  <script src="./js/playlists.js"></script>
   <script src="./js/explorer.js"></script>
   <script src="./js/app.js"></script>
 </body>

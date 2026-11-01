@@ -1,5 +1,5 @@
 // Trove PWA Service Worker
-const CACHE_NAME = 'trove-pwa-v20';
+const CACHE_NAME = 'trove-pwa-v25';
 
 // Core App Shell assets to pre-cache on install
 const PRECACHE_ASSETS = [
@@ -16,6 +16,7 @@ const PRECACHE_ASSETS = [
   './js/importer.js',
   './js/recommendations.js',
   './js/lyrics.js',
+  './js/playlists.js',
   './js/explorer.js',
   './js/app.js',
   './manifest.json',
