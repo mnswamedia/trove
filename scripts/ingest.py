@@ -30,7 +30,45 @@ ENABLE_PROXY_FALLBACK = os.getenv("ENABLE_PROXY_FALLBACK", "false").lower() in (
 
 # Maximum proxy attempts per song if proxy fallback is enabled
 MAX_PROXY_ATTEMPTS = int(os.getenv("MAX_PROXY_ATTEMPTS", "5"))
+
+# Number of songs to download before incrementally pushing to Hugging Face (Default: 3)
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "3"))
 # ==============================================================================
+
+def upload_file_to_hf(local_path: str, remote_path: str, bucket_id: str, env: dict, token: str) -> bool:
+    """Upload a single file to Hugging Face Storage Bucket using hf buckets cp with HfApi fallback."""
+    # 1. Official CLI: hf buckets cp (High-Speed Xet S3 Storage)
+    try:
+        cp_res = subprocess.run(
+            ["hf", "buckets", "cp", local_path, f"hf://buckets/{bucket_id}/{remote_path}"],
+            env=env,
+            capture_output=True,
+            text=True
+        )
+        if cp_res.returncode == 0:
+            print(f"    ✓ Uploaded {remote_path} via hf buckets cp")
+            return True
+        else:
+            err_msg = cp_res.stderr.strip() or cp_res.stdout.strip()
+            print(f"    hf buckets cp notice ({remote_path}): {err_msg[:120]}")
+    except Exception as e:
+        print(f"    hf buckets cp error: {e}")
+
+    # 2. Fallback: HfApi upload_file
+    try:
+        from huggingface_hub import HfApi
+        api = HfApi(token=token)
+        api.upload_file(
+            path_or_fileobj=local_path,
+            path_in_repo=remote_path,
+            repo_id=bucket_id,
+            repo_type="dataset"
+        )
+        print(f"    ✓ Uploaded {remote_path} via HfApi upload")
+        return True
+    except Exception as api_err:
+        print(f"    ✗ Failed to upload {remote_path}: {api_err}")
+        return False
 
 def format_bytes_py(bytes_val):
     """Format byte integer into human-readable string (e.g. 4.25 MB)."""
@@ -564,6 +602,153 @@ def main():
         else:
             print("\n--> [Network] Direct connection (Cloudflare WARP not detected).")
 
+        # Load existing downloads manifest once at start
+        existing_downloads, downloads_file = fetch_existing_downloads(bucket_id, env, token, workdir)
+        print(f"    Existing manifest contains {len(existing_downloads)} recorded downloads.")
+        entries_by_filename = {e.get("filename"): e for e in existing_downloads if isinstance(e, dict) and e.get("filename")}
+        entries_by_id = {e.get("id"): e for e in existing_downloads if isinstance(e, dict) and e.get("id")}
+
+        if media_format == "mp4":
+            allowed_exts = {"mp4", "mkv", "webm", "avi", "mov", "flv", "wmv", "m4v", "ts"}
+        else:
+            allowed_exts = {"m4a", "mp3", "flac", "wav", "aac", "ogg", "opus", "wma", "alac", "aiff"}
+
+        uploaded_media_paths = set()
+        uploaded_meta_paths = set()
+        total_uploaded = 0
+        chunk_number = 0
+
+        def get_pending_media():
+            return [
+                p for p in Path(workdir).iterdir()
+                if p.is_file() and p.suffix.lstrip(".").lower() in allowed_exts and str(p) not in uploaded_media_paths
+            ]
+
+        def flush_chunk(reason="chunk"):
+            nonlocal total_uploaded, chunk_number
+            pending = get_pending_media()
+            if not pending:
+                return 0
+
+            chunk_number += 1
+            print(f"\n==================================================")
+            print(f" [Chunk #{chunk_number}] Pushing {len(pending)} song(s) to Hugging Face ({reason})...")
+            print(f"==================================================")
+
+            now_epoch = int(time.time())
+            now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+            json_files = list(Path(metadata_dir).glob("*.json"))
+            json_by_stem = {jf.stem: jf for jf in json_files}
+
+            files_to_push = []
+
+            for mf in pending:
+                size_bytes = mf.stat().st_size
+                file_format = mf.suffix.lstrip(".").lower()
+                jf = json_by_stem.get(mf.stem)
+
+                data = {}
+                if jf and jf.exists():
+                    try:
+                        with open(jf, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                    except Exception as e:
+                        print(f"    Notice reading metadata {jf.name}: {e}")
+
+                # Enforce rich download provenance fields in individual metadata JSON
+                data["trove_ingested_at"] = now_epoch
+                data["trove_ingested_at_iso"] = now_iso
+                data["trove_media_file"] = mf.name
+                data["trove_media_format"] = file_format
+                data["trove_media_bytes"] = size_bytes
+                data["trove_media_size"] = format_bytes_py(size_bytes)
+                data["trove_duration_formatted"] = format_duration_py(data.get("duration"))
+                data["trove_source"] = "youtube"
+                data["trove_bucket"] = bucket_id
+                data["trove_version"] = "1.0"
+
+                if jf:
+                    try:
+                        with open(jf, "w", encoding="utf-8") as f:
+                            json.dump(data, f, indent=2, ensure_ascii=False)
+                    except Exception as e:
+                        print(f"    Warning formatting {jf.name}: {e}")
+
+                # Extract fields for root downloads.json manifest
+                video_id = data.get("id") or ""
+                title = data.get("title") or mf.stem
+                artist = data.get("artist") or data.get("creator") or data.get("uploader") or data.get("channel") or ""
+                album = data.get("album") or ""
+                duration_sec = int(data.get("duration") or 0)
+                youtube_url = data.get("webpage_url") or (f"https://www.youtube.com/watch?v={video_id}" if video_id else "")
+                thumbnail_url = data.get("thumbnail") or ""
+                tags = data.get("tags") or []
+                genre = data.get("genre") or ""
+
+                manifest_entry = {
+                    "id": video_id,
+                    "filename": mf.name,
+                    "path": mf.name,
+                    "metadata_path": f"metadata/{jf.name}" if jf else "",
+                    "title": title,
+                    "artist": artist,
+                    "album": album,
+                    "duration": format_duration_py(duration_sec),
+                    "duration_seconds": duration_sec,
+                    "size_bytes": size_bytes,
+                    "size_formatted": format_bytes_py(size_bytes),
+                    "format": file_format,
+                    "youtube_url": youtube_url,
+                    "thumbnail_url": thumbnail_url,
+                    "tags": tags,
+                    "genre": genre,
+                    "ingested_at": now_epoch,
+                    "ingested_at_iso": now_iso
+                }
+
+                if mf.name in entries_by_filename:
+                    entries_by_filename[mf.name].update(manifest_entry)
+                elif video_id and video_id in entries_by_id:
+                    entries_by_id[video_id].update(manifest_entry)
+                else:
+                    existing_downloads.append(manifest_entry)
+                    entries_by_filename[mf.name] = manifest_entry
+                    if video_id:
+                        entries_by_id[video_id] = manifest_entry
+
+                files_to_push.append((str(mf), mf.name, "media"))
+                if jf and str(jf) not in uploaded_meta_paths:
+                    files_to_push.append((str(jf), f"metadata/{jf.name}", "meta"))
+
+            # Sort manifest by ingested_at descending (newest downloads first)
+            existing_downloads.sort(key=lambda x: x.get("ingested_at") or 0, reverse=True)
+
+            with open(downloads_file, "w", encoding="utf-8") as f:
+                json.dump(existing_downloads, f, indent=2, ensure_ascii=False)
+
+            files_to_push.append((downloads_file, "downloads.json", "manifest"))
+            if os.path.exists(archive_file):
+                files_to_push.append((archive_file, "all_songs.txt", "ledger"))
+
+            chunk_uploaded = 0
+            for local_path, remote_path, ftype in files_to_push:
+                if upload_file_to_hf(local_path, remote_path, bucket_id, env, token):
+                    if ftype == "media":
+                        uploaded_media_paths.add(local_path)
+                        chunk_uploaded += 1
+                        # Clean up local media file to conserve runner disk space
+                        try:
+                            os.remove(local_path)
+                        except Exception:
+                            pass
+                    elif ftype == "meta":
+                        uploaded_meta_paths.add(local_path)
+
+            total_uploaded += chunk_uploaded
+            print(f"    ✓ Chunk #{chunk_number} complete: {chunk_uploaded} media file(s) uploaded. (Total library entries: {len(existing_downloads)})")
+            return chunk_uploaded
+
         for target_idx, target in enumerate(targets, 1):
             # No wait on the first song; sleep 10s only between subsequent songs in a batch
             if target_idx > 1:
@@ -623,187 +808,25 @@ def main():
 
             if target_success:
                 successful_targets += 1
+                # Check if buffer has reached CHUNK_SIZE
+                pending = get_pending_media()
+                if len(pending) >= CHUNK_SIZE:
+                    flush_chunk(reason=f"Reached threshold of {CHUNK_SIZE} songs")
 
-        # 3. Identify downloaded media files (STRICTLY enforce requested media format)
-        if media_format == "mp4":
-            allowed_exts = {"mp4", "mkv", "webm", "avi", "mov", "flv", "wmv", "m4v", "ts"}
-        else:
-            allowed_exts = {"m4a", "mp3", "flac", "wav", "aac", "ogg", "opus", "wma", "alac", "aiff"}
+        # Flush any remaining items in the final chunk
+        pending_remaining = get_pending_media()
+        if pending_remaining:
+            flush_chunk(reason="Final remaining songs in batch")
 
-        media_files = [
-            p for p in Path(workdir).iterdir()
-            if p.is_file() and p.suffix.lstrip(".").lower() in allowed_exts
-        ]
-
-        if media_format != "mp4":
-            video_remnants = [
-                p for p in Path(workdir).iterdir()
-                if p.is_file() and p.suffix.lstrip(".").lower() in {"mp4", "mkv", "webm", "avi", "mov"}
-            ]
-            if video_remnants:
-                print(f"    Notice: Ignored {len(video_remnants)} unconverted video file(s) since audio ({media_format}) was requested: {[p.name for p in video_remnants]}")
-
-        print(f"\n--> Download Summary:")
-        print(f"    New media files downloaded: {len(media_files)}")
-        for mf in media_files:
-            size_mb = mf.stat().st_size / (1024 * 1024)
-            print(f"      - {mf.name} ({size_mb:.2f} MB)")
-
-        if not media_files:
+        if total_uploaded == 0 and successful_targets == 0:
             print("\nNotice: No new media files were downloaded (items may already exist in all_songs.txt).")
             return
 
-        # 4. Enrich individual metadata JSON files & update root downloads.json manifest
-        print("\n--> Processing metadata & updating downloads.json provenance manifest...")
-        now_epoch = int(time.time())
-        now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-        json_files = list(Path(metadata_dir).glob("*.json"))
-        json_by_stem = {jf.stem: jf for jf in json_files}
-
-        # Load existing downloads.json manifest from HF bucket
-        existing_downloads, downloads_file = fetch_existing_downloads(bucket_id, env, token, workdir)
-        print(f"    Existing manifest contains {len(existing_downloads)} recorded downloads.")
-
-        # Index existing records by filename and YouTube video ID for clean updates
-        entries_by_filename = {e.get("filename"): e for e in existing_downloads if isinstance(e, dict) and e.get("filename")}
-        entries_by_id = {e.get("id"): e for e in existing_downloads if isinstance(e, dict) and e.get("id")}
-
-        for mf in media_files:
-            size_bytes = mf.stat().st_size
-            file_format = mf.suffix.lstrip(".").lower()
-            jf = json_by_stem.get(mf.stem)
-
-            data = {}
-            if jf and jf.exists():
-                try:
-                    with open(jf, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                except Exception as e:
-                    print(f"    Notice reading metadata {jf.name}: {e}")
-
-            # Enforce rich download provenance fields in individual metadata JSON
-            data["trove_ingested_at"] = now_epoch
-            data["trove_ingested_at_iso"] = now_iso
-            data["trove_media_file"] = mf.name
-            data["trove_media_format"] = file_format
-            data["trove_media_bytes"] = size_bytes
-            data["trove_media_size"] = format_bytes_py(size_bytes)
-            data["trove_duration_formatted"] = format_duration_py(data.get("duration"))
-            data["trove_source"] = "youtube"
-            data["trove_bucket"] = bucket_id
-            data["trove_version"] = "1.0"
-
-            if jf:
-                try:
-                    with open(jf, "w", encoding="utf-8") as f:
-                        json.dump(data, f, indent=2, ensure_ascii=False)
-                except Exception as e:
-                    print(f"    Warning formatting {jf.name}: {e}")
-
-            # Extract fields for root downloads.json manifest
-            video_id = data.get("id") or ""
-            title = data.get("title") or mf.stem
-            artist = data.get("artist") or data.get("creator") or data.get("uploader") or data.get("channel") or ""
-            album = data.get("album") or ""
-            duration_sec = int(data.get("duration") or 0)
-            youtube_url = data.get("webpage_url") or (f"https://www.youtube.com/watch?v={video_id}" if video_id else "")
-            thumbnail_url = data.get("thumbnail") or ""
-            tags = data.get("tags") or []
-            genre = data.get("genre") or ""
-
-            manifest_entry = {
-                "id": video_id,
-                "filename": mf.name,
-                "path": mf.name,
-                "metadata_path": f"metadata/{jf.name}" if jf else "",
-                "title": title,
-                "artist": artist,
-                "album": album,
-                "duration": format_duration_py(duration_sec),
-                "duration_seconds": duration_sec,
-                "size_bytes": size_bytes,
-                "size_formatted": format_bytes_py(size_bytes),
-                "format": file_format,
-                "youtube_url": youtube_url,
-                "thumbnail_url": thumbnail_url,
-                "tags": tags,
-                "genre": genre,
-                "ingested_at": now_epoch,
-                "ingested_at_iso": now_iso
-            }
-
-            if mf.name in entries_by_filename:
-                entries_by_filename[mf.name].update(manifest_entry)
-            elif video_id and video_id in entries_by_id:
-                entries_by_id[video_id].update(manifest_entry)
-            else:
-                existing_downloads.append(manifest_entry)
-                entries_by_filename[mf.name] = manifest_entry
-                if video_id:
-                    entries_by_id[video_id] = manifest_entry
-
-        # Sort manifest by ingested_at descending (newest downloads first)
-        existing_downloads.sort(key=lambda x: x.get("ingested_at") or 0, reverse=True)
-
-        with open(downloads_file, "w", encoding="utf-8") as f:
-            json.dump(existing_downloads, f, indent=2, ensure_ascii=False)
-        print(f"    ✓ Updated downloads.json manifest (total {len(existing_downloads)} items).")
-
-        # 5. Upload files to Hugging Face Storage Bucket
-        print(f"\n--> Uploading to Hugging Face Storage Bucket: {bucket_id}...")
-        files_to_upload = []
-        for mf in media_files:
-            files_to_upload.append((str(mf), mf.name))
-        for jf in json_files:
-            files_to_upload.append((str(jf), f"metadata/{jf.name}"))
-        if os.path.exists(downloads_file):
-            files_to_upload.append((downloads_file, "downloads.json"))
-        if os.path.exists(archive_file):
-            files_to_upload.append((archive_file, "all_songs.txt"))
-
-        uploaded_count = 0
-        for local_path, remote_path in files_to_upload:
-            uploaded = False
-            # 1. Official CLI: hf buckets cp (High-Speed Xet S3 Storage)
-            try:
-                cp_res = subprocess.run(
-                    ["hf", "buckets", "cp", local_path, f"hf://buckets/{bucket_id}/{remote_path}"],
-                    env=env,
-                    capture_output=True,
-                    text=True
-                )
-                if cp_res.returncode == 0:
-                    uploaded = True
-                    print(f"    ✓ Uploaded {remote_path} via hf buckets cp")
-                else:
-                    err_msg = cp_res.stderr.strip() or cp_res.stdout.strip()
-                    print(f"    hf buckets cp notice ({remote_path}): {err_msg[:120]}")
-            except Exception as e:
-                print(f"    hf buckets cp error: {e}")
-
-            # 2. Fallback: HfApi upload_file
-            if not uploaded:
-                try:
-                    from huggingface_hub import HfApi
-                    api = HfApi(token=token)
-                    api.upload_file(
-                        path_or_fileobj=local_path,
-                        path_in_repo=remote_path,
-                        repo_id=bucket_id,
-                        repo_type="dataset"
-                    )
-                    uploaded = True
-                    print(f"    ✓ Uploaded {remote_path} via HfApi upload")
-                except Exception as api_err:
-                    print(f"    ✗ Failed to upload {remote_path}: {api_err}")
-
-            if uploaded:
-                uploaded_count += 1
-
         print(f"\n==================================================")
         print(f" Ingestion Complete!")
-        print(f" Uploaded {uploaded_count}/{len(files_to_upload)} files to {bucket_id}")
+        print(f" Targets processed: {total_targets}")
+        print(f" Successful downloads: {successful_targets}")
+        print(f" Media files uploaded to {bucket_id}: {total_uploaded}")
         print(f"==================================================")
 
     finally:
