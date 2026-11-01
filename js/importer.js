@@ -41,7 +41,7 @@
       this.setupEventListeners();
     },
 
-    open() {
+    open(prefillUrl = '') {
       const state = window.Trove.state || {};
       if (!state.token) {
         if (window.Trove.settings) {
@@ -58,6 +58,12 @@
         this.elements.startBtn.disabled = false;
         this.elements.startBtn.classList.remove('opacity-50', 'pointer-events-none');
       }
+
+      if (prefillUrl && this.elements.urlsInput) {
+        const cleaned = cleanAllInputUrls ? cleanAllInputUrls(prefillUrl) : prefillUrl;
+        this.elements.urlsInput.value = cleaned;
+      }
+
       setTimeout(() => {
         if (this.elements.urlsInput) this.elements.urlsInput.focus();
       }, 50);
@@ -241,6 +247,31 @@
       }
       if (this.elements.form) {
         this.elements.form.addEventListener('submit', (e) => this.handleSubmit(e));
+      }
+
+      // Auto-clean pasted or entered URLs (strips ?si=..., &feature=..., etc.)
+      if (this.elements.urlsInput) {
+        this.elements.urlsInput.addEventListener('paste', () => {
+          setTimeout(() => {
+            if (this.elements.urlsInput) {
+              const raw = this.elements.urlsInput.value;
+              const cleaned = cleanAllInputUrls ? cleanAllInputUrls(raw) : raw;
+              if (cleaned !== raw) {
+                this.elements.urlsInput.value = cleaned;
+              }
+            }
+          }, 0);
+        });
+
+        this.elements.urlsInput.addEventListener('blur', () => {
+          if (this.elements.urlsInput) {
+            const raw = this.elements.urlsInput.value;
+            const cleaned = cleanAllInputUrls ? cleanAllInputUrls(raw) : raw;
+            if (cleaned !== raw) {
+              this.elements.urlsInput.value = cleaned;
+            }
+          }
+        });
       }
 
       // Dropzone & File input

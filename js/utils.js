@@ -100,54 +100,64 @@
       .replace(/'/g, '&#039;');
   }
 
-  // YouTube URL Cleaner (Strips playlists, tracking tokens, radio stations)
+  // YouTube URL Cleaner (Strips playlists, tracking tokens, ?si=..., &feature=..., etc.)
   function cleanYouTubeUrl(urlStr) {
     if (!urlStr) return '';
     const trimmed = urlStr.trim();
-    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-      if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) {
-        return `https://www.youtube.com/watch?v=${trimmed}`;
+    if (!trimmed) return '';
+
+    // If bare 11-char video ID
+    if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) {
+      return `https://www.youtube.com/watch?v=${trimmed}`;
+    }
+
+    // Directly extract 11-char YouTube ID (handles youtu.be, watch?v=, watch?...&v=, shorts/, live/, embed/)
+    const match = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?(?:.*&)?v=|shorts\/|live\/))([a-zA-Z0-9_-]{11})/i);
+    if (match && match[1]) {
+      if (trimmed.includes('/shorts/')) {
+        return `https://www.youtube.com/shorts/${match[1]}`;
       }
-      return trimmed;
+      return `https://www.youtube.com/watch?v=${match[1]}`;
+    }
+
+    // Fallback: parse URL and strip tracking parameters
+    let parsedUrl = trimmed;
+    if (!/^https?:\/\//i.test(parsedUrl)) {
+      parsedUrl = 'https://' + parsedUrl;
     }
 
     try {
-      const u = new URL(trimmed);
-      const host = u.hostname.replace(/^www\./, '').replace(/^m\./, '');
-
-      if (host === 'youtu.be') {
-        return `https://youtu.be${u.pathname}`;
-      }
-      if (host === 'youtube.com' || host === 'music.youtube.com') {
-        if (u.pathname.startsWith('/shorts/')) {
-          return `https://www.youtube.com${u.pathname}`;
-        }
-        if (u.pathname === '/watch' && u.searchParams.has('v')) {
-          return `https://www.youtube.com/watch?v=${u.searchParams.get('v')}`;
-        }
-        return `https://www.youtube.com${u.pathname}`;
-      }
-      return trimmed;
-    } catch (e) {
-      return trimmed;
+      const u = new URL(parsedUrl);
+      u.searchParams.delete('si');
+      u.searchParams.delete('feature');
+      u.searchParams.delete('pp');
+      return u.toString();
+    } catch (_) {
+      return trimmed
+        .replace(/[?&]si=[^&\s]+/gi, '')
+        .replace(/[?&]feature=[^&\s]+/gi, '')
+        .replace(/[?&]pp=[^&\s]+/gi, '');
     }
   }
 
   function cleanAllInputUrls(text) {
     if (!text) return '';
     return text.split('\n').map(line => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine || trimmedLine.startsWith('#')) return line;
       return line.split(/\s+/).map(token => {
-        if (token.includes('youtu.be') || token.includes('youtube.com')) {
+        if (!token) return '';
+        if (token.includes('youtu.be') || token.includes('youtube.com') || /^[a-zA-Z0-9_-]{11}$/.test(token)) {
           return cleanYouTubeUrl(token);
         }
         return token;
-      }).join(' ');
+      }).filter(Boolean).join(' ');
     }).join('\n');
   }
 
   function extractYouTubeId(url) {
     if (!url) return null;
-    const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/);
+    const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?(?:.*&)?v=|shorts\/|live\/))([a-zA-Z0-9_-]{11})/i);
     return match ? match[1] : null;
   }
 
