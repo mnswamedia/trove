@@ -87,7 +87,7 @@
   <div class="max-w-6xl mx-auto px-2.5 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 flex flex-col h-full gap-1.5 sm:gap-2">
     
     <!-- Clean Top Bar Header (Always in place) -->
-    <header class="relative z-[70] shrink-0 flex items-center justify-between gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#262c38] rounded-xl shadow-sm transition-colors duration-200">
+    <header class="relative z-30 shrink-0 flex items-center justify-between gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#262c38] rounded-xl shadow-sm transition-colors duration-200">
       <!-- Left: Just the clean name 'Trove' -->
       <div class="flex items-center shrink-0">
         <h1 class="text-base sm:text-lg font-bold tracking-tight text-jet-black dark:text-white leading-none select-none">Trove</h1>
@@ -196,7 +196,7 @@
     <!-- Explorer Workspace (Fills all remaining height) -->
     <main class="flex-1 flex flex-col gap-1.5 sm:gap-2 min-h-0">
       <!-- Toolbar: Search on left (compact width), Dropdown Filter & Single View Toggle on right (Always 1 row) -->
-      <div class="shrink-0 flex items-center justify-between gap-1.5 sm:gap-2 relative z-30">
+      <div class="shrink-0 flex items-center justify-between gap-1.5 sm:gap-2 relative z-20">
         <!-- Search Input (Compact, not stretched) -->
         <div class="relative w-44 sm:w-60 md:w-72 shrink-0">
           <i data-lucide="search" class="w-3.5 h-3.5 absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-stone-brown/60 dark:text-[#758092] pointer-events-none"></i>
@@ -388,7 +388,7 @@
   </aside>
 
   <!-- Fullscreen / Expanded Player Sheet -->
-  <div id="expanded-player" class="fixed inset-0 z-50 bg-[#fbf9f6] dark:bg-[#0e1116] flex flex-col translate-y-full will-change-transform transition-colors duration-200" style="display: none;">
+  <div id="expanded-player" class="fixed inset-0 z-[100] bg-[#fbf9f6] dark:bg-[#0e1116] flex flex-col translate-y-full will-change-transform transition-colors duration-200" style="display: none;">
     <!-- Top Header: Title on Left, Minimize on Right -->
     <div class="max-w-4xl w-full mx-auto p-4 md:p-6 flex items-center justify-between">
       <div class="flex flex-col min-w-0 pr-4">
@@ -505,7 +505,7 @@
   </div>
 
   <!-- Live Ingestion Activity Modal -->
-  <div id="activity-modal" class="fixed inset-0 bg-jet-black/50 dark:bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4" style="display: none;">
+  <div id="activity-modal" class="fixed inset-0 bg-jet-black/50 dark:bg-black/70 backdrop-blur-sm z-[110] flex items-center justify-center p-3 sm:p-4" style="display: none;">
     <div class="bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#2b3240] rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
       
       <!-- Modal Header -->
@@ -565,7 +565,7 @@
   </div>
 
   <!-- YouTube Import Modal (yt-dlp Downloader) -->
-  <div id="import-modal" class="fixed inset-0 bg-black/40 dark:bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+  <div id="import-modal" class="fixed inset-0 bg-black/40 dark:bg-black/70 backdrop-blur-sm z-[110] flex items-center justify-center p-4" style="display: none;">
     <div class="bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#2b3240] rounded-2xl shadow-2xl w-full max-w-lg p-6 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
       
       <!-- Modal Header -->
@@ -694,7 +694,7 @@
   </div>
 
   <!-- Authentication Modal (Password Manager Compliant) -->
-  <div id="auth-modal" class="fixed inset-0 bg-black/40 dark:bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" style="display: none;">
+  <div id="auth-modal" class="fixed inset-0 bg-black/40 dark:bg-black/70 backdrop-blur-sm z-[110] flex items-center justify-center p-4" style="display: none;">
     <div class="bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#2b3240] rounded-xl shadow-xl w-full max-w-md p-6 flex flex-col gap-5">
       <div class="flex items-start gap-3.5">
         <div class="w-10 h-10 rounded-lg bg-almond-cream dark:bg-[#222734] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0">
@@ -742,7 +742,7 @@
   </div>
 
   <!-- Exit Toast Notification -->
-  <div id="trove-exit-toast" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] px-4 py-2 bg-jet-black/90 dark:bg-[#1e222c]/95 border dark:border-[#2f3644] text-white dark:text-[#f3f4f6] text-xs font-medium rounded-full shadow-2xl transition-all duration-300 pointer-events-none opacity-0 translate-y-3 select-none">
+  <div id="trove-exit-toast" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[120] px-4 py-2 bg-jet-black/90 dark:bg-[#1e222c]/95 border dark:border-[#2f3644] text-white dark:text-[#f3f4f6] text-xs font-medium rounded-full shadow-2xl transition-all duration-300 pointer-events-none opacity-0 translate-y-3 select-none">
     Press back again to exit
   </div>
 

@@ -1465,11 +1465,11 @@
 
   function setActivityButtonIdle() {
     if (!elements.activityBtn) return;
-    elements.activityBtn.className = 'w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white border border-khaki-beige text-jet-black hover:bg-almond-cream/40 transition shadow-sm select-none';
+    elements.activityBtn.className = 'hidden sm:inline-flex w-8 h-8 items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm select-none';
     elements.activityBtn.title = 'Ingestion Activity';
     if (elements.activityBtnIcon) {
       elements.activityBtnIcon.setAttribute('data-lucide', 'activity');
-      elements.activityBtnIcon.className = 'w-4 h-4 text-stone-brown';
+      elements.activityBtnIcon.className = 'w-4 h-4 text-stone-brown dark:text-[#c6ac8f]';
     }
     if (elements.activityBtnLabel) {
       elements.activityBtnLabel.className = 'sr-only';
@@ -1482,22 +1482,22 @@
     if (!elements.activityBtn) return;
 
     if (variant === 'green') {
-      elements.activityBtn.className = 'h-8 px-2 sm:px-2.5 inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-900 hover:bg-emerald-500/25 transition shadow-sm select-none';
+      elements.activityBtn.className = 'hidden sm:inline-flex h-8 px-2 sm:px-2.5 items-center gap-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-900 dark:text-emerald-300 hover:bg-emerald-500/25 transition shadow-sm select-none';
       elements.activityBtn.title = 'Ingestion Completed - Click to view details';
       if (elements.activityBtnIcon) {
         elements.activityBtnIcon.setAttribute('data-lucide', 'check-circle-2');
-        elements.activityBtnIcon.className = 'w-3.5 h-3.5 text-emerald-600 shrink-0';
+        elements.activityBtnIcon.className = 'w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0';
       }
       if (elements.activityBtnLabel) {
         elements.activityBtnLabel.className = 'text-xs font-semibold font-mono hidden xs:inline';
         elements.activityBtnLabel.innerText = label;
       }
     } else if (variant === 'red') {
-      elements.activityBtn.className = 'h-8 px-2 sm:px-2.5 inline-flex items-center gap-1.5 rounded-lg bg-red-500/15 border border-red-500/30 text-red-900 hover:bg-red-500/25 transition shadow-sm select-none';
+      elements.activityBtn.className = 'hidden sm:inline-flex h-8 px-2 sm:px-2.5 items-center gap-1.5 rounded-lg bg-red-500/15 border border-red-500/30 text-red-900 dark:text-red-300 hover:bg-red-500/25 transition shadow-sm select-none';
       elements.activityBtn.title = 'Ingestion Failed - Click to view details';
       if (elements.activityBtnIcon) {
         elements.activityBtnIcon.setAttribute('data-lucide', 'alert-circle');
-        elements.activityBtnIcon.className = 'w-3.5 h-3.5 text-red-600 shrink-0';
+        elements.activityBtnIcon.className = 'w-3.5 h-3.5 text-red-600 dark:text-red-400 shrink-0';
       }
       if (elements.activityBtnLabel) {
         elements.activityBtnLabel.className = 'text-xs font-semibold font-mono hidden xs:inline';
@@ -1505,11 +1505,11 @@
       }
     } else {
       // Active Ingesting (Amber)
-      elements.activityBtn.className = 'h-8 px-2 sm:px-2.5 inline-flex items-center gap-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-900 hover:bg-amber-500/25 transition shadow-sm select-none';
+      elements.activityBtn.className = 'hidden sm:inline-flex h-8 px-2 sm:px-2.5 items-center gap-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-900 dark:text-amber-300 hover:bg-amber-500/25 transition shadow-sm select-none';
       elements.activityBtn.title = 'Ingestion in progress - Click to view details';
       if (elements.activityBtnIcon) {
         elements.activityBtnIcon.setAttribute('data-lucide', 'loader-2');
-        elements.activityBtnIcon.className = 'w-3.5 h-3.5 animate-spin text-amber-600 shrink-0';
+        elements.activityBtnIcon.className = 'w-3.5 h-3.5 animate-spin text-amber-600 dark:text-amber-400 shrink-0';
       }
       if (elements.activityBtnLabel) {
         elements.activityBtnLabel.className = 'text-xs font-semibold font-mono hidden xs:inline';
@@ -2559,6 +2559,8 @@
 
     expand() {
       this.isExpanded = true;
+      if (elements.mobileNavMenu) elements.mobileNavMenu.classList.add('hidden');
+      if (elements.filterDropdownMenu) elements.filterDropdownMenu.classList.add('hidden');
       elements.expandedPlayer.style.display = 'flex';
       elements.expandedPlayer.classList.remove('translate-y-full');
       elements.expandedPlayer.classList.add('translate-y-0');
