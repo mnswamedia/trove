@@ -92,6 +92,7 @@
     statVideoCount: document.getElementById('stat-video-count'),
     statTotalSize: document.getElementById('stat-total-size'),
     footerStatus: document.getElementById('footer-status'),
+    exitToast: document.getElementById('trove-exit-toast'),
 
     // Import Modal Elements
     importModal: document.getElementById('import-modal'),
@@ -537,6 +538,9 @@
       // Thumbnail
       const cachedThumb = player.thumbnailCache.get(track.path) || null;
       player.updateThumbnailUI(cachedThumb, track);
+      if (cachedThumb) {
+        player.updateMediaSession(cachedThumb);
+      }
 
       // Show the floating play bar in paused/ready state
       player.showBottomBar();
@@ -1808,8 +1812,61 @@
   }
 
   // ==========================================
-  // MEDIA PLAYER ENGINE
+  // MEDIA PLAYER ENGINE & THUMBNAIL HELPERS
   // ==========================================
+
+  // Capture video frame from HTMLVideoElement onto a canvas for lock screen & notification artwork
+  function captureVideoFrame(videoEl) {
+    try {
+      if (!videoEl || !videoEl.videoWidth || !videoEl.videoHeight) return null;
+      const canvas = document.createElement('canvas');
+      const width = Math.min(videoEl.videoWidth, 640);
+      const height = Math.round(width * (videoEl.videoHeight / videoEl.videoWidth));
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(videoEl, 0, 0, width, height);
+      return canvas.toDataURL('image/jpeg', 0.85);
+    } catch (e) {
+      console.warn('Video frame capture failed:', e);
+      return null;
+    }
+  }
+
+  // Fetch sidecar metadata thumbnail (from metadata/{title}.json in Hugging Face bucket/dataset)
+  async function getSidecarThumbnail(item) {
+    if (!item || !item.name) return null;
+    const baseName = item.name.replace(/\.[a-zA-Z0-9]+$/, '');
+    const encodedName = encodeURIComponent(baseName + '.json');
+    const isBucket = repo.isBucket !== false;
+
+    const candidateUrls = isBucket ? [
+      `https://huggingface.co/buckets/${repo.id}/resolve/metadata/${encodedName}`,
+      `https://huggingface.co/buckets/${repo.id}/raw/metadata/${encodedName}`,
+      `${api.bucketsBase}/${repo.id}/raw/metadata/${encodedName}`,
+      `${api.bucketsBase}/${repo.id}/resolve/metadata/${encodedName}`,
+      `https://huggingface.co/api/buckets/${repo.id}/raw/metadata/${encodedName}`
+    ] : [
+      `https://huggingface.co/datasets/${repo.id}/resolve/${repo.branch || 'main'}/metadata/${encodedName}`,
+      `https://huggingface.co/datasets/${repo.id}/raw/${repo.branch || 'main'}/metadata/${encodedName}`,
+      `${api.datasetsBase}/${repo.id}/resolve/${repo.branch || 'main'}/metadata/${encodedName}`
+    ];
+
+    for (const url of candidateUrls) {
+      try {
+        const headers = state.token ? { 'Authorization': `Bearer ${state.token}` } : {};
+        const res = await fetch(url, { headers });
+        if (res.ok) {
+          const meta = await res.json();
+          if (meta && meta.thumbnail && typeof meta.thumbnail === 'string') {
+            return meta.thumbnail;
+          }
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
   const player = {
     currentTrack: null,
     queue: [],
@@ -1925,6 +1982,18 @@
           console.warn('jsmediatags extraction failed:', e);
         }
       }
+
+      // 3. Check sidecar metadata JSON in Hugging Face (e.g. metadata/<title>.json)
+      try {
+        const sidecarThumb = await getSidecarThumbnail(item);
+        if (sidecarThumb) {
+          this.thumbnailCache.set(item.path, sidecarThumb);
+          return sidecarThumb;
+        }
+      } catch (e) {
+        console.warn('Sidecar thumbnail extraction note:', e);
+      }
+
       return null;
     },
 
@@ -2064,6 +2133,9 @@
       // Reset thumbnail to cached or default
       const cachedThumb = this.thumbnailCache.get(item.path) || null;
       this.updateThumbnailUI(cachedThumb, item);
+      if (cachedThumb) {
+        this.updateMediaSession(cachedThumb);
+      }
 
       // Icon & stage configuration
       const isVideo = item.category === 'video';
@@ -2086,12 +2158,21 @@
       try {
         const mediaEntry = await this.getMediaBlobAndUrl(item);
 
-        // Extract ID3 thumbnail if not yet cached
+        // Extract thumbnail if not yet cached
         let thumbUrl = this.thumbnailCache.get(item.path);
         if (!thumbUrl && mediaEntry.blob) {
           thumbUrl = await this.extractThumbnail(mediaEntry.blob, item);
         }
-        this.updateThumbnailUI(thumbUrl, item);
+        if (!thumbUrl) {
+          thumbUrl = await getSidecarThumbnail(item);
+          if (thumbUrl) {
+            this.thumbnailCache.set(item.path, thumbUrl);
+          }
+        }
+        if (thumbUrl) {
+          this.updateThumbnailUI(thumbUrl, item);
+          this.updateMediaSession(thumbUrl);
+        }
 
         const targetEl = this.getActiveElement();
         targetEl.src = mediaEntry.url;
@@ -2105,7 +2186,7 @@
         await targetEl.play();
         this.isPlaying = true;
         this.updatePlayStateUI();
-        this.updateMediaSession(thumbUrl);
+        this.updateMediaSession(thumbUrl || this.thumbnailCache.get(item.path) || null);
 
         addRecentTrack(item, startAtSeconds, targetEl.duration || 0);
         savePlaybackState();
@@ -2351,17 +2432,27 @@
         cleanTitle = parts.slice(1).join(' - ').trim();
       }
 
-      const artworkList = thumbUrl ? [
-        { src: thumbUrl, sizes: '512x512', type: 'image/jpeg' },
-        { src: thumbUrl, sizes: '256x256', type: 'image/jpeg' },
-        { src: './assets/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' }
-      ] : [
-        { src: './assets/icons/icon-96x96.png', sizes: '96x96', type: 'image/png' },
-        { src: './assets/icons/icon-128x128.png', sizes: '128x128', type: 'image/png' },
-        { src: './assets/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
-        { src: './assets/icons/icon-384x384.png', sizes: '384x384', type: 'image/png' },
-        { src: './assets/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' }
-      ];
+      if (!thumbUrl && this.thumbnailCache.has(track.path)) {
+        thumbUrl = this.thumbnailCache.get(track.path);
+      }
+
+      // Convert relative URL to absolute URL if needed (MediaMetadata requires valid absolute, blob, or data URL)
+      let resolvedThumb = thumbUrl;
+      if (thumbUrl && !thumbUrl.startsWith('blob:') && !thumbUrl.startsWith('data:') && !thumbUrl.startsWith('http')) {
+        try {
+          resolvedThumb = new URL(thumbUrl, window.location.href).href;
+        } catch (_) {}
+      }
+
+      // STRICTLY song/video thumbnail only - NO app icons in notification or lock screen artwork
+      const artworkList = resolvedThumb ? [
+        { src: resolvedThumb, sizes: '512x512', type: 'image/jpeg' },
+        { src: resolvedThumb, sizes: '384x384', type: 'image/jpeg' },
+        { src: resolvedThumb, sizes: '256x256', type: 'image/jpeg' },
+        { src: resolvedThumb, sizes: '192x192', type: 'image/jpeg' },
+        { src: resolvedThumb, sizes: '128x128', type: 'image/jpeg' },
+        { src: resolvedThumb, sizes: '96x96', type: 'image/jpeg' }
+      ] : [];
 
       navigator.mediaSession.metadata = new MediaMetadata({
         title: cleanTitle,
@@ -2469,6 +2560,26 @@
 
   setupMediaElementEvents(elements.playerAudio);
   setupMediaElementEvents(elements.playerVideo);
+
+  // Capture video frame or fetch sidecar thumbnail for video tracks
+  if (elements.playerVideo) {
+    const handleVideoLoadedData = async () => {
+      if (player.currentTrack && player.currentTrack.category === 'video') {
+        if (!player.thumbnailCache.has(player.currentTrack.path)) {
+          let thumb = await getSidecarThumbnail(player.currentTrack);
+          if (!thumb) {
+            thumb = captureVideoFrame(elements.playerVideo);
+          }
+          if (thumb) {
+            player.thumbnailCache.set(player.currentTrack.path, thumb);
+            player.updateThumbnailUI(thumb, player.currentTrack);
+            player.updateMediaSession(thumb);
+          }
+        }
+      }
+    };
+    elements.playerVideo.addEventListener('loadeddata', handleVideoLoadedData);
+  }
 
   // Update Single View Toggle Button UI
   function updateViewToggleUI() {
@@ -2959,6 +3070,87 @@
       .replace(/'/g, '&#039;');
   }
 
+  // Exit Toast Display Helper
+  let exitToastTimeout = null;
+  function showExitToast(message = 'Press back again to exit') {
+    const toast = elements.exitToast || document.getElementById('trove-exit-toast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.classList.remove('opacity-0', 'translate-y-3');
+    toast.classList.add('opacity-100', 'translate-y-0');
+
+    if (exitToastTimeout) clearTimeout(exitToastTimeout);
+    exitToastTimeout = setTimeout(() => {
+      toast.classList.remove('opacity-100', 'translate-y-0');
+      toast.classList.add('opacity-0', 'translate-y-3');
+    }, 2000);
+  }
+
+  // PWA & Browser History / Back Gesture Trapping
+  let lastBackPressTime = 0;
+  let isExiting = false;
+
+  function initHistoryNavigation() {
+    if (!window.history || !window.history.pushState) return;
+
+    // Establish baseline state and active state
+    window.history.replaceState({ trove: 'root' }, '');
+    window.history.pushState({ trove: 'active' }, '');
+
+    window.addEventListener('popstate', () => {
+      if (isExiting) return;
+
+      // 1. If play bar expanded full-screen player is open, close it (do not exit or go back)
+      if (player.isExpanded) {
+        player.minimize();
+        window.history.pushState({ trove: 'active' }, '');
+        return;
+      }
+
+      // 2. If any modal is open, close the modal
+      if (elements.importModal && elements.importModal.style.display === 'flex') {
+        hideImportModal();
+        window.history.pushState({ trove: 'active' }, '');
+        return;
+      }
+      if (elements.activityModal && elements.activityModal.style.display === 'flex') {
+        hideActivityModal();
+        window.history.pushState({ trove: 'active' }, '');
+        return;
+      }
+      if (elements.authModal && elements.authModal.style.display === 'flex') {
+        hideAuthModal();
+        window.history.pushState({ trove: 'active' }, '');
+        return;
+      }
+
+      // 3. If in subdirectory, navigate up to parent directory
+      if (state.currentDirectory !== '') {
+        const parts = state.currentDirectory.split('/').filter(Boolean);
+        parts.pop();
+        state.currentDirectory = parts.join('/');
+        saveViewSettings();
+        render();
+        window.history.pushState({ trove: 'active' }, '');
+        return;
+      }
+
+      // 4. On Home/Root screen: Require double back action within 2 seconds to exit
+      const now = Date.now();
+      if (now - lastBackPressTime < 2000) {
+        isExiting = true;
+        try {
+          window.close();
+        } catch (_) {}
+        window.history.back();
+      } else {
+        lastBackPressTime = now;
+        showExitToast('Press back again to exit');
+        window.history.pushState({ trove: 'active' }, '');
+      }
+    });
+  }
+
   // Initialize
   function init() {
     if (elements.repoIdDisplay) elements.repoIdDisplay.innerText = repo.id;
@@ -2966,6 +3158,7 @@
     if (elements.authUsername) elements.authUsername.value = repo.owner || 'mnswa';
     if (elements.repoBadge) elements.repoBadge.innerText = repo.isPrivate ? 'Private Bucket' : 'Public Bucket';
 
+    initHistoryNavigation();
     loadSavedViewSettings();
     loadStoredThumbnails();
     setupEventListeners();
