@@ -409,14 +409,64 @@
     <!-- Center Stage: Music Vinyl Visualizer OR Video Screen -->
     <div class="flex-1 max-w-4xl w-full mx-auto px-4 md:px-6 flex flex-col items-center justify-center min-h-0 overflow-hidden">
       
-      <!-- Music Stage (When playing audio) - Direct Album Cover Card with Dynamic Fitting -->
-      <div id="stage-music" class="flex flex-col items-center justify-center text-center gap-3.5 sm:gap-4 max-w-xl w-full my-auto px-4">
-        <div class="relative group flex items-center justify-center w-full">
-          <div id="expanded-cover-art" class="max-w-full max-h-[38vh] sm:max-h-[42vh] rounded-2xl shadow-2xl overflow-hidden border border-almond-cream dark:border-[#2b3240] bg-almond-cream/20 dark:bg-[#15181f] flex items-center justify-center transition-all duration-300">
-            <img id="expanded-cover-img" class="max-w-full max-h-[38vh] sm:max-h-[42vh] w-auto h-auto object-contain rounded-2xl hidden" alt="Album Art">
-            <div id="expanded-cover-fallback" class="w-52 h-52 sm:w-60 sm:h-60 flex flex-col items-center justify-center text-stone-brown/60 dark:text-[#758092] gap-3 p-6">
-              <i data-lucide="music" id="expanded-cover-icon" class="w-14 h-14 sm:w-16 sm:h-16"></i>
-              <span class="text-xs font-mono font-medium">Audio Track</span>
+      <!-- Music Stage (When playing audio) - Direct Album Cover Card OR Full Scrollable Lyrics -->
+      <div id="stage-music" class="flex flex-col items-center justify-center text-center gap-2.5 sm:gap-3 max-w-xl w-full my-auto px-4">
+        
+        <!-- Tab Switcher (Cover vs Lyrics) - Just above the thumbnail -->
+        <div id="player-tab-switcher" class="inline-flex items-center p-0.5 sm:p-1 bg-almond-cream/40 dark:bg-[#181c25] rounded-xl border border-almond-cream/80 dark:border-[#282e3b] text-xs font-medium select-none shadow-xs">
+          <button id="tab-btn-cover" type="button" class="px-3 py-1 rounded-lg text-xs font-semibold transition bg-white dark:bg-[#252b38] text-jet-black dark:text-[#f3f4f6] shadow-sm flex items-center gap-1.5" title="Show Album Art">
+            <i data-lucide="disc" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f]"></i>
+            <span>Cover</span>
+          </button>
+          <button id="tab-btn-lyrics" type="button" class="px-3 py-1 rounded-lg text-xs font-medium transition text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white flex items-center gap-1.5" title="Show Song Lyrics">
+            <i data-lucide="mic-2" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f]"></i>
+            <span>Lyrics</span>
+          </button>
+        </div>
+
+        <!-- Cover Art View (Visible by default) -->
+        <div id="expanded-cover-art" class="relative group flex items-center justify-center w-full max-w-full max-h-[38vh] sm:max-h-[42vh] rounded-2xl shadow-2xl overflow-hidden border border-almond-cream dark:border-[#2b3240] bg-almond-cream/20 dark:bg-[#15181f] transition-all duration-300">
+          <img id="expanded-cover-img" class="max-w-full max-h-[38vh] sm:max-h-[42vh] w-auto h-auto object-contain rounded-2xl hidden" alt="Album Art">
+          <div id="expanded-cover-fallback" class="w-52 h-52 sm:w-60 sm:h-60 flex flex-col items-center justify-center text-stone-brown/60 dark:text-[#758092] gap-3 p-6">
+            <i data-lucide="music" id="expanded-cover-icon" class="w-14 h-14 sm:w-16 sm:h-16"></i>
+            <span class="text-xs font-mono font-medium">Audio Track</span>
+          </div>
+        </div>
+
+        <!-- Lyrics View (Hidden by default; takes more vertical space than thumbnail and is scrollable) -->
+        <div id="expanded-lyrics-container" class="w-full max-w-xl h-[48vh] sm:h-[54vh] max-h-[58vh] rounded-2xl bg-white/70 dark:bg-[#15181f]/85 backdrop-blur-md border border-almond-cream dark:border-[#2b3240] p-3.5 sm:p-5 overflow-hidden flex flex-col shadow-2xl transition-all duration-300 select-text hidden">
+          <!-- Lyrics Header / Meta Bar -->
+          <div class="flex items-center justify-between pb-2.5 mb-2 border-b border-almond-cream/60 dark:border-[#252a36] shrink-0 text-xs">
+            <div class="flex items-center gap-2 min-w-0">
+              <span id="lyrics-source-badge" class="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f] truncate">Lyrics</span>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button id="btn-copy-lyrics" type="button" class="p-1.5 rounded-lg text-stone-brown/70 dark:text-[#8b95a5] hover:text-black dark:hover:text-white hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition" title="Copy Lyrics to Clipboard">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              </button>
+              <button id="btn-refresh-lyrics" type="button" class="p-1.5 rounded-lg text-stone-brown/70 dark:text-[#8b95a5] hover:text-black dark:hover:text-white hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition" title="Refresh Lyrics">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Scrollable Lyrics Body -->
+          <div id="lyrics-scroll-body" class="flex-1 overflow-y-auto pr-1 text-center font-sans focus:outline-none">
+            <!-- Loading State -->
+            <div id="lyrics-loading" class="h-full flex flex-col items-center justify-center gap-2.5 text-stone-brown/60 dark:text-[#8b95a5] py-12">
+              <i data-lucide="loader-2" class="w-6 h-6 animate-spin text-stone-brown dark:text-[#c6ac8f]"></i>
+              <span class="text-xs font-mono">Fetching lyrics...</span>
+            </div>
+
+            <!-- Empty / Error State -->
+            <div id="lyrics-empty" class="h-full flex flex-col items-center justify-center gap-2 text-stone-brown/60 dark:text-[#8b95a5] py-12 hidden">
+              <i data-lucide="file-question" class="w-8 h-8 text-stone-brown/40 dark:text-[#525d70]"></i>
+              <p id="lyrics-empty-message" class="text-xs font-medium">Lyrics not available for this track.</p>
+              <button id="btn-retry-lyrics" type="button" class="mt-2 px-3 py-1 rounded-lg text-xs font-semibold bg-jet-black text-white dark:bg-[#f3f4f6] dark:text-[#0e1116] transition shadow-xs">Retry</button>
+            </div>
+
+            <!-- Lyrics Content -->
+            <div id="lyrics-content" class="py-2 px-3 text-sm sm:text-base leading-relaxed sm:leading-loose whitespace-pre-line text-black dark:text-[#e4e7ec] font-normal hidden select-text">
             </div>
           </div>
         </div>
@@ -1111,14 +1161,25 @@
             <span class="text-[11px] font-mono text-stone-brown/60 dark:text-[#758092]">Recommendations & Lyrics</span>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div class="flex flex-col gap-1.5">
-              <label for="worker-url-input" class="text-xs font-semibold text-stone-brown dark:text-[#9aa4b2]">Recommendations Worker URL</label>
+              <label for="worker-url-input" class="text-xs font-semibold text-stone-brown dark:text-[#9aa4b2]">Recommendations Worker</label>
               <input 
                 type="url" 
                 id="worker-url-input" 
                 name="cf_url" 
-                placeholder="https://your-worker.workers.dev" 
+                placeholder="https://recs.workers.dev" 
+                class="w-full px-3 py-2 font-mono text-xs bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-xl text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 transition"
+              >
+            </div>
+
+            <div class="flex flex-col gap-1.5">
+              <label for="worker-lyrics-url-input" class="text-xs font-semibold text-stone-brown dark:text-[#9aa4b2]">Lyrics Worker (Optional)</label>
+              <input 
+                type="url" 
+                id="worker-lyrics-url-input" 
+                name="cf_lyrics_url" 
+                placeholder="https://lyrics.workers.dev" 
                 class="w-full px-3 py-2 font-mono text-xs bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-xl text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 transition"
               >
             </div>
@@ -1130,7 +1191,7 @@
                   type="password" 
                   id="worker-token-input" 
                   name="cf_token" 
-                  placeholder="Optional Worker Bearer Token" 
+                  placeholder="Optional Secret Token" 
                   class="w-full px-3 py-2 pr-10 font-mono text-xs bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-xl text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 transition"
                 >
                 <button type="button" class="btn-toggle-token-eye absolute right-2.5 text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white p-1" data-target="worker-token-input" title="Toggle visibility">
@@ -1140,7 +1201,7 @@
             </div>
           </div>
           <span class="text-[11px] text-stone-brown/70 dark:text-[#758092]">
-            Connects to your Cloudflare Worker for CORS-free live YouTube recommendations.
+            Connects to your Cloudflare Workers for CORS-free recommendations and song lyrics (falls back to Recommendations URL or LRCLIB if unset).
           </span>
         </div>
 
@@ -1179,6 +1240,7 @@
   <script src="./js/activity.js"></script>
   <script src="./js/importer.js"></script>
   <script src="./js/recommendations.js"></script>
+  <script src="./js/lyrics.js"></script>
   <script src="./js/explorer.js"></script>
   <script src="./js/app.js"></script>
 </body>

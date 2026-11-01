@@ -275,6 +275,7 @@
     if (window.Trove.activity) window.Trove.activity.init();
     if (window.Trove.importer) window.Trove.importer.init();
     if (window.Trove.recommendations) window.Trove.recommendations.init();
+    if (window.Trove.lyrics) window.Trove.lyrics.init();
     if (window.Trove.explorer) window.Trove.explorer.init();
 
     if (MotionAnim) MotionAnim.playAppIntro();

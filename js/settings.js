@@ -29,6 +29,7 @@
         ghTokenInput: document.getElementById('gh-token-input'),
         ghRepoInput: document.getElementById('gh-repo-input'),
         workerUrlInput: document.getElementById('worker-url-input'),
+        workerLyricsUrlInput: document.getElementById('worker-lyrics-url-input'),
         workerTokenInput: document.getElementById('worker-token-input'),
         authSettingsBtn: document.getElementById('auth-settings-btn'),
         authBtnLabel: document.getElementById('auth-btn-label'),
@@ -79,6 +80,9 @@
       if (this.elements.workerUrlInput) {
         this.elements.workerUrlInput.value = localStorage.getItem(storage.workerRecsUrlKey) || '';
       }
+      if (this.elements.workerLyricsUrlInput) {
+        this.elements.workerLyricsUrlInput.value = localStorage.getItem(storage.workerLyricsUrlKey) || '';
+      }
       if (this.elements.workerTokenInput) {
         this.elements.workerTokenInput.value = localStorage.getItem(storage.workerTokenKey) || '';
       }
@@ -120,6 +124,7 @@
       const ghToken = (this.elements.ghTokenInput?.value || '').trim();
       const ghRepo = (this.elements.ghRepoInput?.value || '').trim();
       const workerUrl = (this.elements.workerUrlInput?.value || '').trim();
+      const workerLyricsUrl = (this.elements.workerLyricsUrlInput?.value || '').trim();
       const workerToken = (this.elements.workerTokenInput?.value || '').trim();
 
       // 1. HF Token
@@ -148,6 +153,11 @@
         localStorage.setItem(storage.workerRecsUrlKey, workerUrl);
       } else {
         localStorage.removeItem(storage.workerRecsUrlKey);
+      }
+      if (workerLyricsUrl) {
+        localStorage.setItem(storage.workerLyricsUrlKey, workerLyricsUrl);
+      } else {
+        localStorage.removeItem(storage.workerLyricsUrlKey);
       }
       if (workerToken) {
         localStorage.setItem(storage.workerTokenKey, workerToken);

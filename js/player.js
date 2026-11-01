@@ -416,6 +416,10 @@
         this.updatePlayStateUI();
         this.updateMediaSession(thumbUrl || this.thumbnailCache.get(item.path) || null);
 
+        if (window.Trove.lyrics && typeof window.Trove.lyrics.onTrackChanged === 'function') {
+          window.Trove.lyrics.onTrackChanged(item);
+        }
+
         if (window.Trove.store) {
           window.Trove.store.addRecentTrack(item, startAtSeconds, targetEl.duration || 0);
         }

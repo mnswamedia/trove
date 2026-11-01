@@ -30,6 +30,7 @@ window.APP_CONFIG = {
     viewSettingsKey: 'trove_view_settings',
     maxMediaBlobs: 10,
     workerRecsUrlKey: 'trove_worker_recs_url',
+    workerLyricsUrlKey: 'trove_worker_lyrics_url',
     workerTokenKey: 'trove_worker_token'
   },
   api: {
