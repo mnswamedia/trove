@@ -138,9 +138,9 @@
           <i data-lucide="refresh-cw" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]"></i>
         </button>
 
-        <button id="auth-settings-btn" class="hidden sm:inline-flex w-8 h-8 items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm" title="Hugging Face Access Token">
-          <i data-lucide="key-round" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]"></i>
-          <span id="auth-btn-label" class="sr-only">Token</span>
+        <button id="auth-settings-btn" class="hidden sm:inline-flex w-8 h-8 items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm" title="Settings & Access Tokens">
+          <i data-lucide="settings" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]" id="auth-settings-icon"></i>
+          <span id="auth-btn-label" class="sr-only">Settings</span>
         </button>
 
         <!-- Mobile 3-Lines Menu Button (Visible ONLY on mobile < 640px) -->
@@ -180,13 +180,13 @@
               </div>
             </button>
 
-            <!-- Access Token / Connected Status -->
+            <!-- Settings / Access Tokens -->
             <button type="button" id="mobile-auth-btn" class="w-full px-3 py-2 text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] flex items-center justify-between transition text-left border-t border-almond-cream/60 dark:border-[#252a36] mt-1 pt-2">
               <div class="flex items-center gap-2.5">
-                <i data-lucide="key-round" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]"></i>
-                <span class="font-medium">HF Token</span>
+                <i data-lucide="settings" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]"></i>
+                <span class="font-medium">Settings</span>
               </div>
-              <span id="mobile-auth-badge" class="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">Token</span>
+              <span id="mobile-auth-badge" class="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">Tokens</span>
             </button>
           </div>
         </div>
@@ -491,8 +491,14 @@
           <span id="active-queue-counter">1 / 1 in queue</span>
         </div>
 
-        <!-- Right Utilities: EQ Button & Vertical Volume Pill -->
-        <div class="flex items-center gap-2">
+        <!-- Right Utilities: Related Tracks, EQ Button & Vertical Volume Pill -->
+        <div class="flex items-center gap-1.5 sm:gap-2">
+          <!-- Related Recommendations Trigger Button -->
+          <button id="btn-related-toggle" type="button" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-white/80 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition text-stone-brown dark:text-[#c6ac8f] text-xs font-semibold select-none shadow-sm" title="Related Recommendations">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f]"></i>
+            <span class="hidden xs:inline">Related</span>
+          </button>
+
           <!-- Equalizer Bottom Sheet Trigger Button -->
           <button id="btn-eq-toggle" type="button" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-white/80 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition text-stone-brown dark:text-[#c6ac8f] text-xs font-semibold select-none shadow-sm" title="Audio Equalizer">
             <i data-lucide="sliders" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f]"></i>
@@ -736,6 +742,103 @@
     </div>
   </div>
 
+  <!-- Related Recommendations Bottom Sheet Drawer (Powered by Cloudflare Worker) -->
+  <div id="related-bottom-sheet" class="fixed inset-0 bg-jet-black/50 dark:bg-black/70 backdrop-blur-sm z-[115] flex flex-col justify-end p-0 sm:p-4 select-none" style="display: none;">
+    <!-- Backdrop Click to dismiss -->
+    <div id="related-backdrop" class="absolute inset-0"></div>
+
+    <!-- Sheet Container -->
+    <div class="relative w-full max-w-xl sm:max-w-2xl md:max-w-3xl mx-auto bg-white dark:bg-[#15181f] border-t sm:border border-almond-cream dark:border-[#2b3240] rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[85vh] animate-in slide-in-from-bottom duration-200">
+      
+      <!-- Drag Handle (Mobile) -->
+      <div class="pt-3 pb-1.5 flex justify-center sm:hidden">
+        <div class="w-12 h-1.5 rounded-full bg-stone-brown/20 dark:bg-white/20"></div>
+      </div>
+
+      <!-- Sheet Header -->
+      <div class="px-5 sm:px-7 py-3.5 sm:py-4 border-b border-almond-cream dark:border-[#262c38] flex items-center justify-between">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-9 h-9 rounded-xl bg-almond-cream/50 dark:bg-[#222734] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0 shadow-sm">
+            <i data-lucide="sparkles" class="w-4 h-4 sm:w-5 sm:h-5"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <h3 class="text-sm sm:text-base font-bold text-black dark:text-[#f3f4f6]">Related Tracks</h3>
+              <span id="related-count-badge" class="px-2 py-0.5 rounded-md text-xs font-mono font-semibold bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">0 found</span>
+            </div>
+            <p id="related-source-title" class="text-[11px] sm:text-xs font-mono text-stone-brown/70 dark:text-[#9aa4b2] truncate">Based on current track</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1.5 sm:gap-2">
+          <!-- Refresh Recommendations -->
+          <button type="button" id="btn-related-refresh" class="p-2 rounded-xl text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition" title="Refresh Recommendations">
+            <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+          </button>
+
+          <!-- Settings (Config Worker URL/Token) -->
+          <button type="button" id="btn-related-settings" class="p-2 rounded-xl text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition" title="Configure Worker Endpoint">
+            <i data-lucide="settings" class="w-4 h-4"></i>
+          </button>
+
+          <!-- Close Sheet Button -->
+          <button type="button" id="btn-close-related" class="p-2 rounded-xl text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition" title="Close Drawer">
+            <i data-lucide="x" class="w-4 h-4 sm:w-5 sm:h-5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Multi-select Toolbar (shows when items are available) -->
+      <div id="related-toolbar" class="px-5 sm:px-7 py-2 bg-almond-cream/20 dark:bg-[#181c25] border-b border-almond-cream dark:border-[#262c38] flex items-center justify-between text-xs">
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <input type="checkbox" id="related-select-all" class="rounded border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#c6ac8f] focus:ring-0">
+          <span class="font-medium text-stone-brown dark:text-[#9aa4b2]">Select All</span>
+        </label>
+        <span id="related-selected-summary" class="font-mono text-[11px] text-stone-brown/70 dark:text-[#758092]">0 selected</span>
+      </div>
+
+      <!-- Scrollable Tracks List -->
+      <div id="related-list-container" class="flex-1 overflow-y-auto min-h-[220px] max-h-[58vh] divide-y divide-almond-cream/60 dark:divide-[#222734] p-2 sm:p-3">
+        <!-- Dynamic Recommendation Items Injected Here -->
+      </div>
+
+      <!-- Loading State Overlay / Placeholder -->
+      <div id="related-loading-state" class="py-14 flex flex-col items-center justify-center gap-3 text-center hidden">
+        <i data-lucide="loader-2" class="w-7 h-7 text-stone-brown dark:text-[#c6ac8f] animate-spin"></i>
+        <div class="text-xs font-semibold text-black dark:text-[#f3f4f6]">Finding related music...</div>
+        <div class="text-[11px] font-mono text-stone-brown/60 dark:text-[#758092]">Analyzing YouTube stream via Cloudflare Worker</div>
+      </div>
+
+      <!-- Empty / Error State -->
+      <div id="related-empty-state" class="py-12 px-6 flex flex-col items-center justify-center gap-2 text-center hidden">
+        <div class="w-10 h-10 rounded-full bg-almond-cream/40 dark:bg-[#202532] text-stone-brown/60 dark:text-[#758092] flex items-center justify-center">
+          <i data-lucide="music-2" class="w-5 h-5"></i>
+        </div>
+        <p id="related-empty-text" class="text-xs font-semibold text-black dark:text-[#f3f4f6]">No recommendations available</p>
+        <p id="related-empty-subtext" class="text-[11px] text-stone-brown/70 dark:text-[#9aa4b2] max-w-sm">Make sure the current track has YouTube metadata or provide a valid Worker URL.</p>
+        <button type="button" id="btn-empty-open-settings" class="mt-2 inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-jet-black text-white dark:bg-[#f3f4f6] dark:text-[#0e1116] transition shadow-sm hidden">
+          <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+          <span>Configure in Settings</span>
+        </button>
+      </div>
+
+      <!-- Footer Action Bar -->
+      <div class="px-5 sm:px-7 py-3 border-t border-almond-cream dark:border-[#262c38] bg-almond-cream/10 dark:bg-[#1a1e26] flex items-center justify-between text-xs">
+        <span class="text-[11px] font-mono text-stone-brown/60 dark:text-[#758092]" id="related-footer-status">Ready</span>
+        <button 
+          type="button" 
+          id="btn-download-selected" 
+          disabled
+          class="inline-flex items-center gap-1.5 px-4 py-2 font-semibold rounded-xl bg-jet-black text-white hover:bg-black dark:bg-[#f3f4f6] dark:text-[#0e1116] dark:hover:bg-white transition shadow-sm opacity-50 cursor-not-allowed disabled:pointer-events-none"
+        >
+          <i data-lucide="download" class="w-3.5 h-3.5"></i>
+          <span id="btn-download-selected-label">Download Selected</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
   <!-- Live Ingestion Activity Modal -->
   <div id="activity-modal" class="fixed inset-0 bg-jet-black/50 dark:bg-black/70 backdrop-blur-sm z-[110] flex items-center justify-center p-3 sm:p-4" style="display: none;">
     <div class="bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#2b3240] rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
@@ -861,44 +964,6 @@
           </div>
         </div>
 
-        <!-- GitHub Runner Configuration -->
-        <div class="border-t border-almond-cream/60 dark:border-[#252a36] pt-3 flex flex-col gap-2">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-semibold text-black dark:text-[#f3f4f6] flex items-center gap-1.5">
-              <i data-lucide="github" class="w-3.5 h-3.5"></i>
-              <span>GitHub Actions Runner</span>
-            </span>
-            <button type="button" id="toggle-gh-config-btn" class="text-[11px] text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white font-semibold">
-              Settings &darr;
-            </button>
-          </div>
-          <div id="gh-config-fields" class="flex flex-col gap-2.5">
-            <div class="flex flex-col gap-1">
-              <label for="import-gh-token" class="text-[11px] font-semibold text-stone-brown dark:text-[#9aa4b2] flex items-center justify-between">
-                <span>GitHub Personal Access Token</span>
-                <a href="https://github.com/settings/tokens/new?scopes=repo,workflow&amp;description=Trove+Runner" target="_blank" rel="noopener noreferrer" class="text-accent-brown hover:underline text-[10px] dark:text-[#c6ac8f]">Create Token (workflow scope) &nearr;</a>
-              </label>
-              <input 
-                type="password" 
-                id="import-gh-token" 
-                placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                autocomplete="off"
-                class="w-full px-3 py-1.5 text-xs font-mono bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-lg text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 focus:border-jet-black dark:focus:border-white/50 transition"
-              >
-            </div>
-            <div class="flex flex-col gap-1">
-              <label for="import-gh-repo" class="text-[11px] font-semibold text-stone-brown dark:text-[#9aa4b2]">Repository (owner/repo)</label>
-              <input 
-                type="text" 
-                id="import-gh-repo" 
-                value="mnswa/trove"
-                placeholder="mnswa/trove"
-                class="w-full px-3 py-1.5 text-xs font-mono bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-lg text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 focus:border-jet-black dark:focus:border-white/50 transition"
-              >
-            </div>
-          </div>
-        </div>
-
         <!-- Progress / Status Box -->
         <div id="import-progress-box" class="p-3.5 rounded-xl bg-almond-cream/30 dark:bg-[#1a1e26] border border-almond-cream dark:border-[#2b3240] flex flex-col gap-2 hidden">
           <div class="flex items-center gap-2">
@@ -925,51 +990,177 @@
     </div>
   </div>
 
-  <!-- Authentication Modal (Password Manager Compliant) -->
-  <div id="auth-modal" class="fixed inset-0 bg-black/40 dark:bg-black/70 backdrop-blur-sm z-[110] flex items-center justify-center p-4" style="display: none;">
-    <div class="bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#2b3240] rounded-xl shadow-xl w-full max-w-md p-6 flex flex-col gap-5">
-      <div class="flex items-start gap-3.5">
-        <div class="w-10 h-10 rounded-lg bg-almond-cream dark:bg-[#222734] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0">
-          <i data-lucide="lock" class="w-5 h-5"></i>
+  <!-- Top Drawer Settings Panel (Consolidated Tokens & System Configuration) -->
+  <div id="settings-drawer" class="fixed inset-0 bg-jet-black/50 dark:bg-black/70 backdrop-blur-sm z-[115] flex flex-col justify-start p-0 sm:p-4 select-none" style="display: none;">
+    <!-- Backdrop Click to dismiss -->
+    <div id="settings-backdrop" class="absolute inset-0"></div>
+
+    <!-- Sheet Container (Sliding in from top) -->
+    <div class="relative w-full max-w-xl sm:max-w-2xl md:max-w-3xl mx-auto bg-white dark:bg-[#15181f] border-b sm:border border-almond-cream dark:border-[#2b3240] rounded-b-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[88vh] animate-in slide-in-from-top duration-200">
+      
+      <!-- Drawer Header -->
+      <div class="px-5 sm:px-7 py-3.5 sm:py-4 border-b border-almond-cream dark:border-[#262c38] flex items-center justify-between bg-almond-cream/20 dark:bg-[#181c25]">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-almond-cream/50 dark:bg-[#222734] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0 shadow-sm">
+            <i data-lucide="settings" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h2 class="text-sm sm:text-base font-bold text-black dark:text-[#f3f4f6]">Settings & Access Tokens</h2>
+            <p class="text-[11px] sm:text-xs font-mono text-stone-brown/70 dark:text-[#9aa4b2]">Manage dataset, GitHub runner, and Cloudflare Worker credentials</p>
+          </div>
         </div>
-        <div>
-          <h2 class="text-lg font-bold text-black dark:text-[#f3f4f6]">Authentication Required</h2>
-          <p class="text-xs text-stone-brown dark:text-[#9aa4b2] mt-0.5">Connect to dataset <code id="modal-repo-id" class="px-1.5 py-0.5 bg-almond-cream/50 dark:bg-[#242a38] rounded font-mono text-jet-black dark:text-[#c6ac8f]">--</code></p>
-        </div>
+
+        <button type="button" id="btn-close-settings" class="p-2 rounded-xl text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition" title="Close Settings">
+          <i data-lucide="x" class="w-4 h-4 sm:w-5 sm:h-5"></i>
+        </button>
       </div>
 
-      <form id="auth-form" class="flex flex-col gap-4" autocomplete="on">
-        <!-- Hidden username input for password manager matching -->
+      <!-- Settings Form & Scrollable Body -->
+      <form id="settings-form" class="flex-1 overflow-y-auto p-5 sm:p-7 flex flex-col gap-5">
+        <!-- Hidden username for password manager compatibility -->
         <input type="text" name="username" id="auth-username" autocomplete="username" class="sr-only" tabindex="-1">
 
-        <div class="flex flex-col gap-1.5">
-          <label for="hf-token-input" class="text-xs font-semibold text-black dark:text-[#f3f4f6]">Hugging Face Read Token</label>
-          <div class="relative flex items-center">
-            <input 
-              type="password" 
-              id="hf-token-input" 
-              name="password" 
-              autocomplete="current-password" 
-              placeholder="hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
-              required
-              class="w-full px-3 py-2 pr-10 font-mono text-xs bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-lg text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 focus:border-jet-black dark:focus:border-white/50 transition"
-            >
-            <button type="button" id="toggle-token-visibility" class="absolute right-2.5 text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white p-1" title="Toggle visibility">
-              <i data-lucide="eye" id="eye-icon" class="w-4 h-4"></i>
-            </button>
+        <!-- Section 1: Hugging Face Media Vault -->
+        <div class="flex flex-col gap-2.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+              <h3 class="text-xs font-bold uppercase tracking-wider text-black dark:text-[#f3f4f6]">Hugging Face Media Vault</h3>
+            </div>
+            <code id="modal-repo-id" class="px-2 py-0.5 bg-almond-cream/40 dark:bg-[#242a38] rounded text-[11px] font-mono text-jet-black dark:text-[#c6ac8f]">--</code>
           </div>
-          <span class="text-[11px] text-stone-brown/80 dark:text-[#9aa4b2] leading-relaxed mt-0.5">
-            Token will be stored in your browser's local cache. Requires <strong>Read</strong> access to the dataset.
+
+          <div class="flex flex-col gap-1.5">
+            <label for="hf-token-input" class="text-xs font-semibold text-stone-brown dark:text-[#9aa4b2] flex items-center justify-between">
+              <span>Hugging Face Read Token</span>
+              <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" class="text-accent-brown hover:underline text-[11px] dark:text-[#c6ac8f]">Get Read Token &nearr;</a>
+            </label>
+            <div class="relative flex items-center">
+              <input 
+                type="password" 
+                id="hf-token-input" 
+                name="hf_token" 
+                autocomplete="current-password" 
+                placeholder="hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
+                class="w-full px-3 py-2 pr-10 font-mono text-xs bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-xl text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 transition"
+              >
+              <button type="button" class="btn-toggle-token-eye absolute right-2.5 text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white p-1" data-target="hf-token-input" title="Toggle visibility">
+                <i data-lucide="eye" class="w-4 h-4"></i>
+              </button>
+            </div>
+            <span class="text-[11px] text-stone-brown/70 dark:text-[#758092]">
+              Required to read dataset directory tree & stream media files.
+            </span>
+          </div>
+        </div>
+
+        <!-- Section 2: GitHub Actions Runner (Ingestion / Downloads) -->
+        <div class="border-t border-almond-cream dark:border-[#262c38] pt-4 flex flex-col gap-2.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <h3 class="text-xs font-bold uppercase tracking-wider text-black dark:text-[#f3f4f6]">GitHub Actions Runner</h3>
+            </div>
+            <span class="text-[11px] font-mono text-stone-brown/60 dark:text-[#758092]">Ingestion Runner</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1.5">
+              <label for="gh-token-input" class="text-xs font-semibold text-stone-brown dark:text-[#9aa4b2] flex items-center justify-between">
+                <span>Personal Access Token</span>
+                <a href="https://github.com/settings/tokens/new?scopes=repo,workflow&amp;description=Trove+Runner" target="_blank" rel="noopener noreferrer" class="text-accent-brown hover:underline text-[10px] dark:text-[#c6ac8f]">Create PAT (workflow scope) &nearr;</a>
+              </label>
+              <div class="relative flex items-center">
+                <input 
+                  type="password" 
+                  id="gh-token-input" 
+                  name="gh_token" 
+                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" 
+                  class="w-full px-3 py-2 pr-10 font-mono text-xs bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-xl text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 transition"
+                >
+                <button type="button" class="btn-toggle-token-eye absolute right-2.5 text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white p-1" data-target="gh-token-input" title="Toggle visibility">
+                  <i data-lucide="eye" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="flex flex-col gap-1.5">
+              <label for="gh-repo-input" class="text-xs font-semibold text-stone-brown dark:text-[#9aa4b2]">Repository (owner/repo)</label>
+              <input 
+                type="text" 
+                id="gh-repo-input" 
+                name="gh_repo" 
+                placeholder="mnswa/trove" 
+                value="mnswa/trove"
+                class="w-full px-3 py-2 font-mono text-xs bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-xl text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 transition"
+              >
+            </div>
+          </div>
+          <span class="text-[11px] text-stone-brown/70 dark:text-[#758092]">
+            Used to dispatch ingestion runs when downloading songs/videos from YouTube.
           </span>
         </div>
 
-        <div id="auth-error-msg" class="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 text-xs hidden"></div>
+        <!-- Section 3: Cloudflare Workers (Recommendations & AI) -->
+        <div class="border-t border-almond-cream dark:border-[#262c38] pt-4 flex flex-col gap-2.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+              <h3 class="text-xs font-bold uppercase tracking-wider text-black dark:text-[#f3f4f6]">Cloudflare Workers</h3>
+            </div>
+            <span class="text-[11px] font-mono text-stone-brown/60 dark:text-[#758092]">Recommendations & Lyrics</span>
+          </div>
 
-        <div class="flex items-center justify-end gap-2.5 pt-2">
-          <button type="button" id="close-modal-btn" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-[#202532] border border-khaki-beige dark:border-[#353c4d] text-stone-brown dark:text-[#9aa4b2] hover:bg-almond-cream/30 dark:hover:bg-[#282e3b] transition">Cancel</button>
-          <button type="submit" id="save-token-btn" class="px-4 py-1.5 text-xs font-semibold rounded-lg bg-jet-black text-white hover:bg-black dark:bg-[#f3f4f6] dark:text-[#0e1116] dark:hover:bg-white transition">Connect Vault</button>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="flex flex-col gap-1.5">
+              <label for="worker-url-input" class="text-xs font-semibold text-stone-brown dark:text-[#9aa4b2]">Recommendations Worker URL</label>
+              <input 
+                type="url" 
+                id="worker-url-input" 
+                name="cf_url" 
+                placeholder="https://your-worker.workers.dev" 
+                class="w-full px-3 py-2 font-mono text-xs bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-xl text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 transition"
+              >
+            </div>
+
+            <div class="flex flex-col gap-1.5">
+              <label for="worker-token-input" class="text-xs font-semibold text-stone-brown dark:text-[#9aa4b2]">Worker API Secret (Optional)</label>
+              <div class="relative flex items-center">
+                <input 
+                  type="password" 
+                  id="worker-token-input" 
+                  name="cf_token" 
+                  placeholder="Optional Worker Bearer Token" 
+                  class="w-full px-3 py-2 pr-10 font-mono text-xs bg-white dark:bg-[#1a1e26] border border-khaki-beige dark:border-[#353c4d] rounded-xl text-black dark:text-[#f3f4f6] focus:outline-none focus:ring-2 focus:ring-jet-black/20 dark:focus:ring-white/20 transition"
+                >
+                <button type="button" class="btn-toggle-token-eye absolute right-2.5 text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white p-1" data-target="worker-token-input" title="Toggle visibility">
+                  <i data-lucide="eye" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+          <span class="text-[11px] text-stone-brown/70 dark:text-[#758092]">
+            Connects to your Cloudflare Worker for CORS-free live YouTube recommendations.
+          </span>
         </div>
+
+        <div id="settings-error-msg" class="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 text-xs hidden"></div>
       </form>
+
+      <!-- Drawer Footer -->
+      <div class="px-5 sm:px-7 py-3 sm:py-3.5 border-t border-almond-cream dark:border-[#262c38] bg-almond-cream/15 dark:bg-[#181c25] flex items-center justify-between text-xs">
+        <span class="text-[11px] font-mono text-stone-brown/60 dark:text-[#758092] hidden xs:inline">Stored in browser cache</span>
+        <div class="flex items-center gap-2.5 ml-auto">
+          <button type="button" id="btn-cancel-settings" class="px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-white dark:bg-[#202532] border border-khaki-beige dark:border-[#353c4d] text-stone-brown dark:text-[#9aa4b2] hover:bg-almond-cream/30 dark:hover:bg-[#282e3b] transition">
+            Cancel
+          </button>
+          <button type="button" id="btn-save-settings" class="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-xl bg-jet-black text-white hover:bg-black dark:bg-[#f3f4f6] dark:text-[#0e1116] dark:hover:bg-white transition shadow-sm">
+            <i data-lucide="check" class="w-3.5 h-3.5"></i>
+            <span>Save & Apply</span>
+          </button>
+        </div>
+      </div>
+
     </div>
   </div>
 

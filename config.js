@@ -28,7 +28,9 @@ window.APP_CONFIG = {
     thumbnailsKey: 'trove_thumbnails_cache',
     maxCachedThumbnails: 25,
     viewSettingsKey: 'trove_view_settings',
-    maxMediaBlobs: 10
+    maxMediaBlobs: 10,
+    workerRecsUrlKey: 'trove_worker_recs_url',
+    workerTokenKey: 'trove_worker_token'
   },
   api: {
     bucketsBase: 'https://huggingface.co/api/buckets',

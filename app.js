@@ -37,7 +37,9 @@
     filterType: 'all', // 'all' | 'video' | 'music' | 'document' | 'image' | 'other'
     searchQuery: '',
     isLoading: false,
-    error: null
+    error: null,
+    pendingAutoPlayId: null,
+    pendingAutoPlayTitle: null
   };
 
   // DOM Elements
@@ -88,12 +90,23 @@
     activityItemsList: document.getElementById('activity-items-list'),
     authSettingsBtn: document.getElementById('auth-settings-btn'),
     authBtnLabel: document.getElementById('auth-btn-label'),
-    authModal: document.getElementById('auth-modal'),
-    authForm: document.getElementById('auth-form'),
+    mobileAuthBtn: document.getElementById('mobile-auth-btn'),
+    mobileAuthBadge: document.getElementById('mobile-auth-badge'),
+
+    // Top Drawer Settings Panel Elements
+    settingsDrawer: document.getElementById('settings-drawer'),
+    settingsBackdrop: document.getElementById('settings-backdrop'),
+    settingsForm: document.getElementById('settings-form'),
+    btnCloseSettings: document.getElementById('btn-close-settings'),
+    btnCancelSettings: document.getElementById('btn-cancel-settings'),
+    btnSaveSettings: document.getElementById('btn-save-settings'),
+    settingsErrorMsg: document.getElementById('settings-error-msg'),
     hfTokenInput: document.getElementById('hf-token-input'),
-    toggleTokenVisibility: document.getElementById('toggle-token-visibility'),
-    closeModalBtn: document.getElementById('close-modal-btn'),
-    authErrorMsg: document.getElementById('auth-error-msg'),
+    ghTokenInput: document.getElementById('gh-token-input'),
+    ghRepoInput: document.getElementById('gh-repo-input'),
+    workerUrlInput: document.getElementById('worker-url-input'),
+    workerTokenInput: document.getElementById('worker-token-input'),
+
     explorerState: document.getElementById('explorer-state'),
     stateIcon: document.getElementById('state-icon'),
     stateTitle: document.getElementById('state-title'),
@@ -121,10 +134,6 @@
     importStatusSubtext: document.getElementById('import-status-subtext'),
     importErrorMsg: document.getElementById('import-error-msg'),
     startImportBtn: document.getElementById('start-import-btn'),
-    importGhToken: document.getElementById('import-gh-token'),
-    importGhRepo: document.getElementById('import-gh-repo'),
-    toggleGhConfigBtn: document.getElementById('toggle-gh-config-btn'),
-    ghConfigFields: document.getElementById('gh-config-fields'),
 
     // Media Player Elements
     playerAudio: document.getElementById('player-audio'),
@@ -187,7 +196,29 @@
     eqBackdrop: document.getElementById('eq-backdrop'),
     btnCloseEq: document.getElementById('btn-close-eq'),
     btnEqBypass: document.getElementById('btn-eq-bypass'),
-    btnResetEq: document.getElementById('btn-reset-eq')
+    btnResetEq: document.getElementById('btn-reset-eq'),
+
+    // Related Recommendations Elements
+    btnRelatedToggle: document.getElementById('btn-related-toggle'),
+    relatedBottomSheet: document.getElementById('related-bottom-sheet'),
+    relatedBackdrop: document.getElementById('related-backdrop'),
+    btnCloseRelated: document.getElementById('btn-close-related'),
+    btnRelatedRefresh: document.getElementById('btn-related-refresh'),
+    btnRelatedSettings: document.getElementById('btn-related-settings'),
+    relatedCountBadge: document.getElementById('related-count-badge'),
+    relatedSourceTitle: document.getElementById('related-source-title'),
+    relatedToolbar: document.getElementById('related-toolbar'),
+    relatedSelectAll: document.getElementById('related-select-all'),
+    relatedSelectedSummary: document.getElementById('related-selected-summary'),
+    relatedListContainer: document.getElementById('related-list-container'),
+    relatedLoadingState: document.getElementById('related-loading-state'),
+    relatedEmptyState: document.getElementById('related-empty-state'),
+    relatedEmptyText: document.getElementById('related-empty-text'),
+    relatedEmptySubtext: document.getElementById('related-empty-subtext'),
+    btnEmptyOpenSettings: document.getElementById('btn-empty-open-settings'),
+    relatedFooterStatus: document.getElementById('related-footer-status'),
+    btnDownloadSelected: document.getElementById('btn-download-selected'),
+    btnDownloadSelectedLabel: document.getElementById('btn-download-selected-label')
   };
 
   // =========================================================================
@@ -384,6 +415,42 @@
           animate(card, { transform: ['translateY(0%)', 'translateY(100%)'] }, { duration: 0.2, easing: [0.32, 0.72, 0, 1] });
         }
         const anim = animate(sheetEl, { opacity: [1, 0] }, { duration: 0.18, easing: 'ease-in' });
+        if (anim && anim.finished) {
+          anim.finished.then(() => { if (onDone) onDone(); }).catch(() => { if (onDone) onDone(); });
+        } else {
+          setTimeout(() => { if (onDone) onDone(); }, 200);
+        }
+      } catch (_) {
+        if (onDone) onDone();
+      }
+    },
+
+    // 12. Top Drawer Entrance (Slide down from top)
+    animateTopDrawerIn(drawerEl) {
+      if (!this.isAvailable() || !drawerEl) return;
+      try {
+        const { animate } = window.Motion;
+        const card = drawerEl.querySelector('.relative');
+        animate(drawerEl, { opacity: [0, 1] }, { duration: 0.16, easing: 'ease-out' });
+        if (card) {
+          animate(card, { transform: ['translateY(-100%)', 'translateY(0%)'] }, { duration: 0.28, easing: [0.32, 0.72, 0, 1] });
+        }
+      } catch (_) {}
+    },
+
+    // 13. Top Drawer Exit (Slide up into top)
+    animateTopDrawerOut(drawerEl, onDone) {
+      if (!this.isAvailable() || !drawerEl) {
+        if (onDone) onDone();
+        return;
+      }
+      try {
+        const { animate } = window.Motion;
+        const card = drawerEl.querySelector('.relative');
+        if (card) {
+          animate(card, { transform: ['translateY(0%)', 'translateY(-100%)'] }, { duration: 0.2, easing: [0.32, 0.72, 0, 1] });
+        }
+        const anim = animate(drawerEl, { opacity: [1, 0] }, { duration: 0.18, easing: 'ease-in' });
         if (anim && anim.finished) {
           anim.finished.then(() => { if (onDone) onDone(); }).catch(() => { if (onDone) onDone(); });
         } else {
@@ -994,6 +1061,26 @@
       if (player.currentTrack) {
         player.updateQueue(player.currentTrack);
       }
+
+      // Check if there is a pending auto-play track after download
+      if (state.pendingAutoPlayId) {
+        const autoId = state.pendingAutoPlayId;
+        const autoTitle = (state.pendingAutoPlayTitle || '').toLowerCase();
+        state.pendingAutoPlayId = null;
+        state.pendingAutoPlayTitle = null;
+
+        const found = state.allItems.find(item => {
+          if (item.isDir) return false;
+          if (item.name.includes(autoId)) return true;
+          if (autoTitle && item.name.toLowerCase().includes(autoTitle.slice(0, 15))) return true;
+          return false;
+        });
+
+        if (found) {
+          showToast(`Now Playing newly imported: ${found.name.replace(/\.[a-zA-Z0-9]+$/, '')}`);
+          player.playTrack(found);
+        }
+      }
     } catch (err) {
       console.error('Failed to load dataset:', err);
       if (err.message === 'AUTH_ERROR') {
@@ -1454,29 +1541,117 @@
     elements.footerStatus.innerText = text;
   }
 
-  // Authentication Modal Logic
-  function showAuthModal(errorText = '') {
-    elements.authModal.style.display = 'flex';
-    elements.hfTokenInput.value = state.token || '';
-    if (errorText) {
-      elements.authErrorMsg.innerText = errorText;
-      elements.authErrorMsg.classList.remove('hidden');
-    } else {
-      elements.authErrorMsg.classList.add('hidden');
-    }
-    setTimeout(() => elements.hfTokenInput.focus(), 50);
+  // =========================================================================
+  // TOP DRAWER SETTINGS PANEL CONTROLLER (Consolidated Tokens & System Config)
+  // =========================================================================
+  function openSettingsDrawer(errorText = '') {
+    if (!elements.settingsDrawer) return;
 
-    if (window.lucide) {
-      window.lucide.createIcons();
+    // Populate all token inputs from localStorage
+    if (elements.hfTokenInput) {
+      elements.hfTokenInput.value = state.token || localStorage.getItem(storage.tokenKey) || '';
     }
-    MotionAnim.animateModalIn(elements.authModal);
+    if (elements.ghTokenInput) {
+      elements.ghTokenInput.value = localStorage.getItem(storage.ghTokenKey) || '';
+    }
+    if (elements.ghRepoInput) {
+      const defaultRepo = (CONFIG.github?.owner && CONFIG.github?.repo) ? `${CONFIG.github.owner}/${CONFIG.github.repo}` : 'mnswa/trove';
+      elements.ghRepoInput.value = localStorage.getItem(storage.ghRepoKey) || defaultRepo;
+    }
+    if (elements.workerUrlInput) {
+      elements.workerUrlInput.value = localStorage.getItem(storage.workerRecsUrlKey) || '';
+    }
+    if (elements.workerTokenInput) {
+      elements.workerTokenInput.value = localStorage.getItem(storage.workerTokenKey) || '';
+    }
+
+    if (errorText) {
+      if (elements.settingsErrorMsg) {
+        elements.settingsErrorMsg.innerText = errorText;
+        elements.settingsErrorMsg.classList.remove('hidden');
+      }
+    } else {
+      if (elements.settingsErrorMsg) elements.settingsErrorMsg.classList.add('hidden');
+    }
+
+    elements.settingsDrawer.style.display = 'flex';
+    if (window.lucide) window.lucide.createIcons();
+    MotionAnim.animateTopDrawerIn(elements.settingsDrawer);
+    setTimeout(() => {
+      if (!state.token && elements.hfTokenInput) elements.hfTokenInput.focus();
+    }, 100);
   }
 
-  function hideAuthModal() {
-    MotionAnim.animateModalOut(elements.authModal, () => {
-      elements.authModal.style.display = 'none';
-      elements.authErrorMsg.classList.add('hidden');
+  function closeSettingsDrawer() {
+    if (!elements.settingsDrawer || elements.settingsDrawer.style.display === 'none') return;
+    MotionAnim.animateTopDrawerOut(elements.settingsDrawer, () => {
+      elements.settingsDrawer.style.display = 'none';
+      if (elements.settingsErrorMsg) elements.settingsErrorMsg.classList.add('hidden');
     });
+  }
+
+  function saveAllSettings() {
+    const hfToken = (elements.hfTokenInput?.value || '').trim();
+    const ghToken = (elements.ghTokenInput?.value || '').trim();
+    const ghRepo = (elements.ghRepoInput?.value || '').trim();
+    const workerUrl = (elements.workerUrlInput?.value || '').trim();
+    const workerToken = (elements.workerTokenInput?.value || '').trim();
+
+    // 1. HF Token
+    const oldHfToken = state.token;
+    state.token = hfToken;
+    if (hfToken) {
+      localStorage.setItem(storage.tokenKey, hfToken);
+    } else {
+      localStorage.removeItem(storage.tokenKey);
+    }
+
+    // 2. GH Token & Repo
+    if (ghToken) {
+      localStorage.setItem(storage.ghTokenKey, ghToken);
+    } else {
+      localStorage.removeItem(storage.ghTokenKey);
+    }
+    if (ghRepo) {
+      localStorage.setItem(storage.ghRepoKey, ghRepo);
+    } else {
+      localStorage.removeItem(storage.ghRepoKey);
+    }
+
+    // 3. Cloudflare Worker URL & Secret
+    if (workerUrl) {
+      localStorage.setItem(storage.workerRecsUrlKey, workerUrl);
+    } else {
+      localStorage.removeItem(storage.workerRecsUrlKey);
+    }
+    if (workerToken) {
+      localStorage.setItem(storage.workerTokenKey, workerToken);
+    } else {
+      localStorage.removeItem(storage.workerTokenKey);
+    }
+
+    // Update UI headers
+    if (elements.authBtnLabel) elements.authBtnLabel.innerText = hfToken ? 'Connected' : 'Settings';
+    if (elements.mobileAuthBadge) elements.mobileAuthBadge.innerText = hfToken ? 'Ready' : 'Tokens';
+    if (elements.authSettingsBtn) {
+      elements.authSettingsBtn.title = hfToken ? 'Trove Settings (Vault Connected)' : 'Trove Settings (Token Required)';
+    }
+
+    closeSettingsDrawer();
+    showToast('Settings & credentials saved!');
+
+    // If HF Token changed or dataset empty, reload
+    if (hfToken && (hfToken !== oldHfToken || state.allItems.length === 0)) {
+      loadRepository(true);
+    }
+  }
+
+  // Backward compatibility aliases
+  function showAuthModal(errorText = '') {
+    openSettingsDrawer(errorText);
+  }
+  function hideAuthModal() {
+    closeSettingsDrawer();
   }
 
   // ==========================================
@@ -1857,23 +2032,8 @@
 
   function showImportModal() {
     if (!state.token) {
-      showAuthModal('Please connect with your Hugging Face Token first.');
+      openSettingsDrawer('Please connect with your Hugging Face Token first.');
       return;
-    }
-
-    const savedGhToken = localStorage.getItem(storage.ghTokenKey) || '';
-    const defaultGhRepo = (CONFIG.github?.owner && CONFIG.github?.repo) ? `${CONFIG.github.owner}/${CONFIG.github.repo}` : 'mnswamedia/trove';
-    const savedGhRepo = localStorage.getItem(storage.ghRepoKey) || defaultGhRepo;
-
-    if (elements.importGhToken) elements.importGhToken.value = savedGhToken;
-    if (elements.importGhRepo) elements.importGhRepo.value = savedGhRepo;
-
-    if (elements.ghConfigFields) {
-      if (savedGhToken) {
-        elements.ghConfigFields.classList.add('hidden');
-      } else {
-        elements.ghConfigFields.classList.remove('hidden');
-      }
     }
 
     elements.importModal.style.display = 'flex';
@@ -1956,23 +2116,17 @@
       return;
     }
 
-    const ghToken = (elements.importGhToken.value || '').trim() || localStorage.getItem(storage.ghTokenKey) || '';
+    const ghToken = localStorage.getItem(storage.ghTokenKey) || '';
     if (!ghToken) {
-      showImportError('Please provide your GitHub Personal Access Token (with workflow scope) to run the ingestion.');
-      if (elements.ghConfigFields) elements.ghConfigFields.classList.remove('hidden');
-      if (elements.importGhToken) elements.importGhToken.focus();
+      showImportError('GitHub Personal Access Token is required to dispatch ingestion. Please open Settings to configure your GitHub token.');
       return;
     }
 
-    // Persist GitHub credentials in localStorage
-    localStorage.setItem(storage.ghTokenKey, ghToken);
     const defaultRepo = (CONFIG.github?.owner && CONFIG.github?.repo) ? `${CONFIG.github.owner}/${CONFIG.github.repo}` : 'mnswamedia/trove';
-    const rawRepo = (elements.importGhRepo.value || '').trim() || localStorage.getItem(storage.ghRepoKey) || defaultRepo;
-    localStorage.setItem(storage.ghRepoKey, rawRepo);
-
+    const rawRepo = localStorage.getItem(storage.ghRepoKey) || defaultRepo;
     const repoParts = rawRepo.split('/').map(s => s.trim());
     if (repoParts.length !== 2 || !repoParts[0] || !repoParts[1]) {
-      showImportError('Please enter the GitHub repository in "owner/repo" format (e.g. mnswamedia/trove).');
+      showImportError('Invalid GitHub repository in Settings (expected "owner/repo").');
       return;
     }
     const [owner, repoName] = repoParts;
@@ -3294,40 +3448,617 @@
     if (window.lucide) window.lucide.createIcons();
   }
 
+  // =========================================================================
+  // RELATED RECOMMENDATIONS MANAGER (Cloudflare Worker InnerTube Integration)
+  // =========================================================================
+  const RelatedManager = {
+    isOpen: false,
+    currentTrackPath: null,
+    currentVideoId: null,
+    cache: new Map(), // track.path -> { videoId, videos: [], sourceTitle }
+    selectedVideos: new Map(), // videoId -> video object
+    isLoading: false,
+
+    init() {
+      if (!elements.btnRelatedToggle) return;
+
+      elements.btnRelatedToggle.addEventListener('click', () => {
+        this.open();
+      });
+
+      if (elements.relatedBackdrop) {
+        elements.relatedBackdrop.addEventListener('click', () => this.close());
+      }
+      if (elements.btnCloseRelated) {
+        elements.btnCloseRelated.addEventListener('click', () => this.close());
+      }
+      if (elements.btnRelatedRefresh) {
+        elements.btnRelatedRefresh.addEventListener('click', () => {
+          this.fetchRecommendations(true);
+        });
+      }
+      if (elements.btnRelatedSettings) {
+        elements.btnRelatedSettings.addEventListener('click', () => {
+          openSettingsDrawer();
+        });
+      }
+      if (elements.btnEmptyOpenSettings) {
+        elements.btnEmptyOpenSettings.addEventListener('click', () => {
+          openSettingsDrawer();
+        });
+      }
+      if (elements.relatedSelectAll) {
+        elements.relatedSelectAll.addEventListener('change', (e) => {
+          this.handleSelectAll(e.target.checked);
+        });
+      }
+      if (elements.btnDownloadSelected) {
+        elements.btnDownloadSelected.addEventListener('click', () => {
+          this.downloadSelected();
+        });
+      }
+
+      // Close dropdowns on outside click
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.item-menu-wrapper')) {
+          document.querySelectorAll('.item-menu-dropdown').forEach(d => d.classList.add('hidden'));
+        }
+      });
+    },
+
+    open() {
+      if (!elements.relatedBottomSheet) return;
+      this.isOpen = true;
+      elements.relatedBottomSheet.style.display = 'flex';
+      MotionAnim.animateSheetIn(elements.relatedBottomSheet);
+
+      const track = player.currentTrack;
+      if (!track) {
+        this.renderEmpty('No Track Playing', 'Play a track in Trove to see live recommendations.');
+        return;
+      }
+
+      // Check if already cached for the exact same track
+      if (this.currentTrackPath === track.path && this.cache.has(track.path)) {
+        const cached = this.cache.get(track.path);
+        this.renderVideos(cached.videos, cached.sourceTitle);
+      } else {
+        this.fetchRecommendations(false);
+      }
+    },
+
+    close() {
+      if (!elements.relatedBottomSheet || elements.relatedBottomSheet.style.display === 'none') return;
+      this.isOpen = false;
+      MotionAnim.animateSheetOut(elements.relatedBottomSheet, () => {
+        elements.relatedBottomSheet.style.display = 'none';
+      });
+    },
+
+    // Extract or resolve videoId from the track
+    async resolveVideoId(track) {
+      if (!track) return null;
+      if (track._videoId) return track._videoId;
+
+      // 1. Check cached thumbnail URL for ytimg.com/vi/<id>/
+      const thumb = player.thumbnailCache.get(track.path);
+      if (thumb && typeof thumb === 'string') {
+        const m = thumb.match(/(?:ytimg\.com\/vi\/|youtube\.com\/vi\/)([A-Za-z0-9_-]{11})/);
+        if (m) {
+          track._videoId = m[1];
+          return m[1];
+        }
+      }
+
+      // 2. Check track filename for 11-char ID
+      const nameMatch = track.name.match(/\[([A-Za-z0-9_-]{11})\]/) || track.name.match(/(?:-|_|\s)([A-Za-z0-9_-]{11})(?:\.[a-zA-Z0-9]+)?$/);
+      if (nameMatch) {
+        track._videoId = nameMatch[1];
+        return nameMatch[1];
+      }
+
+      // 3. Check sidecar metadata json in Hugging Face bucket/dataset
+      try {
+        const baseName = track.name.replace(/\.[a-zA-Z0-9]+$/, '');
+        const encodedName = encodeURIComponent(baseName + '.json');
+        const isBucket = repo.isBucket !== false;
+        const candidateUrls = isBucket ? [
+          `https://huggingface.co/buckets/${repo.id}/resolve/metadata/${encodedName}`,
+          `https://huggingface.co/buckets/${repo.id}/raw/metadata/${encodedName}`,
+          `${api.bucketsBase}/${repo.id}/resolve/metadata/${encodedName}`
+        ] : [
+          `https://huggingface.co/datasets/${repo.id}/resolve/${repo.branch || 'main'}/metadata/${encodedName}`,
+          `https://huggingface.co/datasets/${repo.id}/raw/${repo.branch || 'main'}/metadata/${encodedName}`
+        ];
+
+        for (const u of candidateUrls) {
+          try {
+            const h = state.token ? { 'Authorization': `Bearer ${state.token}` } : {};
+            const r = await fetch(u, { headers: h });
+            if (r.ok) {
+              const meta = await r.json();
+              if (meta) {
+                if (meta.id && /^[A-Za-z0-9_-]{11}$/.test(meta.id)) {
+                  track._videoId = meta.id;
+                  return meta.id;
+                }
+                if (meta.videoId && /^[A-Za-z0-9_-]{11}$/.test(meta.videoId)) {
+                  track._videoId = meta.videoId;
+                  return meta.videoId;
+                }
+                if (meta.webpage_url) {
+                  const m2 = meta.webpage_url.match(/(?:v=|youtu\.be\/)([^#&?]{11})/);
+                  if (m2) {
+                    track._videoId = m2[1];
+                    return m2[1];
+                  }
+                }
+                if (meta.thumbnail) {
+                  const m3 = meta.thumbnail.match(/(?:ytimg\.com\/vi\/|youtube\.com\/vi\/)([A-Za-z0-9_-]{11})/);
+                  if (m3) {
+                    track._videoId = m3[1];
+                    return m3[1];
+                  }
+                }
+              }
+            }
+          } catch (_) {}
+        }
+      } catch (_) {}
+
+      return null;
+    },
+
+    async fetchRecommendations(forceFresh = false) {
+      const track = player.currentTrack;
+      if (!track) {
+        this.renderEmpty('No Track Playing', 'Play a track in Trove to see recommendations.');
+        return;
+      }
+
+      const workerUrl = localStorage.getItem(storage.workerRecsUrlKey) || '';
+      const workerToken = localStorage.getItem(storage.workerTokenKey) || '';
+
+      if (!workerUrl) {
+        this.renderEmpty('Cloudflare Worker Needed', 'Please configure your Recommendations Worker URL in Settings.');
+        if (elements.btnEmptyOpenSettings) elements.btnEmptyOpenSettings.classList.remove('hidden');
+        return;
+      }
+
+      this.currentTrackPath = track.path;
+      this.selectedVideos.clear();
+      this.updateSelectionUI();
+
+      const cleanTitle = track.name.replace(/\.[a-zA-Z0-9]+$/, '').replace(/\[.*?\]/g, '').trim();
+      if (elements.relatedSourceTitle) {
+        elements.relatedSourceTitle.innerText = `Based on: ${cleanTitle}`;
+      }
+
+      // Check in-memory cache if not forced refresh
+      if (!forceFresh && this.cache.has(track.path)) {
+        const cached = this.cache.get(track.path);
+        this.renderVideos(cached.videos, cleanTitle);
+        return;
+      }
+
+      // Show Loading State
+      this.setLoading(true);
+
+      try {
+        const videoId = await this.resolveVideoId(track);
+        if (!videoId) {
+          this.setLoading(false);
+          this.renderEmpty(
+            'No YouTube ID Found',
+            `Could not resolve a YouTube video ID for "${cleanTitle}". Tracks imported via the Ingest tool contain YouTube IDs.`
+          );
+          return;
+        }
+
+        this.currentVideoId = videoId;
+
+        // Build request URL
+        const cleanBase = workerUrl.replace(/\/+$/, '');
+        let targetUrl = `${cleanBase}/?videoId=${encodeURIComponent(videoId)}&excludeShorts=true`;
+        if (workerToken) {
+          targetUrl += `&token=${encodeURIComponent(workerToken)}`;
+        }
+        if (forceFresh) {
+          targetUrl += '&fresh=1';
+        }
+
+        const headers = { 'Accept': 'application/json' };
+        if (workerToken) {
+          headers['Authorization'] = `Bearer ${workerToken}`;
+          headers['X-API-Key'] = workerToken;
+        }
+
+        const res = await fetch(targetUrl, { headers });
+        if (!res.ok) {
+          let errText = `Worker returned status ${res.status}`;
+          try {
+            const errData = await res.json();
+            errText = errData.error || errText;
+          } catch (_) {}
+          throw new Error(errText);
+        }
+
+        const data = await res.json();
+        const videos = Array.isArray(data.videos) ? data.videos : [];
+
+        // Cache results
+        this.cache.set(track.path, { videoId, videos, sourceTitle: cleanTitle });
+        this.setLoading(false);
+        this.renderVideos(videos, cleanTitle);
+
+      } catch (err) {
+        console.error('Recommendations fetch error:', err);
+        this.setLoading(false);
+        this.renderEmpty(
+          'Failed to load recommendations',
+          err.message || 'Check your Cloudflare Worker URL, network connection, or API token.'
+        );
+      }
+    },
+
+    setLoading(loading) {
+      this.isLoading = loading;
+      if (elements.relatedLoadingState) {
+        elements.relatedLoadingState.classList.toggle('hidden', !loading);
+      }
+      if (elements.relatedListContainer) {
+        elements.relatedListContainer.classList.toggle('hidden', loading);
+      }
+      if (elements.relatedEmptyState) {
+        elements.relatedEmptyState.classList.add('hidden');
+      }
+      if (elements.btnRelatedRefresh) {
+        elements.btnRelatedRefresh.classList.toggle('animate-spin', loading);
+      }
+    },
+
+    renderEmpty(title, subtext) {
+      if (elements.relatedLoadingState) elements.relatedLoadingState.classList.add('hidden');
+      if (elements.relatedListContainer) {
+        elements.relatedListContainer.innerHTML = '';
+        elements.relatedListContainer.classList.add('hidden');
+      }
+      if (elements.relatedEmptyState) {
+        elements.relatedEmptyState.classList.remove('hidden');
+        if (elements.relatedEmptyText) elements.relatedEmptyText.innerText = title;
+        if (elements.relatedEmptySubtext) elements.relatedEmptySubtext.innerText = subtext;
+      }
+      if (elements.relatedCountBadge) elements.relatedCountBadge.innerText = '0 found';
+      if (elements.relatedFooterStatus) elements.relatedFooterStatus.innerText = 'Idle';
+    },
+
+    renderVideos(videos, sourceTitle) {
+      if (!elements.relatedListContainer) return;
+      elements.relatedListContainer.innerHTML = '';
+
+      if (!videos || videos.length === 0) {
+        this.renderEmpty('No Recommendations', 'YouTube returned 0 recommendations for this track.');
+        return;
+      }
+
+      if (elements.relatedLoadingState) elements.relatedLoadingState.classList.add('hidden');
+      if (elements.relatedEmptyState) elements.relatedEmptyState.classList.add('hidden');
+      elements.relatedListContainer.classList.remove('hidden');
+
+      if (elements.relatedCountBadge) {
+        elements.relatedCountBadge.innerText = `${videos.length} found`;
+      }
+      if (elements.relatedFooterStatus) {
+        elements.relatedFooterStatus.innerText = `${videos.length} tracks ready`;
+      }
+
+      videos.forEach((video) => {
+        const card = document.createElement('div');
+        card.className = 'p-2 sm:p-2.5 rounded-xl hover:bg-almond-cream/30 dark:hover:bg-[#1e232e] transition flex items-center gap-3 group select-none relative';
+
+        const thumbUrl = video.thumbnail || (video.thumbnails && video.thumbnails[0]) || `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`;
+        const titleEscaped = (video.title || 'Untitled Track').replace(/"/g, '&quot;');
+        const channelEscaped = (video.channel || 'YouTube').replace(/"/g, '&quot;');
+
+        card.innerHTML = `
+          <!-- Checkbox -->
+          <input type="checkbox" class="related-item-checkbox rounded border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#c6ac8f] shrink-0 cursor-pointer w-4 h-4" data-video-id="${video.id}">
+
+          <!-- Thumbnail with duration badge -->
+          <div class="relative w-16 h-12 sm:w-20 sm:h-14 rounded-lg overflow-hidden bg-almond-cream/40 dark:bg-[#12151c] shrink-0 shadow-sm border border-almond-cream/60 dark:border-[#262c38]">
+            <img src="${thumbUrl}" alt="" class="w-full h-full object-cover" loading="lazy">
+            ${video.duration ? `<span class="absolute bottom-0.5 right-0.5 px-1 py-0.2 rounded text-[9px] sm:text-[10px] font-mono font-bold bg-black/80 text-white leading-tight">${video.duration}</span>` : ''}
+          </div>
+
+          <!-- Title & Channel Info -->
+          <div class="flex-1 min-w-0 pr-1">
+            <div class="text-xs sm:text-sm font-semibold text-black dark:text-[#f3f4f6] truncate group-hover:text-accent-brown dark:group-hover:text-[#c6ac8f] transition" title="${titleEscaped}">
+              ${video.title || 'Untitled'}
+            </div>
+            <div class="flex items-center gap-1.5 mt-0.5 text-[10px] sm:text-[11px] font-mono text-stone-brown/70 dark:text-[#9aa4b2]">
+              <span class="truncate max-w-[120px] sm:max-w-[200px]">${channelEscaped}</span>
+              ${video.view_count ? `<span>• ${video.view_count}</span>` : ''}
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex items-center gap-1 shrink-0">
+            <!-- Play Next (Download & Auto-play) -->
+            <button type="button" class="btn-play-related p-2 rounded-lg hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] text-stone-brown dark:text-[#c6ac8f] hover:text-black dark:hover:text-white transition" title="Download & Play Next" data-video-id="${video.id}">
+              <i data-lucide="play-circle" class="w-5 h-5"></i>
+            </button>
+
+            <!-- Item Menu Dropdown Wrapper -->
+            <div class="relative item-menu-wrapper">
+              <button type="button" class="btn-item-menu p-1.5 sm:p-2 rounded-lg hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] text-stone-brown/60 dark:text-[#8b95a5] hover:text-black dark:hover:text-white transition" title="Options">
+                <i data-lucide="more-vertical" class="w-4 h-4"></i>
+              </button>
+              <div class="item-menu-dropdown absolute right-0 bottom-full mb-1 w-44 bg-white dark:bg-[#1a1e27] border border-almond-cream dark:border-[#2f3747] rounded-xl shadow-xl py-1.5 z-30 hidden">
+                <button type="button" class="btn-action-download w-full px-3 py-1.5 text-left text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] flex items-center gap-2">
+                  <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                  <span>Download to Vault</span>
+                </button>
+                <button type="button" class="btn-action-copy w-full px-3 py-1.5 text-left text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] flex items-center gap-2">
+                  <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                  <span>Copy URL</span>
+                </button>
+                <a href="${video.url}" target="_blank" rel="noopener noreferrer" class="w-full px-3 py-1.5 text-left text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] flex items-center gap-2">
+                  <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                  <span>Open on YouTube</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        `;
+
+        // Checkbox binding
+        const cb = card.querySelector('.related-item-checkbox');
+        cb.addEventListener('change', (e) => {
+          if (e.target.checked) {
+            this.selectedVideos.set(video.id, video);
+          } else {
+            this.selectedVideos.delete(video.id);
+          }
+          this.updateSelectionUI();
+        });
+
+        // Play Next binding (Download and Play)
+        const btnPlay = card.querySelector('.btn-play-related');
+        btnPlay.addEventListener('click', () => {
+          this.downloadAndPlay(video);
+        });
+
+        // Menu toggle
+        const btnMenu = card.querySelector('.btn-item-menu');
+        const dropdown = card.querySelector('.item-menu-dropdown');
+        btnMenu.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const isHidden = dropdown.classList.contains('hidden');
+          document.querySelectorAll('.item-menu-dropdown').forEach(d => d.classList.add('hidden'));
+          if (isHidden) dropdown.classList.remove('hidden');
+        });
+
+        // Menu Actions
+        const btnDl = card.querySelector('.btn-action-download');
+        btnDl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          dropdown.classList.add('hidden');
+          this.downloadTracks([video]);
+        });
+
+        const btnCopy = card.querySelector('.btn-action-copy');
+        btnCopy.addEventListener('click', (e) => {
+          e.stopPropagation();
+          dropdown.classList.add('hidden');
+          navigator.clipboard?.writeText(video.url);
+          showToast('Copied YouTube URL to clipboard');
+        });
+
+        elements.relatedListContainer.appendChild(card);
+      });
+
+      if (window.lucide) window.lucide.createIcons();
+    },
+
+    handleSelectAll(checked) {
+      const currentList = this.cache.get(this.currentTrackPath)?.videos || [];
+      const checkboxes = elements.relatedListContainer?.querySelectorAll('.related-item-checkbox') || [];
+      checkboxes.forEach((cb) => {
+        cb.checked = checked;
+      });
+
+      if (checked) {
+        currentList.forEach(v => this.selectedVideos.set(v.id, v));
+      } else {
+        this.selectedVideos.clear();
+      }
+      this.updateSelectionUI();
+    },
+
+    updateSelectionUI() {
+      const count = this.selectedVideos.size;
+      if (elements.relatedSelectedSummary) {
+        elements.relatedSelectedSummary.innerText = `${count} selected`;
+      }
+      if (elements.btnDownloadSelected) {
+        elements.btnDownloadSelected.disabled = count === 0;
+        if (count > 0) {
+          elements.btnDownloadSelected.classList.remove('opacity-50', 'cursor-not-allowed', 'disabled:pointer-events-none');
+        } else {
+          elements.btnDownloadSelected.classList.add('opacity-50', 'cursor-not-allowed', 'disabled:pointer-events-none');
+        }
+      }
+      if (elements.btnDownloadSelectedLabel) {
+        elements.btnDownloadSelectedLabel.innerText = count > 0 ? `Download Selected (${count})` : 'Download Selected';
+      }
+      if (elements.relatedSelectAll) {
+        const total = this.cache.get(this.currentTrackPath)?.videos?.length || 0;
+        elements.relatedSelectAll.checked = total > 0 && count === total;
+      }
+    },
+
+    downloadSelected() {
+      if (this.selectedVideos.size === 0) return;
+      const videos = Array.from(this.selectedVideos.values());
+      this.downloadTracks(videos);
+    },
+
+    // Download one or more tracks via GitHub Actions runner
+    async downloadTracks(videos, { playWhenReadyVideoId = null, playWhenReadyTitle = '' } = {}) {
+      if (!videos || videos.length === 0) return;
+
+      const ghToken = localStorage.getItem(storage.ghTokenKey) || '';
+      if (!ghToken) {
+        showToast('GitHub PAT required for downloads');
+        openSettingsDrawer('GitHub Personal Access Token is required to dispatch downloads via GitHub Actions.');
+        return;
+      }
+
+      const defaultRepo = (CONFIG.github?.owner && CONFIG.github?.repo) ? `${CONFIG.github.owner}/${CONFIG.github.repo}` : 'mnswamedia/trove';
+      const rawRepo = localStorage.getItem(storage.ghRepoKey) || defaultRepo;
+      const repoParts = rawRepo.split('/').map(s => s.trim());
+      if (repoParts.length !== 2) {
+        alert('Invalid GitHub repository format (expected owner/repo).');
+        return;
+      }
+      const [owner, repoName] = repoParts;
+      const workflowFile = CONFIG.github?.workflowFile || 'ingest.yml';
+
+      const targets = videos.map(v => v.url).join('\n');
+
+      // Update UI Status
+      if (elements.relatedFooterStatus) {
+        elements.relatedFooterStatus.innerText = `Dispatching ${videos.length} track(s)...`;
+      }
+
+      try {
+        const dispatchUrl = `https://api.github.com/repos/${owner}/${repoName}/actions/workflows/${workflowFile}/dispatches`;
+        const res = await fetch(dispatchUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${ghToken}`,
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            ref: CONFIG.github?.ref || 'main',
+            inputs: {
+              targets: targets,
+              format: 'm4a',
+              bucket_id: repo.id,
+              hf_token: state.token || ''
+            }
+          })
+        });
+
+        if (!res.ok) {
+          let errDetail = `GitHub API HTTP ${res.status}`;
+          try {
+            const errData = await res.json();
+            errDetail = errData.message || errDetail;
+          } catch (_) {}
+          throw new Error(errDetail);
+        }
+
+        if (playWhenReadyVideoId) {
+          state.pendingAutoPlayId = playWhenReadyVideoId;
+          state.pendingAutoPlayTitle = playWhenReadyTitle;
+        }
+
+        // Close drawer and clear selection
+        this.selectedVideos.clear();
+        this.updateSelectionUI();
+        this.close();
+
+        // Open Activity Modal & start tracking
+        showToast(`Dispatched ${videos.length} track(s) to GitHub Actions!`);
+        pollActivityLoop(0);
+        openActivityModal();
+
+      } catch (err) {
+        console.error('Download dispatch error:', err);
+        alert(`Failed to trigger download: ${err.message}`);
+        if (elements.relatedFooterStatus) {
+          elements.relatedFooterStatus.innerText = 'Download failed';
+        }
+      }
+    },
+
+    downloadAndPlay(video) {
+      if (!video) return;
+      this.downloadTracks([video], {
+        playWhenReadyVideoId: video.id,
+        playWhenReadyTitle: video.title
+      });
+    }
+  };
+
   // Setup Event Handlers
   function setupEventListeners() {
-    // Auth Form Submit
-    elements.authForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const inputVal = elements.hfTokenInput.value.trim();
-      if (!inputVal) return;
+    RelatedManager.init();
+    // Top Drawer Settings Panel Event Listeners (Unified Tokens & System Config)
+    if (elements.settingsForm) {
+      elements.settingsForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        saveAllSettings();
+      });
+    }
 
-      state.token = inputVal;
-      localStorage.setItem(storage.tokenKey, inputVal);
-      hideAuthModal();
-      if (elements.authBtnLabel) elements.authBtnLabel.innerText = 'Connected';
-      if (elements.mobileAuthBadge) elements.mobileAuthBadge.innerText = 'Connected';
-      if (elements.authSettingsBtn) elements.authSettingsBtn.title = 'Hugging Face Access Token (Connected)';
-      loadRepository(true);
-    });
+    if (elements.btnSaveSettings) {
+      elements.btnSaveSettings.addEventListener('click', (e) => {
+        e.preventDefault();
+        saveAllSettings();
+      });
+    }
 
-    elements.closeModalBtn.addEventListener('click', () => {
-      hideAuthModal();
-    });
+    if (elements.btnCloseSettings) {
+      elements.btnCloseSettings.addEventListener('click', () => {
+        closeSettingsDrawer();
+      });
+    }
 
-    elements.authSettingsBtn.addEventListener('click', () => {
-      showAuthModal();
-    });
+    if (elements.btnCancelSettings) {
+      elements.btnCancelSettings.addEventListener('click', () => {
+        closeSettingsDrawer();
+      });
+    }
 
-    // Toggle Password Visibility
-    elements.toggleTokenVisibility.addEventListener('click', () => {
-      const isPass = elements.hfTokenInput.getAttribute('type') === 'password';
-      elements.hfTokenInput.setAttribute('type', isPass ? 'text' : 'password');
-      const icon = elements.toggleTokenVisibility.querySelector('i');
-      if (icon) {
-        icon.setAttribute('data-lucide', isPass ? 'eye-off' : 'eye');
-        if (window.lucide) window.lucide.createIcons();
-      }
+    if (elements.settingsBackdrop) {
+      elements.settingsBackdrop.addEventListener('click', () => {
+        closeSettingsDrawer();
+      });
+    }
+
+    // Topbar & Mobile Menu Settings Triggers
+    if (elements.authSettingsBtn) {
+      elements.authSettingsBtn.addEventListener('click', () => {
+        openSettingsDrawer();
+      });
+    }
+
+    if (elements.mobileAuthBtn) {
+      elements.mobileAuthBtn.addEventListener('click', () => {
+        if (elements.mobileNavMenu) elements.mobileNavMenu.classList.add('hidden');
+        openSettingsDrawer();
+      });
+    }
+
+    // Password & Token Visibility Toggles (Eye Icons)
+    document.querySelectorAll('.btn-toggle-token-eye').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const targetId = btn.getAttribute('data-target');
+        const targetInput = targetId ? document.getElementById(targetId) : null;
+        if (!targetInput) return;
+
+        const isPass = targetInput.getAttribute('type') === 'password';
+        targetInput.setAttribute('type', isPass ? 'text' : 'password');
+        const icon = btn.querySelector('i');
+        if (icon) {
+          icon.setAttribute('data-lucide', isPass ? 'eye-off' : 'eye');
+          if (window.lucide) window.lucide.createIcons();
+        }
+      });
     });
 
     // Refresh Button (Forces 1-hour cache bypass)
@@ -3718,12 +4449,6 @@
       });
     }
 
-    if (elements.toggleGhConfigBtn && elements.ghConfigFields) {
-      elements.toggleGhConfigBtn.addEventListener('click', () => {
-        elements.ghConfigFields.classList.toggle('hidden');
-      });
-    }
-
     // Format radio pills in Import Modal
     document.querySelectorAll('.import-format-radio').forEach(radio => {
       radio.addEventListener('change', () => {
@@ -3944,9 +4669,14 @@
     window.addEventListener('popstate', () => {
       if (isExiting) return;
 
-      // 0. If EQ bottom sheet is open, close it
+      // 0. If EQ or Related bottom sheet is open, close it
       if (elements.eqBottomSheet && elements.eqBottomSheet.style.display === 'flex') {
         hideEqualizerSheet();
+        window.history.pushState({ trove: 'active' }, '');
+        return;
+      }
+      if (RelatedManager && RelatedManager.isDrawerOpen) {
+        RelatedManager.close();
         window.history.pushState({ trove: 'active' }, '');
         return;
       }
@@ -3958,7 +4688,12 @@
         return;
       }
 
-      // 2. If any modal is open, close the modal
+      // 2. If any modal or top drawer is open, close it
+      if (elements.settingsDrawer && elements.settingsDrawer.style.display === 'flex') {
+        closeSettingsDrawer();
+        window.history.pushState({ trove: 'active' }, '');
+        return;
+      }
       if (elements.importModal && elements.importModal.style.display === 'flex') {
         hideImportModal();
         window.history.pushState({ trove: 'active' }, '');
@@ -3966,11 +4701,6 @@
       }
       if (elements.activityModal && elements.activityModal.style.display === 'flex') {
         hideActivityModal();
-        window.history.pushState({ trove: 'active' }, '');
-        return;
-      }
-      if (elements.authModal && elements.authModal.style.display === 'flex') {
-        hideAuthModal();
         window.history.pushState({ trove: 'active' }, '');
         return;
       }
