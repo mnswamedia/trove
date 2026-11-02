@@ -265,6 +265,28 @@
     });
   }
 
+  // 1-Tap Hard Update & PWA Cache Clear
+  async function forceAppUpdate() {
+    if (window.Trove.utils?.showToast) {
+      window.Trove.utils.showToast('Checking for updates & clearing cache...');
+    }
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const reg of regs) {
+          await reg.unregister();
+        }
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+    } catch (_) {}
+
+    const cleanUrl = window.location.href.split('?')[0];
+    window.location.replace(`${cleanUrl}?_ts=${Date.now()}`);
+  }
+
   // App Initialization
   function init() {
     initTheme();
@@ -283,8 +305,14 @@
     if (repoBadge) repoBadge.innerText = repo.isPrivate ? 'Private Bucket' : 'Public Bucket';
 
     const versionEl = document.getElementById('footer-version');
-    if (versionEl && CONFIG.version) {
-      versionEl.innerText = CONFIG.version;
+    if (versionEl) {
+      if (CONFIG.version) versionEl.innerText = CONFIG.version;
+      versionEl.addEventListener('click', forceAppUpdate);
+    }
+
+    const forceUpdateBtn = document.getElementById('btn-force-update');
+    if (forceUpdateBtn) {
+      forceUpdateBtn.addEventListener('click', forceAppUpdate);
     }
 
     // Initialize all modules in sequence
@@ -302,10 +330,25 @@
 
     // Register Service Worker for PWA
     if ('serviceWorker' in navigator) {
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
+      });
+
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js', { scope: './' })
+        navigator.serviceWorker.register('./sw.js', { scope: './', updateViaCache: 'none' })
           .then((reg) => {
             console.log('Trove ServiceWorker active with scope:', reg.scope);
+            reg.update();
+
+            document.addEventListener('visibilitychange', () => {
+              if (document.visibilityState === 'visible') {
+                reg.update();
+              }
+            });
           })
           .catch((err) => {
             console.warn('Trove ServiceWorker registration note:', err);

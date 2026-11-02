@@ -1,5 +1,5 @@
 // Trove PWA Service Worker
-const CACHE_NAME = 'trove-pwa-v38';
+const CACHE_NAME = 'trove-pwa-v39';
 
 // Core App Shell assets to pre-cache on install
 const PRECACHE_ASSETS = [
@@ -32,11 +32,23 @@ const PRECACHE_ASSETS = [
   './assets/icons/icon-512x512-maskable.png'
 ];
 
-// Install: pre-cache the shell and activate immediately
+// Install: pre-cache the shell bypassing browser HTTP cache and activate immediately
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(PRECACHE_ASSETS);
+      // Force network reload for all precache assets to avoid stale browser HTTP cache
+      const cachePromises = PRECACHE_ASSETS.map((asset) => {
+        return fetch(new Request(asset, { cache: 'reload' }))
+          .then((response) => {
+            if (response.ok) {
+              return cache.put(asset, response);
+            }
+          })
+          .catch((err) => {
+            console.warn('Precache skip for:', asset, err);
+          });
+      });
+      return Promise.all(cachePromises);
     }).then(() => self.skipWaiting())
   );
 });
@@ -48,6 +60,7 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
+            console.log('Purging stale cache:', key);
             return caches.delete(key);
           }
         })
@@ -108,8 +121,15 @@ self.addEventListener('fetch', (event) => {
   }
 
   // 5. App Shell assets (HTML, CSS, JS, manifest): Network-First, fallback to Cache
+  // For HTML documents/navigations, ALWAYS fetch with cache: 'no-cache' so browser HTTP cache doesn't block updates
+  const isNavOrHtml = req.mode === 'navigate' || 
+    url.pathname.endsWith('/') || 
+    url.pathname.endsWith('index.html');
+
+  const fetchOptions = isNavOrHtml ? { cache: 'no-cache' } : {};
+
   event.respondWith(
-    fetch(req)
+    fetch(new Request(req, fetchOptions))
       .then((networkRes) => {
         if (networkRes && networkRes.status === 200) {
           const clone = networkRes.clone();
@@ -120,4 +140,3 @@ self.addEventListener('fetch', (event) => {
       .catch(() => caches.match(req))
   );
 });
-
