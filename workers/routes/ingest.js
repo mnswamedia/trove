@@ -191,105 +191,252 @@ export async function handleIngest(request, env, url) {
         return jsonResponse({ success: false, error: "run_id or github_run_id required" }, 400);
       }
 
-      // Resolve runId if only githubRunId is known
+      // Step 1: Resolve or self-heal active run row in ingest_runs
       let activeRunId = runId;
-      if (!activeRunId && githubRunId) {
-        const found = await env.DB.prepare(`SELECT id FROM ingest_runs WHERE github_run_id = ?`).bind(githubRunId).first();
-        if (found) activeRunId = found.id;
+      let runRow = null;
+
+      if (activeRunId) {
+        runRow = await env.DB.prepare(`SELECT * FROM ingest_runs WHERE id = ?`).bind(activeRunId).first();
       }
 
-      if (!activeRunId) {
-        return jsonResponse({ success: false, error: "Run not found" }, 404);
+      if (!runRow && githubRunId) {
+        runRow = await env.DB.prepare(`SELECT * FROM ingest_runs WHERE github_run_id = ?`).bind(githubRunId).first();
+        if (runRow) {
+          activeRunId = runRow.id;
+        }
       }
 
+      // If still not found, self-heal: create the run row immediately
+      if (!runRow) {
+        if (!activeRunId) {
+          activeRunId = githubRunId ? `run_gh_${githubRunId}` : `run_${now}_${Math.random().toString(36).slice(2, 7)}`;
+        }
+        const totalTracks = Number(body.total_tracks) || (trackIndex > 0 ? trackIndex : 1);
+        const format = (body.format || "m4a").trim().toLowerCase();
+        const bucketId = (body.bucket_id || "mnswa/trove_dataset").trim();
+
+        await env.DB.prepare(`
+          INSERT INTO ingest_runs (id, github_run_id, status, total_tracks, succeeded_tracks, failed_tracks, format, bucket_id, started_at, created_at, updated_at)
+          VALUES (?, ?, 'in_progress', ?, 0, 0, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            github_run_id = CASE WHEN ? != '' THEN ? ELSE github_run_id END,
+            total_tracks = CASE WHEN ? > 0 AND total_tracks = 0 THEN ? ELSE total_tracks END,
+            updated_at = ?
+        `).bind(
+          activeRunId,
+          githubRunId,
+          totalTracks,
+          format,
+          bucketId,
+          now,
+          now,
+          now,
+          githubRunId,
+          githubRunId,
+          totalTracks,
+          totalTracks,
+          now
+        ).run();
+
+        runRow = await env.DB.prepare(`SELECT * FROM ingest_runs WHERE id = ?`).bind(activeRunId).first();
+      } else {
+        // Link github_run_id if previously empty
+        if (githubRunId && (!runRow.github_run_id || runRow.github_run_id === "")) {
+          await env.DB.prepare(`
+            UPDATE ingest_runs SET github_run_id = ?, updated_at = ? WHERE id = ?
+          `).bind(githubRunId, now, activeRunId).run();
+        }
+      }
+
+      // Step 2: Handle lifecycle events
       // Case A: Entire Run Started
       if (event === "run_started" || status === "started") {
+        const totalTracks = Number(body.total_tracks) || 0;
         await env.DB.prepare(`
           UPDATE ingest_runs
           SET status = 'in_progress',
               github_run_id = CASE WHEN ? != '' THEN ? ELSE github_run_id END,
+              total_tracks = CASE WHEN ? > 0 THEN ? ELSE total_tracks END,
               started_at = COALESCE(started_at, ?),
               updated_at = ?
           WHERE id = ?
-        `).bind(githubRunId, githubRunId, now, now, activeRunId).run();
+        `).bind(githubRunId, githubRunId, totalTracks, totalTracks, now, now, activeRunId).run();
       }
 
       // Case B: Individual Item Started
       else if (event === "item_started" || status === "downloading") {
-        await env.DB.prepare(`
-          UPDATE ingest_items
-          SET status = 'downloading',
+        let existingItem = null;
+        if (trackIndex > 0) {
+          existingItem = await env.DB.prepare(`
+            SELECT id FROM ingest_items WHERE run_id = ? AND track_index = ?
+          `).bind(activeRunId, trackIndex).first();
+        }
+        if (!existingItem && urlTarget) {
+          existingItem = await env.DB.prepare(`
+            SELECT id FROM ingest_items WHERE run_id = ? AND url = ?
+          `).bind(activeRunId, urlTarget).first();
+        }
+        if (!existingItem && songId) {
+          existingItem = await env.DB.prepare(`
+            SELECT id FROM ingest_items WHERE run_id = ? AND song_id = ?
+          `).bind(activeRunId, songId).first();
+        }
+
+        if (existingItem) {
+          await env.DB.prepare(`
+            UPDATE ingest_items
+            SET status = 'downloading',
+                started_at = COALESCE(started_at, ?),
+                updated_at = ?
+            WHERE id = ?
+          `).bind(now, now, existingItem.id).run();
+        } else {
+          const itemId = `item_${activeRunId}_${trackIndex || Date.now().toString(36)}`;
+          const derivedSongId = songId || extractYouTubeId(urlTarget);
+          const itemTitle = title || (derivedSongId ? `YouTube (${derivedSongId})` : (urlTarget || `Target #${trackIndex || 1}`));
+          await env.DB.prepare(`
+            INSERT INTO ingest_items (id, run_id, track_index, url, song_id, title, format, status, started_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'downloading', ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              status = 'downloading',
               started_at = COALESCE(started_at, ?),
               updated_at = ?
-          WHERE run_id = ? AND (track_index = ? OR url = ?)
-        `).bind(now, now, activeRunId, trackIndex, urlTarget).run();
+          `).bind(
+            itemId, activeRunId, trackIndex || 1, urlTarget, derivedSongId, itemTitle, "m4a", now, now, now,
+            now, now
+          ).run();
+        }
 
         await env.DB.prepare(`
           UPDATE ingest_runs
           SET status = 'in_progress',
               started_at = COALESCE(started_at, ?),
+              total_tracks = CASE WHEN ? > total_tracks THEN ? ELSE total_tracks END,
               updated_at = ?
-          WHERE id = ? AND status = 'queued'
-        `).bind(now, now, activeRunId).run();
+          WHERE id = ?
+        `).bind(now, trackIndex, trackIndex, now, activeRunId).run();
       }
 
       // Case C: Individual Item Ended (Success, Failure, or Skipped)
       else if (event === "item_ended" || status === "succeeded" || status === "failed" || status === "skipped_archive") {
         const finalItemStatus = status === "succeeded" ? "succeeded" : (status === "skipped_archive" ? "skipped_archive" : "failed");
 
-        await env.DB.prepare(`
-          UPDATE ingest_items
-          SET status = ?,
+        let existingItem = null;
+        if (trackIndex > 0) {
+          existingItem = await env.DB.prepare(`
+            SELECT id FROM ingest_items WHERE run_id = ? AND track_index = ?
+          `).bind(activeRunId, trackIndex).first();
+        }
+        if (!existingItem && urlTarget) {
+          existingItem = await env.DB.prepare(`
+            SELECT id FROM ingest_items WHERE run_id = ? AND url = ?
+          `).bind(activeRunId, urlTarget).first();
+        }
+        if (!existingItem && songId) {
+          existingItem = await env.DB.prepare(`
+            SELECT id FROM ingest_items WHERE run_id = ? AND song_id = ?
+          `).bind(activeRunId, songId).first();
+        }
+
+        const derivedSongId = songId || extractYouTubeId(urlTarget);
+        const itemFormat = (body.format || "m4a").trim().toLowerCase();
+
+        if (existingItem) {
+          await env.DB.prepare(`
+            UPDATE ingest_items
+            SET status = ?,
+                title = CASE WHEN ? != '' THEN ? ELSE title END,
+                song_id = CASE WHEN ? != '' THEN ? ELSE song_id END,
+                format = CASE WHEN ? != '' THEN ? ELSE format END,
+                size_bytes = CASE WHEN ? > 0 THEN ? ELSE size_bytes END,
+                duration_seconds = CASE WHEN ? > 0 THEN ? ELSE duration_seconds END,
+                error = ?,
+                ended_at = ?,
+                updated_at = ?
+            WHERE id = ?
+          `).bind(
+            finalItemStatus,
+            title, title,
+            derivedSongId, derivedSongId,
+            itemFormat, itemFormat,
+            sizeBytes, sizeBytes,
+            durationSeconds, durationSeconds,
+            error,
+            now,
+            now,
+            existingItem.id
+          ).run();
+        } else {
+          const itemId = `item_${activeRunId}_${trackIndex || Date.now().toString(36)}`;
+          const itemTitle = title || (derivedSongId ? `YouTube (${derivedSongId})` : (urlTarget || `Target #${trackIndex || 1}`));
+          await env.DB.prepare(`
+            INSERT INTO ingest_items (id, run_id, track_index, url, song_id, title, format, size_bytes, duration_seconds, status, error, started_at, ended_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              status = ?,
               title = CASE WHEN ? != '' THEN ? ELSE title END,
               song_id = CASE WHEN ? != '' THEN ? ELSE song_id END,
+              format = CASE WHEN ? != '' THEN ? ELSE format END,
               size_bytes = CASE WHEN ? > 0 THEN ? ELSE size_bytes END,
-              duration_seconds = CASE WHEN ? > 0 THEN ? ELSE duration_seconds END,
               error = ?,
               ended_at = ?,
               updated_at = ?
-          WHERE run_id = ? AND (track_index = ? OR url = ?)
-        `).bind(
-          finalItemStatus,
-          title, title,
-          songId, songId,
-          sizeBytes, sizeBytes,
-          durationSeconds, durationSeconds,
-          error,
-          now,
-          now,
-          activeRunId,
-          trackIndex,
-          urlTarget
-        ).run();
-
-        // Increment counts on the parent run
-        if (finalItemStatus === "succeeded" || finalItemStatus === "skipped_archive") {
-          await env.DB.prepare(`
-            UPDATE ingest_runs
-            SET succeeded_tracks = succeeded_tracks + 1, updated_at = ?
-            WHERE id = ?
-          `).bind(now, activeRunId).run();
-        } else {
-          await env.DB.prepare(`
-            UPDATE ingest_runs
-            SET failed_tracks = failed_tracks + 1, updated_at = ?
-            WHERE id = ?
-          `).bind(now, activeRunId).run();
+          `).bind(
+            itemId, activeRunId, trackIndex || 1, urlTarget, derivedSongId, itemTitle, itemFormat, sizeBytes, durationSeconds, finalItemStatus, error, now, now, now, now,
+            finalItemStatus,
+            title, title,
+            derivedSongId, derivedSongId,
+            itemFormat, itemFormat,
+            sizeBytes, sizeBytes,
+            error,
+            now,
+            now
+          ).run();
         }
+
+        // Dynamically recalculate run counts from ingest_items
+        await env.DB.prepare(`
+          UPDATE ingest_runs
+          SET succeeded_tracks = (SELECT COUNT(*) FROM ingest_items WHERE run_id = ? AND status IN ('succeeded', 'skipped_archive')),
+              failed_tracks = (SELECT COUNT(*) FROM ingest_items WHERE run_id = ? AND status = 'failed'),
+              total_tracks = MAX(total_tracks, (SELECT COUNT(*) FROM ingest_items WHERE run_id = ?)),
+              updated_at = ?
+          WHERE id = ?
+        `).bind(activeRunId, activeRunId, activeRunId, now, activeRunId).run();
       }
 
       // Case D: Entire Run Ended
       else if (event === "run_ended" || status === "completed" || status === "finished") {
-        await env.DB.prepare(`
-          UPDATE ingest_runs
-          SET status = ?,
-              ended_at = ?,
-              updated_at = ?
-          WHERE id = ?
-        `).bind(status === "failed" ? "failed" : "completed", now, now, activeRunId).run();
+        const finalRunStatus = status === "failed" ? "failed" : "completed";
+        const bodySucceeded = typeof body.succeeded_tracks === "number" ? body.succeeded_tracks : -1;
+        const bodyFailed = typeof body.failed_tracks === "number" ? body.failed_tracks : -1;
+
+        if (bodySucceeded >= 0 && bodyFailed >= 0) {
+          await env.DB.prepare(`
+            UPDATE ingest_runs
+            SET status = ?,
+                ended_at = ?,
+                succeeded_tracks = ?,
+                failed_tracks = ?,
+                total_tracks = MAX(total_tracks, ? + ?),
+                updated_at = ?
+            WHERE id = ?
+          `).bind(finalRunStatus, now, bodySucceeded, bodyFailed, bodySucceeded, bodyFailed, now, activeRunId).run();
+        } else {
+          await env.DB.prepare(`
+            UPDATE ingest_runs
+            SET status = ?,
+                ended_at = ?,
+                succeeded_tracks = (SELECT COUNT(*) FROM ingest_items WHERE run_id = ? AND status IN ('succeeded', 'skipped_archive')),
+                failed_tracks = (SELECT COUNT(*) FROM ingest_items WHERE run_id = ? AND status = 'failed'),
+                total_tracks = MAX(total_tracks, (SELECT COUNT(*) FROM ingest_items WHERE run_id = ?)),
+                updated_at = ?
+            WHERE id = ?
+          `).bind(finalRunStatus, now, activeRunId, activeRunId, activeRunId, now, activeRunId).run();
+        }
       }
 
-      return jsonResponse({ success: true, timestamp: now }, 200);
+      return jsonResponse({ success: true, timestamp: now, run_id: activeRunId }, 200);
 
     } catch (err) {
       return jsonResponse({ success: false, error: "Failed to record update: " + err.message }, 500);
@@ -304,20 +451,29 @@ export async function handleIngest(request, env, url) {
       const runId = url.searchParams.get("run_id") || url.searchParams.get("job_id") || url.searchParams.get("id");
       const githubRunId = url.searchParams.get("github_run_id") || url.searchParams.get("run_id_gh");
 
+      // Check if there is an active run in progress or queued
+      const activeRunning = await env.DB.prepare(`
+        SELECT * FROM ingest_runs
+        WHERE status IN ('in_progress', 'queued')
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).first();
+
       let run = null;
-      if (runId) {
+      if (activeRunning) {
+        // Always prioritize the active running batch
+        run = activeRunning;
+      } else if (runId) {
         run = await env.DB.prepare(`SELECT * FROM ingest_runs WHERE id = ?`).bind(runId).first();
       } else if (githubRunId) {
         run = await env.DB.prepare(`SELECT * FROM ingest_runs WHERE github_run_id = ?`).bind(githubRunId).first();
       }
 
       if (!run) {
-        // Default / Fallback: return active running batch first, or the most recent run
+        // Default fallback: most recent run
         run = await env.DB.prepare(`
           SELECT * FROM ingest_runs
-          ORDER BY
-            CASE WHEN status IN ('in_progress', 'queued') THEN 0 ELSE 1 END ASC,
-            created_at DESC
+          ORDER BY created_at DESC
           LIMIT 1
         `).first();
       }
@@ -335,10 +491,21 @@ export async function handleIngest(request, env, url) {
         SELECT * FROM ingest_items WHERE run_id = ? ORDER BY track_index ASC
       `).bind(run.id).all();
 
+      const items = itemsResult.results || [];
+
+      // Ensure counts in run object accurately reflect items
+      if (items.length > 0) {
+        const computedSucceeded = items.filter(it => it.status === "succeeded" || it.status === "skipped_archive").length;
+        const computedFailed = items.filter(it => it.status === "failed").length;
+        run.succeeded_tracks = Math.max(run.succeeded_tracks || 0, computedSucceeded);
+        run.failed_tracks = Math.max(run.failed_tracks || 0, computedFailed);
+        run.total_tracks = Math.max(run.total_tracks || 0, items.length);
+      }
+
       return jsonResponse({
         success: true,
         run: run,
-        items: itemsResult.results || []
+        items: items
       }, 200);
 
     } catch (err) {
