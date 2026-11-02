@@ -736,11 +736,8 @@
         this.updateSelectionUI();
         this.close();
 
-        if (showToast) showToast(`Dispatched ${videos.length} track(s) to GitHub Actions!`);
-        if (window.Trove.activity) {
-          window.Trove.activity.startPolling();
-          window.Trove.activity.open();
-        }
+        const toastFn = showToast || window.Trove.utils?.showToast;
+        if (toastFn) toastFn(`Dispatched ${videos.length} track(s) for ingestion!`);
 
       } catch (err) {
         console.error('Download dispatch error:', err);
