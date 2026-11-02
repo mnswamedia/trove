@@ -882,45 +882,63 @@
       if (this.isExtractingQueue || this.extractionQueue.length === 0) return;
       this.isExtractingQueue = true;
 
-      while (this.extractionQueue.length > 0) {
-        const path = this.extractionQueue.shift();
-        const item = (state.allItems || []).find(i => i.path === path);
-        if (!item) continue;
+      const CONCURRENCY = 8;
 
-        try {
-          // 1. Check IDB, dedicated covers/ folder, or sidecar metadata
-          // WITHOUT downloading the multi-megabyte media file!
-          let thumbUrl = null;
-          if (typeof player.getCoverThumbnail === 'function') {
-            thumbUrl = await player.getCoverThumbnail(item);
-          }
+      const worker = async () => {
+        while (this.extractionQueue.length > 0) {
+          const path = this.extractionQueue.shift();
+          if (!path) continue;
+          if (player.thumbnailCache?.has(path)) continue;
+          const item = (state.allItems || []).find(i => i.path === path);
+          if (!item) continue;
 
-          // 2. Fall back to downloading full media file ONLY if dedicated cover doesn't exist
-          if (!thumbUrl) {
-            const mediaEntry = await player.getMediaBlobAndUrl(item);
-            if (mediaEntry && mediaEntry.blob) {
-              thumbUrl = await player.extractThumbnail(mediaEntry.blob, item);
+          try {
+            // 1. Check IDB, dedicated covers/ folder, or sidecar metadata
+            // WITHOUT downloading the multi-megabyte media file!
+            let thumbUrl = null;
+            if (typeof player.getCoverThumbnail === 'function') {
+              thumbUrl = await player.getCoverThumbnail(item);
             }
-          }
 
-          if (thumbUrl && this.elements.fileList) {
-            const slots = this.elements.fileList.querySelectorAll('.list-thumb-slot');
-            slots.forEach(slot => {
-              if (slot.dataset.filePath === path) {
-                const img = slot.querySelector('.list-thumb-img');
-                const iconWrapper = slot.querySelector('.list-thumb-icon-wrapper');
-                if (img && iconWrapper) {
-                  img.src = thumbUrl;
-                  img.classList.remove('hidden');
-                  iconWrapper.classList.add('hidden');
-                }
+            // 2. Fall back to downloading full media file ONLY if dedicated cover doesn't exist
+            if (!thumbUrl) {
+              const mediaEntry = await player.getMediaBlobAndUrl(item);
+              if (mediaEntry && mediaEntry.blob) {
+                thumbUrl = await player.extractThumbnail(mediaEntry.blob, item);
               }
-            });
-          }
-        } catch (_) {}
+            }
+
+            if (thumbUrl && this.elements.fileList) {
+              const slots = this.elements.fileList.querySelectorAll('.list-thumb-slot');
+              slots.forEach(slot => {
+                if (slot.dataset.filePath === path) {
+                  const img = slot.querySelector('.list-thumb-img');
+                  const iconWrapper = slot.querySelector('.list-thumb-icon-wrapper');
+                  if (img && iconWrapper) {
+                    img.src = thumbUrl;
+                    img.classList.remove('hidden');
+                    iconWrapper.classList.add('hidden');
+                  }
+                }
+              });
+            }
+          } catch (_) {}
+        }
+      };
+
+      const workers = [];
+      const workerCount = Math.min(CONCURRENCY, this.extractionQueue.length);
+      for (let i = 0; i < workerCount; i++) {
+        workers.push(worker());
       }
+      await Promise.all(workers);
 
       this.isExtractingQueue = false;
+
+      // Drain any new items enqueued while workers were active
+      if (this.extractionQueue.length > 0) {
+        this.processExtractionQueue();
+      }
     },
 
     async loadStoredThumbnails() {
