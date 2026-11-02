@@ -1,11 +1,12 @@
 /**
  * Trove Media Vault - Native Mobile Touch Gestures Engine
  *
- * Implements 60/120fps hardware-accelerated gestures without external dependencies:
- *   1. Pull-Down to Refresh (Vault Explorer #file-list)
- *   2. Swipe Track Right to Add to Queue (Revealing green action underlayer with icon)
- *   3. Expanded Player Gestures (Drag down to minimize, swipe left/right to skip tracks)
- *   4. Mini-Player Bar Gestures (Swipe up to expand, swipe left/right to skip tracks)
+ * Implements 60/120fps hardware-accelerated gestures with authentic spring physics:
+ *   1. Pull-Down to Refresh (Vault Explorer #file-list) with natural logarithmic rubber-band
+ *   2. Swipe Track Right to Add to Queue (Revealing green action underlayer with dynamic icon scale)
+ *   3. Expanded Player Sheet: Fluid drag down to dismiss (with scale & radius, zero duplicated animation)
+ *   4. Expanded Player Artwork: Horizontal swipe with 3D rotational tilt, instant base fallback, and smooth spring entry
+ *   5. Mini-Player Bottom Bar: Swipe up to expand, swipe left/right to skip with click suppression
  */
 (function() {
   window.Trove = window.Trove || {};
@@ -21,7 +22,7 @@
       this.initBottomBarGestures();
     },
 
-    // 1. PULL-DOWN TO REFRESH
+    // 1. PULL-DOWN TO REFRESH (#file-list)
     initPullToRefresh() {
       const fileList = document.getElementById('file-list');
       const indicator = document.getElementById('pull-refresh-indicator');
@@ -37,7 +38,6 @@
 
       fileList.addEventListener('touchstart', (e) => {
         if (this.isRefreshing) return;
-        // Only engage when scrolled to the very top
         if (fileList.scrollTop <= 0) {
           startY = e.touches[0].clientY;
           startX = e.touches[0].clientX;
@@ -58,17 +58,17 @@
         const diffY = currentY - startY;
         const diffX = currentX - startX;
 
-        // If user is pulling downward and mostly vertical
-        if (diffY > 5 && Math.abs(diffY) > Math.abs(diffX) * 1.2) {
+        // Disambiguate downward pull from horizontal scroll
+        if (diffY > 6 && Math.abs(diffY) > Math.abs(diffX) * 1.3) {
           isPulling = true;
-          // Apply rubber-band damping
-          pullDistance = Math.min(diffY * 0.42, 95);
+          // Organic logarithmic rubber-band damping
+          pullDistance = Math.min(95, Math.pow(diffY, 0.82) * 1.6);
 
           if (e.cancelable) e.preventDefault();
 
           indicator.style.transition = 'none';
-          indicator.style.opacity = `${Math.min(1, pullDistance / 35)}`;
-          indicator.style.transform = `translate(-50%, ${pullDistance - 35}px)`;
+          indicator.style.opacity = `${Math.min(1, pullDistance / 40)}`;
+          indicator.style.transform = `translate3d(-50%, ${pullDistance - 38}px, 0)`;
 
           if (icon) {
             const rot = (pullDistance / THRESHOLD) * 360;
@@ -78,10 +78,10 @@
           if (text) {
             if (pullDistance >= THRESHOLD) {
               text.innerText = 'Release to refresh';
-              indicator.classList.add('border-emerald-500/50', 'bg-emerald-50/90', 'dark:bg-emerald-950/90');
+              indicator.classList.add('border-emerald-500/50', 'bg-emerald-50/95', 'dark:bg-emerald-950/95');
             } else {
               text.innerText = 'Pull to refresh';
-              indicator.classList.remove('border-emerald-500/50', 'bg-emerald-50/90', 'dark:bg-emerald-950/90');
+              indicator.classList.remove('border-emerald-500/50', 'bg-emerald-50/95', 'dark:bg-emerald-950/95');
             }
           }
         }
@@ -101,19 +101,19 @@
             icon.style.transform = '';
             icon.classList.add('animate-spin');
           }
-          indicator.style.transition = 'transform 0.25s ease-out, opacity 0.25s ease-out';
-          indicator.style.transform = 'translate(-50%, 25px)';
+          indicator.style.transition = 'transform 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.15), opacity 0.25s ease-out';
+          indicator.style.transform = 'translate3d(-50%, 22px, 0)';
           indicator.style.opacity = '1';
 
           if (window.Trove.explorer && typeof window.Trove.explorer.loadRepository === 'function') {
             window.Trove.explorer.loadRepository(true).finally(() => {
               setTimeout(() => {
-                indicator.style.transition = 'transform 0.25s ease-in, opacity 0.25s ease-in';
-                indicator.style.transform = 'translate(-50%, -48px)';
+                indicator.style.transition = 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease-in';
+                indicator.style.transform = 'translate3d(-50%, -48px, 0)';
                 indicator.style.opacity = '0';
                 setTimeout(() => {
                   if (icon) icon.classList.remove('animate-spin');
-                  indicator.classList.remove('border-emerald-500/50', 'bg-emerald-50/90', 'dark:bg-emerald-950/90');
+                  indicator.classList.remove('border-emerald-500/50', 'bg-emerald-50/95', 'dark:bg-emerald-950/95');
                   this.isRefreshing = false;
                   if (window.lucide) window.lucide.createIcons();
                 }, 250);
@@ -123,8 +123,8 @@
             this.isRefreshing = false;
           }
         } else {
-          indicator.style.transition = 'transform 0.2s ease-out, opacity 0.2s ease-out';
-          indicator.style.transform = 'translate(-50%, -48px)';
+          indicator.style.transition = 'transform 0.24s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s ease-out';
+          indicator.style.transform = 'translate3d(-50%, -48px, 0)';
           indicator.style.opacity = '0';
         }
         pullDistance = 0;
@@ -141,6 +141,7 @@
 
       let activeRow = null;
       let activeReveal = null;
+      let activeBadge = null;
       let startX = 0;
       let startY = 0;
       let isHorizontal = false;
@@ -153,6 +154,7 @@
         if (!row || row.dataset.isDir === 'true') {
           activeRow = null;
           activeReveal = null;
+          activeBadge = null;
           return;
         }
 
@@ -162,6 +164,7 @@
         activeRow = row;
         const wrapper = row.closest('.file-row-wrapper');
         activeReveal = wrapper ? wrapper.querySelector('.swipe-queue-reveal') : null;
+        activeBadge = activeReveal ? activeReveal.querySelector('div') : null;
 
         startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
@@ -179,11 +182,10 @@
         const diffX = currentX - startX;
         const diffY = currentY - startY;
 
-        // Determine direction in first 10px
+        // Disambiguate within first 8px
         if (!isDetermined && (Math.abs(diffX) > 8 || Math.abs(diffY) > 8)) {
           isDetermined = true;
-          // Swiping right?
-          if (diffX > 8 && Math.abs(diffX) > Math.abs(diffY) * 1.2) {
+          if (diffX > 8 && Math.abs(diffX) > Math.abs(diffY) * 1.3) {
             isHorizontal = true;
             this.isSwipingRow = true;
             activeRow.classList.add('select-none');
@@ -193,40 +195,44 @@
               const underlayer = document.createElement('div');
               underlayer.className = 'swipe-queue-reveal absolute inset-y-0 left-0 w-full bg-emerald-600 dark:bg-emerald-600 flex items-center px-4 text-white font-semibold text-xs select-none pointer-events-none transition-colors';
               underlayer.innerHTML = `
-                <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs">
+                <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs transition-transform duration-150">
                   <svg class="w-4 h-4 shrink-0 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 12H3"/><path d="M16 6H3"/><path d="M16 18H3"/><path d="M18 9v6"/><path d="M21 12h-6"/></svg>
                   <span class="tracking-wider text-[11px] font-bold uppercase text-white">Add to Queue</span>
                 </div>
               `;
               activeRow.parentElement.insertBefore(underlayer, activeRow);
               activeReveal = underlayer;
+              activeBadge = underlayer.querySelector('div');
             }
           } else {
             isHorizontal = false;
             activeRow = null;
             activeReveal = null;
+            activeBadge = null;
             return;
           }
         }
 
         if (isHorizontal && diffX > 0) {
           if (e.cancelable) e.preventDefault();
-          // Rubber band effect beyond 125px
-          currentDeltaX = diffX > 125 ? 125 + (diffX - 125) * 0.28 : diffX;
+          // Progressive rubber-band travel
+          currentDeltaX = diffX > 80 ? 80 + (diffX - 80) * 0.35 : diffX;
           activeRow.style.transition = 'none';
-          activeRow.style.transform = `translateX(${currentDeltaX}px)`;
+          activeRow.style.transform = `translate3d(${currentDeltaX}px, 0, 0)`;
 
-          // Visual cue when threshold crossed
+          // Visual cue & dynamic badge scaling
           if (activeReveal) {
-            const badge = activeReveal.querySelector('div');
+            const scale = Math.min(1.08, 0.8 + (currentDeltaX / SWIPE_THRESHOLD) * 0.28);
+            if (activeBadge) activeBadge.style.transform = `scale(${scale})`;
+
             if (currentDeltaX >= SWIPE_THRESHOLD) {
               activeReveal.classList.remove('bg-emerald-600', 'dark:bg-emerald-600');
               activeReveal.classList.add('bg-emerald-500', 'dark:bg-emerald-500');
-              if (badge) badge.classList.add('scale-105', 'bg-white/30');
+              if (activeBadge) activeBadge.classList.add('bg-white/30');
             } else {
               activeReveal.classList.add('bg-emerald-600', 'dark:bg-emerald-600');
               activeReveal.classList.remove('bg-emerald-500', 'dark:bg-emerald-500');
-              if (badge) badge.classList.remove('scale-105', 'bg-white/30');
+              if (activeBadge) activeBadge.classList.remove('bg-white/30');
             }
           }
         }
@@ -237,8 +243,10 @@
 
         const row = activeRow;
         const reveal = activeReveal;
+        const badge = activeBadge;
         activeRow = null;
         activeReveal = null;
+        activeBadge = null;
 
         if (isHorizontal && currentDeltaX >= SWIPE_THRESHOLD) {
           if (navigator.vibrate) navigator.vibrate(30);
@@ -252,9 +260,9 @@
           }
         }
 
-        // Animate row back smoothly
-        row.style.transition = 'transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1)';
-        row.style.transform = 'translateX(0)';
+        // Tactile spring return
+        row.style.transition = 'transform 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.15)';
+        row.style.transform = 'translate3d(0, 0, 0)';
         setTimeout(() => {
           row.style.transition = '';
           row.style.transform = '';
@@ -262,19 +270,21 @@
           if (reveal) {
             reveal.classList.add('bg-emerald-600', 'dark:bg-emerald-600');
             reveal.classList.remove('bg-emerald-500', 'dark:bg-emerald-500');
-            const badge = reveal.querySelector('div');
-            if (badge) badge.classList.remove('scale-105', 'bg-white/30');
+            if (badge) {
+              badge.style.transform = '';
+              badge.classList.remove('bg-white/30');
+            }
           }
           setTimeout(() => {
             this.isSwipingRow = false;
           }, 80);
-        }, 250);
+        }, 290);
       };
 
       fileList.addEventListener('touchend', endRowSwipe, { passive: true });
       fileList.addEventListener('touchcancel', endRowSwipe, { passive: true });
 
-      // Intercept clicks on rows if user just swiped
+      // Suppress clicks on rows if user just swiped
       fileList.addEventListener('click', (e) => {
         if (this.isSwipingRow) {
           e.stopPropagation();
@@ -283,7 +293,7 @@
       }, true);
     },
 
-    // 3. EXPANDED PLAYER GESTURES (SWIPE DOWN TO MINIMIZE, SWIPE LEFT/RIGHT TO SKIP)
+    // 3. EXPANDED PLAYER GESTURES (DRAG DOWN TO MINIMIZE & HORIZONTAL SWIPE TO SKIP)
     initExpandedPlayerGestures() {
       const expandedPlayer = document.getElementById('expanded-player');
       const coverArt = document.getElementById('expanded-cover-art');
@@ -298,11 +308,10 @@
       let isDetermined = false;
 
       expandedPlayer.addEventListener('touchstart', (e) => {
-        // Only active when player is actually expanded
         const playerState = window.Trove.player || {};
         if (playerState.isExpanded === false) return;
 
-        // Ignore touches on interactive controls (buttons, range sliders, select, lyrics scrolling)
+        // Ignore touches on interactive controls (buttons, sliders, select, lyrics scroll container)
         if (e.target.closest('button, input, select, a, #lyrics-scroll-body, #expanded-lyrics-container')) return;
 
         startX = e.touches[0].clientX;
@@ -327,11 +336,11 @@
 
         if (!isDetermined && (absX > 8 || absY > 8)) {
           isDetermined = true;
-          // Downward drag to minimize
-          if (diffY > 8 && diffY > absX * 0.9) {
+          // Downward drag to dismiss
+          if (diffY > 8 && diffY > absX * 1.1) {
             gestureMode = 'down';
-          } else if (absX > 8 && absX > absY * 0.9) {
-            // Horizontal swipe to skip
+          } else if (absX > 8 && absX > absY * 1.1) {
+            // Horizontal swipe to skip track
             gestureMode = 'horizontal';
           } else {
             gestureMode = null;
@@ -343,19 +352,24 @@
         if (gestureMode === 'down') {
           if (diffY > 0) {
             if (e.cancelable) e.preventDefault();
-            // Fluid downward sheet movement with rubber-band damping
+            // Fluid downward sheet movement with dynamic micro-scale & corner-radius
+            const pullDown = diffY * 0.85;
+            const scale = Math.max(0.93, 1 - (pullDown / 2500));
             expandedPlayer.style.transition = 'none';
-            expandedPlayer.style.transform = `translateY(${diffY}px)`;
-            const opacity = Math.max(0.65, 1 - (diffY / 550));
+            expandedPlayer.style.transform = `translate3d(0, ${pullDown}px, 0) scale(${scale})`;
+            expandedPlayer.style.borderRadius = `${Math.min(28, (pullDown / 100) * 28)}px`;
+            const opacity = Math.max(0.72, 1 - (pullDown / 650));
             expandedPlayer.style.opacity = `${opacity}`;
           }
         } else if (gestureMode === 'horizontal') {
           if (e.cancelable) e.preventDefault();
-          // Visual horizontal drag feedback on the album cover art
+          // Visual horizontal travel with subtle 3D rotational tilt on cover art
           if (coverArt) {
+            const travelX = diffX * 0.65;
+            const tilt = (diffX / 300) * 7;
             coverArt.style.transition = 'none';
-            coverArt.style.transform = `translateX(${diffX * 0.45}px)`;
-            const fade = Math.max(0.4, 1 - (absX / 280));
+            coverArt.style.transform = `translate3d(${travelX}px, 0, 0) rotate(${tilt}deg)`;
+            const fade = Math.max(0.45, 1 - (absX / 320));
             coverArt.style.opacity = `${fade}`;
           }
         }
@@ -366,31 +380,28 @@
         isTracking = false;
 
         if (gestureMode === 'down') {
-          const THRESHOLD_MINIMIZE = 85;
+          const THRESHOLD_MINIMIZE = 80;
           if (diffY >= THRESHOLD_MINIMIZE) {
             if (navigator.vibrate) navigator.vibrate(20);
-            // Animate sheet sliding away smoothly
-            expandedPlayer.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.22s ease';
-            expandedPlayer.style.transform = 'translateY(100%)';
+            // Single, clean dismissal: animate directly off-screen
+            expandedPlayer.style.transition = 'transform 0.24s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease-out';
+            expandedPlayer.style.transform = 'translate3d(0, 100%, 0) scale(0.9)';
             expandedPlayer.style.opacity = '0';
             setTimeout(() => {
-              expandedPlayer.style.transition = '';
-              expandedPlayer.style.transform = '';
-              expandedPlayer.style.opacity = '';
+              // Pass skipAnimation = true so player.minimize does NOT replay duplicate animation!
               if (window.Trove.player && typeof window.Trove.player.minimize === 'function') {
-                window.Trove.player.minimize();
+                window.Trove.player.minimize(true);
               }
-            }, 210);
+            }, 230);
           } else {
-            // Snap back up
-            expandedPlayer.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.22s ease';
-            expandedPlayer.style.transform = 'translateY(0%)';
+            // Elastic spring back to fullscreen
+            expandedPlayer.style.transition = 'transform 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.1), opacity 0.22s ease-out';
+            expandedPlayer.style.transform = 'translate3d(0, 0, 0) scale(1)';
             expandedPlayer.style.opacity = '1';
+            expandedPlayer.style.borderRadius = '';
             setTimeout(() => {
               expandedPlayer.style.transition = '';
-              expandedPlayer.style.transform = '';
-              expandedPlayer.style.opacity = '';
-            }, 230);
+            }, 290);
           }
         } else if (gestureMode === 'horizontal') {
           const THRESHOLD_SKIP = 48;
@@ -401,10 +412,10 @@
             const isNext = diffX < 0; // Swipe Left = Next, Swipe Right = Previous
 
             if (coverArt) {
-              // Slide out in swipe direction
-              coverArt.style.transition = 'transform 0.16s ease-out, opacity 0.16s ease-out';
-              coverArt.style.transform = `translateX(${isNext ? -90 : 90}px)`;
-              coverArt.style.opacity = '0.1';
+              // Slide out in swipe direction with slight tilt
+              coverArt.style.transition = 'transform 0.18s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.15s ease-out';
+              coverArt.style.transform = `translate3d(${isNext ? -130 : 130}px, 0, 0) rotate(${isNext ? -12 : 12}deg)`;
+              coverArt.style.opacity = '0';
 
               setTimeout(() => {
                 if (window.Trove.player) {
@@ -416,22 +427,22 @@
                     else if (typeof window.Trove.player.previous === 'function') window.Trove.player.previous();
                   }
                 }
-                // Prepare slide in from opposite side
+                // Prepare entry from opposite side with scale
                 coverArt.style.transition = 'none';
-                coverArt.style.transform = `translateX(${isNext ? 90 : -90}px)`;
-                coverArt.style.opacity = '0.2';
+                coverArt.style.transform = `translate3d(${isNext ? 90 : -90}px, 0, 0) rotate(${isNext ? 8 : -8}deg) scale(0.93)`;
+                coverArt.style.opacity = '0.3';
 
                 requestAnimationFrame(() => {
-                  coverArt.style.transition = 'transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.24s ease';
-                  coverArt.style.transform = 'translateX(0)';
+                  coverArt.style.transition = 'transform 0.32s cubic-bezier(0.175, 0.885, 0.32, 1.1), opacity 0.26s ease-out';
+                  coverArt.style.transform = 'translate3d(0, 0, 0) rotate(0deg) scale(1)';
                   coverArt.style.opacity = '1';
                   setTimeout(() => {
                     coverArt.style.transition = '';
                     coverArt.style.transform = '';
                     coverArt.style.opacity = '';
-                  }, 250);
+                  }, 330);
                 });
-              }, 160);
+              }, 170);
             } else if (window.Trove.player) {
               if (isNext) {
                 if (typeof window.Trove.player.playNext === 'function') window.Trove.player.playNext();
@@ -442,15 +453,15 @@
               }
             }
           } else if (coverArt) {
-            // Snap cover back to center
-            coverArt.style.transition = 'transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.2s ease';
-            coverArt.style.transform = 'translateX(0)';
+            // Spring back to center
+            coverArt.style.transition = 'transform 0.26s cubic-bezier(0.175, 0.885, 0.32, 1.15), opacity 0.2s ease-out';
+            coverArt.style.transform = 'translate3d(0, 0, 0) rotate(0deg) scale(1)';
             coverArt.style.opacity = '1';
             setTimeout(() => {
               coverArt.style.transition = '';
               coverArt.style.transform = '';
               coverArt.style.opacity = '';
-            }, 210);
+            }, 270);
           }
         }
 
@@ -504,11 +515,11 @@
           if (absX > absY) {
             if (e.cancelable) e.preventDefault();
             // Subtle horizontal nudge feedback
-            bottomPlayBar.style.transform = `translateX(${bDiffX * 0.22}px)`;
+            bottomPlayBar.style.transform = `translate3d(${bDiffX * 0.22}px, 0, 0)`;
           } else if (bDiffY < 0) {
             if (e.cancelable) e.preventDefault();
             // Subtle lift feedback on swipe up
-            bottomPlayBar.style.transform = `translateY(${bDiffY * 0.3}px)`;
+            bottomPlayBar.style.transform = `translate3d(0, ${bDiffY * 0.28}px, 0)`;
           }
         }
       }, { passive: false });
@@ -517,11 +528,12 @@
         if (!isBarTracking) return;
         isBarTracking = false;
 
-        bottomPlayBar.style.transition = 'transform 0.22s ease-out';
-        bottomPlayBar.style.transform = '';
+        bottomPlayBar.style.transition = 'transform 0.24s cubic-bezier(0.175, 0.885, 0.32, 1.15)';
+        bottomPlayBar.style.transform = 'translate3d(0, 0, 0)';
         setTimeout(() => {
           bottomPlayBar.style.transition = '';
-        }, 230);
+          bottomPlayBar.style.transform = '';
+        }, 250);
 
         if (isBarSwiping) {
           // Suppress the click event on bar-expand-trigger
@@ -532,7 +544,7 @@
           bottomPlayBar.addEventListener('click', suppressClick, { capture: true, once: true });
           setTimeout(() => {
             bottomPlayBar.removeEventListener('click', suppressClick, { capture: true });
-          }, 250);
+          }, 260);
 
           const absX = Math.abs(bDiffX);
           const absY = Math.abs(bDiffY);
