@@ -715,9 +715,15 @@
           <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f]">
             ${isPlayable ? `
             <div class="swipe-queue-reveal absolute inset-y-0 left-0 w-full bg-emerald-600 dark:bg-emerald-600 flex items-center px-4 text-white font-semibold text-xs select-none pointer-events-none transition-colors">
-              <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs">
+              <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs transition-transform duration-150">
                 <i data-lucide="list-plus" class="w-4 h-4 shrink-0 text-white"></i>
                 <span class="tracking-wider text-[11px] font-bold uppercase text-white">Add to Queue</span>
+              </div>
+            </div>
+            <div class="swipe-playlist-reveal absolute inset-y-0 right-0 w-full bg-amber-600 dark:bg-amber-600 flex items-center justify-end px-4 text-white font-semibold text-xs select-none pointer-events-none transition-colors">
+              <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs transition-transform duration-150">
+                <span class="tracking-wider text-[11px] font-bold uppercase text-white">Add to Playlist</span>
+                <i data-lucide="folder-plus" class="w-4 h-4 shrink-0 text-white"></i>
               </div>
             </div>
             ` : ''}

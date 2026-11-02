@@ -351,7 +351,7 @@
       <!-- File List Card (Fills remaining height) -->
       <div class="relative flex-1 flex flex-col min-h-0 bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#262c38] rounded-xl shadow-sm overflow-hidden transition-colors">
         <!-- Pull to Refresh Floating Pill Indicator -->
-        <div id="pull-refresh-indicator" class="pointer-events-none absolute top-12 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/95 dark:bg-[#1c212c]/95 border border-almond-cream/80 dark:border-[#2f3747] shadow-lg opacity-0 -translate-y-12 transition-all duration-200 select-none">
+        <div id="pull-refresh-indicator" class="pointer-events-none absolute top-12 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/95 dark:bg-[#1c212c]/95 border border-almond-cream/80 dark:border-[#2f3747] shadow-lg opacity-0 -translate-y-12 select-none">
           <i data-lucide="refresh-cw" id="pull-refresh-icon" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f] transition-transform"></i>
           <span id="pull-refresh-text" class="text-[11px] font-semibold text-stone-brown dark:text-[#f3f4f6]">Pull to refresh</span>
         </div>
@@ -392,7 +392,7 @@
     <footer id="app-footer" class="shrink-0 py-0.5 flex items-center justify-center gap-1.5 sm:gap-2 text-[10px] text-stone-brown/60 dark:text-[#758092] transition-colors select-none">
       <span>Trove · Hugging Face Dataset Explorer</span>
       <span>•</span>
-      <button id="footer-version" type="button" class="font-mono font-semibold text-stone-brown/80 dark:text-[#9aa4b2] hover:text-black dark:hover:text-white hover:underline transition cursor-pointer" title="Click to check for updates & clear cache">v40</button>
+      <button id="footer-version" type="button" class="font-mono font-semibold text-stone-brown/80 dark:text-[#9aa4b2] hover:text-black dark:hover:text-white hover:underline transition cursor-pointer" title="Click to check for updates & clear cache">v41</button>
       <span>•</span>
       <span id="footer-status">Ready</span>
     </footer>
@@ -435,6 +435,9 @@
           <div class="flex items-center gap-2 mt-0.5">
             <span id="bar-time-current" class="text-[11px] font-mono text-stone-brown/70 dark:text-[#8b95a5] shrink-0">0:00</span>
             <div class="relative flex-1 flex items-center" onclick="event.stopPropagation();">
+              <div id="bar-time-bubble" class="absolute -top-6 left-0 -translate-x-1/2 pointer-events-none opacity-0 scale-75 transition-all duration-150 z-20 px-1.5 py-0.2 rounded-full bg-jet-black dark:bg-[#282f3e] text-white dark:text-[#f3f4f6] font-mono text-[10px] font-bold shadow-md">
+                0:00
+              </div>
               <input 
                 type="range" 
                 id="bar-progress-slider" 
@@ -509,11 +512,31 @@
         </div>
 
         <!-- Cover Art View (Visible by default) -->
-        <div id="expanded-cover-art" class="relative group flex items-center justify-center w-full max-w-full max-h-[38vh] sm:max-h-[42vh] rounded-2xl shadow-2xl overflow-hidden border border-almond-cream dark:border-[#2b3240] bg-almond-cream/20 dark:bg-[#15181f] transition-all duration-300">
+        <div id="expanded-cover-art" class="relative group flex items-center justify-center w-full max-w-full max-h-[38vh] sm:max-h-[42vh] rounded-2xl shadow-2xl overflow-hidden border border-almond-cream dark:border-[#2b3240] bg-almond-cream/20 dark:bg-[#15181f] transition-colors duration-200">
           <img id="expanded-cover-img" class="max-w-full max-h-[38vh] sm:max-h-[42vh] w-auto h-auto object-contain rounded-2xl hidden" alt="Album Art">
           <div id="expanded-cover-fallback" class="w-52 h-52 sm:w-60 sm:h-60 flex flex-col items-center justify-center text-stone-brown/60 dark:text-[#758092] gap-3 p-6">
             <i data-lucide="music" id="expanded-cover-icon" class="w-14 h-14 sm:w-16 sm:h-16"></i>
             <span class="text-xs font-mono font-medium">Audio Track</span>
+          </div>
+
+          <!-- Double-tap Rewind Ripple Overlay -->
+          <div id="cover-tap-rewind-indicator" class="pointer-events-none absolute inset-y-0 left-0 w-1/2 flex items-center justify-center bg-black/35 backdrop-blur-xs text-white opacity-0 transition-opacity duration-200 z-20">
+            <div class="flex flex-col items-center gap-1 scale-90 transition-transform duration-200">
+              <div class="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center shadow-lg">
+                <i data-lucide="rotate-ccw" class="w-6 h-6 text-white"></i>
+              </div>
+              <span class="text-xs font-mono font-bold tracking-wider">-10s</span>
+            </div>
+          </div>
+
+          <!-- Double-tap Fast-Forward Ripple Overlay -->
+          <div id="cover-tap-forward-indicator" class="pointer-events-none absolute inset-y-0 right-0 w-1/2 flex items-center justify-center bg-black/35 backdrop-blur-xs text-white opacity-0 transition-opacity duration-200 z-20">
+            <div class="flex flex-col items-center gap-1 scale-90 transition-transform duration-200">
+              <div class="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center shadow-lg">
+                <i data-lucide="rotate-cw" class="w-6 h-6 text-white"></i>
+              </div>
+              <span class="text-xs font-mono font-bold tracking-wider">+10s</span>
+            </div>
           </div>
         </div>
 
@@ -574,7 +597,10 @@
     <!-- Bottom Controls Area -->
     <div class="max-w-2xl w-full mx-auto px-4 pb-5 pt-1 sm:pb-7 md:pb-8 flex flex-col gap-3 sm:gap-4">
       <!-- Scrubber -->
-      <div class="flex flex-col gap-1.5">
+      <div class="relative flex flex-col gap-1.5">
+        <div id="expanded-time-bubble" class="absolute -top-7 left-0 -translate-x-1/2 pointer-events-none opacity-0 scale-75 transition-all duration-150 z-20 px-2 py-0.5 rounded-full bg-jet-black dark:bg-[#282f3e] text-white dark:text-[#f3f4f6] font-mono text-[11px] font-bold shadow-md flex items-center justify-center">
+          0:00
+        </div>
         <input 
           type="range" 
           id="expanded-progress-slider" 
@@ -1100,6 +1126,53 @@
         <div id="detail-track-list" class="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col gap-1.5"></div>
       </div>
 
+    </div>
+  </div>
+
+  <!-- Track Context Bottom Action Sheet (Triggered by Long-Press / Haptic Touch) -->
+  <div id="track-context-sheet" class="fixed inset-0 bg-black/40 dark:bg-black/70 backdrop-blur-sm z-[125] flex flex-col justify-end transition-opacity duration-200 opacity-0 pointer-events-none" style="display: none;">
+    <div id="track-context-backdrop" class="absolute inset-0"></div>
+    <div id="track-context-panel" class="relative w-full max-w-md mx-auto bg-white dark:bg-[#15181f] rounded-t-2xl sm:rounded-2xl sm:mb-6 border border-almond-cream dark:border-[#2b3240] shadow-2xl p-4 sm:p-5 flex flex-col gap-3 translate-y-full transition-transform duration-250 will-change-transform select-none">
+      <!-- Handle -->
+      <div class="w-10 h-1 rounded-full bg-stone-brown/20 dark:bg-white/20 mx-auto sm:hidden mb-1"></div>
+      
+      <!-- Track Header Preview -->
+      <div class="flex items-center gap-3 pb-3 border-b border-almond-cream/60 dark:border-[#252a36]">
+        <div id="context-sheet-icon" class="w-10 h-10 rounded-xl bg-almond-cream/60 dark:bg-[#202532] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0 shadow-xs">
+          <i data-lucide="music" class="w-5 h-5"></i>
+        </div>
+        <div class="flex flex-col min-w-0 flex-1">
+          <h4 id="context-sheet-title" class="text-sm font-bold text-black dark:text-[#f3f4f6] truncate">Track Title</h4>
+          <p id="context-sheet-meta" class="text-xs font-mono text-stone-brown/70 dark:text-[#8b95a5] truncate">Category • Size</p>
+        </div>
+        <button id="context-sheet-close-btn" type="button" class="p-1.5 text-stone-brown/60 hover:text-black dark:text-[#8b95a5] dark:hover:text-white rounded-lg">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Action Items -->
+      <div class="flex flex-col gap-1 text-sm font-medium">
+        <button id="ctx-btn-play" type="button" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition text-left cursor-pointer">
+          <i data-lucide="play" class="w-4 h-4 text-emerald-600 dark:text-emerald-400"></i>
+          <span>Play Now</span>
+        </button>
+        <button id="ctx-btn-play-next" type="button" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition text-left cursor-pointer">
+          <i data-lucide="list-video" class="w-4 h-4 text-blue-600 dark:text-blue-400"></i>
+          <span>Play Next</span>
+        </button>
+        <button id="ctx-btn-add-queue" type="button" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition text-left cursor-pointer">
+          <i data-lucide="list-plus" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]"></i>
+          <span>Add to Queue</span>
+        </button>
+        <button id="ctx-btn-add-playlist" type="button" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition text-left cursor-pointer">
+          <i data-lucide="folder-plus" class="w-4 h-4 text-amber-600 dark:text-amber-400"></i>
+          <span>Add to Playlist...</span>
+        </button>
+        <button id="ctx-btn-copy-link" type="button" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition text-left cursor-pointer">
+          <i data-lucide="link" class="w-4 h-4 text-stone-brown dark:text-[#8b95a5]"></i>
+          <span>Copy Direct Link</span>
+        </button>
+      </div>
     </div>
   </div>
 

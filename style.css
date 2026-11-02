@@ -325,3 +325,42 @@ code, .font-mono {
     transform: translateY(0) scale(1);
   }
 }
+
+/* =========================================================================
+   HARDWARE ACCELERATION & GESTURE 60/120 FPS OPTIMIZATIONS
+   ========================================================================= */
+.file-row-wrapper {
+  contain: layout paint;
+  position: relative;
+}
+
+.file-row {
+  touch-action: pan-y;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
+  transition: background-color 0.15s ease, border-color 0.15s ease !important;
+}
+
+.gesture-dragging {
+  transition: none !important;
+  will-change: transform !important;
+}
+
+#expanded-player {
+  touch-action: none;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+#expanded-cover-art {
+  touch-action: none;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+#pull-refresh-indicator {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+

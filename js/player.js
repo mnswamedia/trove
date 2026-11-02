@@ -1182,24 +1182,60 @@
         });
       }
 
-      // Progress sliders
-      const setupSlider = (slider) => {
+      // Progress sliders with floating Time-Bubble and micro-haptics
+      const setupSlider = (slider, bubbleId) => {
         if (!slider) return;
-        slider.addEventListener('mousedown', () => { this.isSeeking = true; });
-        slider.addEventListener('touchstart', () => { this.isSeeking = true; });
+        const bubble = bubbleId ? document.getElementById(bubbleId) : null;
+        let lastHapticStep = -1;
+
+        const updateBubble = (val) => {
+          const activeEl = this.getActiveElement();
+          const dur = activeEl && activeEl.duration ? activeEl.duration : 0;
+          const targetSec = (val / 100) * dur;
+
+          if (bubble) {
+            bubble.style.left = `${Math.max(4, Math.min(96, val))}%`;
+            bubble.innerText = formatTime(targetSec);
+            bubble.classList.remove('opacity-0', 'scale-75');
+            bubble.classList.add('opacity-100', 'scale-100');
+          }
+
+          if (this.elements.barTimeCurrent) this.elements.barTimeCurrent.innerText = formatTime(targetSec);
+          if (this.elements.expandedTimeCurrent) this.elements.expandedTimeCurrent.innerText = formatTime(targetSec);
+
+          // Micro-haptic tick every 30 seconds of scrub travel
+          const step = Math.floor(targetSec / 30);
+          if (step !== lastHapticStep && dur > 60) {
+            lastHapticStep = step;
+            if (navigator.vibrate) navigator.vibrate(10);
+          }
+        };
+
+        const hideBubble = () => {
+          if (bubble) {
+            bubble.classList.remove('opacity-100', 'scale-100');
+            bubble.classList.add('opacity-0', 'scale-75');
+          }
+          lastHapticStep = -1;
+        };
+
+        slider.addEventListener('mousedown', (e) => {
+          this.isSeeking = true;
+          updateBubble(e.target.value);
+        });
+        slider.addEventListener('touchstart', (e) => {
+          this.isSeeking = true;
+          updateBubble(e.target.value);
+        }, { passive: true });
 
         slider.addEventListener('input', (e) => {
-          const activeEl = this.getActiveElement();
-          if (activeEl && activeEl.duration) {
-            const targetSec = (e.target.value / 100) * activeEl.duration;
-            if (this.elements.barTimeCurrent) this.elements.barTimeCurrent.innerText = formatTime(targetSec);
-            if (this.elements.expandedTimeCurrent) this.elements.expandedTimeCurrent.innerText = formatTime(targetSec);
-          }
+          updateBubble(e.target.value);
         });
 
         const finishSeeking = (e) => {
           if (!this.isSeeking) return;
           this.isSeeking = false;
+          hideBubble();
           const activeEl = this.getActiveElement();
           if (activeEl && activeEl.duration) {
             activeEl.currentTime = (e.target.value / 100) * activeEl.duration;
@@ -1212,8 +1248,8 @@
         slider.addEventListener('change', finishSeeking);
       };
 
-      setupSlider(this.elements.barProgressSlider);
-      setupSlider(this.elements.expandedProgressSlider);
+      setupSlider(this.elements.barProgressSlider, 'bar-time-bubble');
+      setupSlider(this.elements.expandedProgressSlider, 'expanded-time-bubble');
 
       // Shuffle & Repeat
       if (this.elements.btnShuffle) {

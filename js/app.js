@@ -265,8 +265,26 @@
     });
   }
 
+  // Module-level update lock to prevent double reloads
+  let isUpdateInProgress = false;
+
   // 1-Tap Hard Update & PWA Cache Clear
-  async function forceAppUpdate() {
+  async function forceAppUpdate(e) {
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+    if (isUpdateInProgress) return;
+    isUpdateInProgress = true;
+
+    const versionEl = document.getElementById('footer-version');
+    const forceUpdateBtn = document.getElementById('btn-force-update');
+    if (versionEl) {
+      versionEl.style.opacity = '0.5';
+      versionEl.style.pointerEvents = 'none';
+    }
+    if (forceUpdateBtn) {
+      forceUpdateBtn.disabled = true;
+      forceUpdateBtn.style.opacity = '0.5';
+    }
+
     if (window.Trove.utils?.showToast) {
       window.Trove.utils.showToast('Checking for updates & clearing cache...');
     }
@@ -330,10 +348,9 @@
 
     // Register Service Worker for PWA
     if ('serviceWorker' in navigator) {
-      let refreshing = false;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!refreshing) {
-          refreshing = true;
+        if (!isUpdateInProgress) {
+          isUpdateInProgress = true;
           window.location.reload();
         }
       });
