@@ -66,20 +66,16 @@
     const isBucket = repo.isBucket !== false;
     const state = window.Trove.state || {};
 
-    // Common formats for covers: .jpg, .jpeg, .png, .webp
-    const exts = ['jpg', 'jpeg', 'png', 'webp'];
+    // Prioritize standard .jpg first (1 fast request), with fallback extensions
+    const exts = ['jpg', 'png', 'webp'];
     for (const ext of exts) {
       const fileName = `${encodedBase}.${ext}`;
       const candidateUrls = isBucket ? [
         `https://huggingface.co/buckets/${repo.id}/resolve/covers/${fileName}`,
-        `https://huggingface.co/buckets/${repo.id}/raw/covers/${fileName}`,
-        `${api.bucketsBase}/${repo.id}/raw/covers/${fileName}`,
-        `${api.bucketsBase}/${repo.id}/resolve/covers/${fileName}`,
         `https://huggingface.co/api/buckets/${repo.id}/raw/covers/${fileName}`
       ] : [
         `https://huggingface.co/datasets/${repo.id}/resolve/${repo.branch || 'main'}/covers/${fileName}`,
-        `https://huggingface.co/datasets/${repo.id}/raw/${repo.branch || 'main'}/covers/${fileName}`,
-        `${api.datasetsBase}/${repo.id}/resolve/${repo.branch || 'main'}/covers/${fileName}`
+        `https://huggingface.co/datasets/${repo.id}/raw/${repo.branch || 'main'}/covers/${fileName}`
       ];
 
       for (const url of candidateUrls) {

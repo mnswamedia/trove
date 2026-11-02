@@ -873,18 +873,27 @@
       const player = window.Trove.player || {};
       if (this.extractionQueue.includes(path) || player.thumbnailCache?.has(path)) return;
       this.extractionQueue.push(path);
-      this.processExtractionQueue();
+      this.drainThumbnailQueue();
     },
 
-    async processExtractionQueue() {
+    drainThumbnailQueue() {
+      const CONCURRENCY = 8;
+      if (typeof this.activeThumbnailWorkers !== 'number') {
+        this.activeThumbnailWorkers = 0;
+      }
+
+      // Launch parallel workers up to CONCURRENCY limit
+      while (this.activeThumbnailWorkers < CONCURRENCY && this.extractionQueue.length > 0) {
+        this.activeThumbnailWorkers++;
+        this.runThumbnailWorker();
+      }
+    },
+
+    async runThumbnailWorker() {
       const player = window.Trove.player || {};
       const state = window.Trove.state || {};
-      if (this.isExtractingQueue || this.extractionQueue.length === 0) return;
-      this.isExtractingQueue = true;
 
-      const CONCURRENCY = 8;
-
-      const worker = async () => {
+      try {
         while (this.extractionQueue.length > 0) {
           const path = this.extractionQueue.shift();
           if (!path) continue;
@@ -924,20 +933,12 @@
             }
           } catch (_) {}
         }
-      };
-
-      const workers = [];
-      const workerCount = Math.min(CONCURRENCY, this.extractionQueue.length);
-      for (let i = 0; i < workerCount; i++) {
-        workers.push(worker());
-      }
-      await Promise.all(workers);
-
-      this.isExtractingQueue = false;
-
-      // Drain any new items enqueued while workers were active
-      if (this.extractionQueue.length > 0) {
-        this.processExtractionQueue();
+      } finally {
+        this.activeThumbnailWorkers--;
+        // If items were enqueued while worker was exiting, keep the pool filled
+        if (this.extractionQueue.length > 0) {
+          this.drainThumbnailQueue();
+        }
       }
     },
 
