@@ -619,7 +619,7 @@
         html += `
           <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f] select-none">
             <div class="grid grid-cols-12 items-center px-4 py-2.5 hover:bg-almond-cream/20 dark:hover:bg-[#1a1f28] cursor-pointer transition text-sm" data-action="go-parent">
-              <div class="col-span-7 md:col-span-6 flex items-center gap-3 min-w-0">
+              <div class="col-span-6 md:col-span-6 flex items-center gap-3 min-w-0">
                 <div class="w-8 h-8 rounded-lg bg-almond-cream/60 dark:bg-[#202532] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0">
                   <i data-lucide="corner-left-up" class="w-4 h-4"></i>
                 </div>
@@ -628,11 +628,10 @@
                   <span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">Parent Directory</span>
                 </div>
               </div>
-              <div class="col-span-2 md:col-span-2">
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">UP</span>
+              <div class="col-span-4 md:col-span-4 flex items-center gap-1.5">
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">UP</span>
               </div>
-              <div class="col-span-3 md:col-span-2 font-mono text-xs text-stone-brown/60 dark:text-[#758092] text-right md:text-left">--</div>
-              <div class="hidden md:block col-span-2 text-xs text-stone-brown/60 dark:text-[#758092]">Directory</div>
+              <div class="col-span-2 md:col-span-2"></div>
             </div>
           </div>
         `;
@@ -735,15 +734,13 @@
                   <span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">${escapeHtml(pathSub)}</span>
                 </div>
               </div>
-              <div class="col-span-2 md:col-span-2">
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase ${badgeClasses}">
+              <div class="col-span-4 md:col-span-4 flex items-center gap-1.5 min-w-0">
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase ${badgeClasses} shrink-0">
                   ${escapeHtml(item.label)}
                 </span>
+                ${!isFolder ? `<span class="font-mono text-xs text-stone-brown dark:text-[#9aa4b2] truncate">- ${formatBytes(item.size)}</span>` : ''}
               </div>
-              <div class="col-span-3 md:col-span-2 font-mono text-xs text-stone-brown dark:text-[#9aa4b2] text-right md:text-left truncate">
-                ${isFolder ? '--' : formatBytes(item.size)}
-              </div>
-              <div class="col-span-1 md:col-span-2 flex items-center justify-end md:justify-between text-xs ${isPlayable && isCurrentActive ? 'text-jet-black dark:text-[#c6ac8f] font-semibold' : 'text-stone-brown/70 dark:text-[#758092]'}">
+              <div class="col-span-2 md:col-span-2 flex items-center justify-end md:justify-between text-xs ${isPlayable && isCurrentActive ? 'text-jet-black dark:text-[#c6ac8f] font-semibold' : 'text-stone-brown/70 dark:text-[#758092]'}">
                 <span class="hidden md:inline truncate" ${dateTooltip ? `title="${escapeHtml(dateTooltip)}"` : ''}>${escapeHtml(displayStatus)}</span>
                 ${actionBtnHtml}
               </div>
@@ -1196,7 +1193,13 @@
             const item = (state.allItems || []).find(i => i.path === path);
             if (!item) return;
             if (item.category === 'music' || item.category === 'video') {
-              if (player.playTrack) player.playTrack(item);
+              if (player) {
+                player.isCustomContextActive = false;
+                const displayPlayable = this.getDisplayItems().filter(i => !i.isDir && (i.category === 'music' || i.category === 'video'));
+                player.queue = displayPlayable.length > 0 ? displayPlayable : (state.allItems || []).filter(i => !i.isDir && (i.category === 'music' || i.category === 'video'));
+                player.currentIndex = player.queue.findIndex(i => i.path === item.path);
+                if (typeof player.playTrack === 'function') player.playTrack(item);
+              }
             } else {
               const encodedPath = item.path.split('/').map(seg => encodeURIComponent(seg)).join('/');
               const fileUrl = `https://huggingface.co/buckets/${repo.id}/resolve/${encodedPath}`;

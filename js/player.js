@@ -178,14 +178,35 @@
     },
 
     updateQueue(clickedItem = null) {
+      if (clickedItem && this.queue && this.queue.length > 0) {
+        const existingIdx = this.queue.findIndex(i => i.path === clickedItem.path);
+        if (existingIdx !== -1) {
+          this.currentIndex = existingIdx;
+          this.updateQueueCounter();
+          return;
+        }
+      }
+
       if (!this.isCustomContextActive) {
-        const state = window.Trove.state || {};
-        const playable = (state.allItems || []).filter(i => !i.isDir && (i.category === 'music' || i.category === 'video'));
+        let playable = [];
+        if (window.Trove.explorer && typeof window.Trove.explorer.getDisplayItems === 'function') {
+          const displayItems = window.Trove.explorer.getDisplayItems();
+          playable = displayItems.filter(i => !i.isDir && (i.category === 'music' || i.category === 'video'));
+        }
+        if (playable.length === 0) {
+          const state = window.Trove.state || {};
+          playable = (state.allItems || []).filter(i => !i.isDir && (i.category === 'music' || i.category === 'video'));
+        }
         this.queue = playable;
       }
 
       if (clickedItem) {
         this.currentIndex = this.queue.findIndex(i => i.path === clickedItem.path);
+        if (this.currentIndex === -1) {
+          const state = window.Trove.state || {};
+          this.queue = (state.allItems || []).filter(i => !i.isDir && (i.category === 'music' || i.category === 'video'));
+          this.currentIndex = this.queue.findIndex(i => i.path === clickedItem.path);
+        }
       }
       this.updateQueueCounter();
     },
@@ -749,11 +770,11 @@
       this.playTrack(this.queue[nextIndex]);
     },
 
-    playPrev() {
+    playPrev(skipRewind = false) {
       if (this.queue.length === 0) return;
 
       const activeEl = this.getActiveElement();
-      if (activeEl.currentTime > 3) {
+      if (!skipRewind && activeEl && activeEl.currentTime > 3) {
         activeEl.currentTime = 0;
         return;
       }
@@ -869,47 +890,55 @@
       }
     },
 
+    updateShuffleUI() {
+      if (!this.elements.btnShuffle) return;
+      if (this.shuffle) {
+        this.elements.btnShuffle.classList.add('text-jet-black', 'dark:text-[#c6ac8f]', 'font-bold');
+        this.elements.btnShuffle.classList.remove('text-stone-brown/50', 'dark:text-[#6b7688]');
+        this.elements.btnShuffle.title = 'Shuffle On';
+      } else {
+        this.elements.btnShuffle.classList.remove('text-jet-black', 'dark:text-[#c6ac8f]', 'font-bold');
+        this.elements.btnShuffle.classList.add('text-stone-brown/50', 'dark:text-[#6b7688]');
+        this.elements.btnShuffle.title = 'Shuffle Off';
+      }
+    },
+
+    updateRepeatUI() {
+      if (!this.elements.btnRepeat) return;
+      if (this.repeat === 'all') {
+        this.elements.btnRepeat.setAttribute('title', 'Repeat All');
+        this.elements.btnRepeat.classList.add('text-jet-black', 'dark:text-[#c6ac8f]', 'font-bold');
+        this.elements.btnRepeat.classList.remove('text-stone-brown/50', 'dark:text-[#6b7688]');
+        this.elements.btnRepeat.innerHTML = '<i data-lucide="repeat" class="w-5 h-5"></i>';
+      } else if (this.repeat === 'one') {
+        this.elements.btnRepeat.setAttribute('title', 'Repeat One');
+        this.elements.btnRepeat.classList.add('text-jet-black', 'dark:text-[#c6ac8f]', 'font-bold');
+        this.elements.btnRepeat.classList.remove('text-stone-brown/50', 'dark:text-[#6b7688]');
+        this.elements.btnRepeat.innerHTML = '<i data-lucide="repeat-1" class="w-5 h-5"></i>';
+      } else {
+        this.elements.btnRepeat.setAttribute('title', 'Repeat Off');
+        this.elements.btnRepeat.classList.remove('text-jet-black', 'dark:text-[#c6ac8f]', 'font-bold');
+        this.elements.btnRepeat.classList.add('text-stone-brown/50', 'dark:text-[#6b7688]');
+        this.elements.btnRepeat.innerHTML = '<i data-lucide="repeat" class="w-5 h-5"></i>';
+      }
+      if (window.lucide) window.lucide.createIcons();
+    },
+
     toggleShuffle() {
       this.shuffle = !this.shuffle;
-      if (this.elements.btnShuffle) {
-        if (this.shuffle) {
-          this.elements.btnShuffle.classList.add('text-jet-black', 'font-bold');
-          this.elements.btnShuffle.classList.remove('text-stone-brown/50');
-          this.elements.btnShuffle.title = 'Shuffle On';
-        } else {
-          this.elements.btnShuffle.classList.remove('text-jet-black', 'font-bold');
-          this.elements.btnShuffle.classList.add('text-stone-brown/50');
-          this.elements.btnShuffle.title = 'Shuffle Off';
-        }
-      }
+      this.updateShuffleUI();
       this.savePlaybackState();
     },
 
     toggleRepeat() {
       if (this.repeat === 'off') {
         this.repeat = 'all';
-        if (this.elements.btnRepeat) {
-          this.elements.btnRepeat.setAttribute('title', 'Repeat All');
-          this.elements.btnRepeat.classList.add('text-jet-black', 'font-bold');
-          this.elements.btnRepeat.classList.remove('text-stone-brown/50');
-          this.elements.btnRepeat.innerHTML = '<i data-lucide="repeat" class="w-5 h-5"></i>';
-        }
       } else if (this.repeat === 'all') {
         this.repeat = 'one';
-        if (this.elements.btnRepeat) {
-          this.elements.btnRepeat.setAttribute('title', 'Repeat One');
-          this.elements.btnRepeat.innerHTML = '<i data-lucide="repeat-1" class="w-5 h-5"></i>';
-        }
       } else {
         this.repeat = 'off';
-        if (this.elements.btnRepeat) {
-          this.elements.btnRepeat.setAttribute('title', 'Repeat Off');
-          this.elements.btnRepeat.classList.remove('text-jet-black', 'font-bold');
-          this.elements.btnRepeat.classList.add('text-stone-brown/50');
-          this.elements.btnRepeat.innerHTML = '<i data-lucide="repeat" class="w-5 h-5"></i>';
-        }
       }
-      if (window.lucide) window.lucide.createIcons();
+      this.updateRepeatUI();
       this.savePlaybackState();
     },
 
@@ -1028,21 +1057,8 @@
         if (this.elements.playerVideo) this.elements.playerVideo.volume = this.volume;
         updateVolumeUI(this.volume, false);
 
-        if (this.shuffle && this.elements.btnShuffle) {
-          this.elements.btnShuffle.classList.add('text-jet-black', 'font-bold');
-          this.elements.btnShuffle.classList.remove('text-stone-brown/50');
-        }
-
-        if (this.elements.btnRepeat) {
-          if (this.repeat === 'all') {
-            this.elements.btnRepeat.classList.add('text-jet-black', 'font-bold');
-            this.elements.btnRepeat.classList.remove('text-stone-brown/50');
-          } else if (this.repeat === 'one') {
-            this.elements.btnRepeat.classList.add('text-jet-black', 'font-bold');
-            this.elements.btnRepeat.classList.remove('text-stone-brown/50');
-            this.elements.btnRepeat.innerHTML = '<i data-lucide="repeat-1" class="w-5 h-5"></i>';
-          }
-        }
+        this.updateShuffleUI();
+        this.updateRepeatUI();
 
         if (this.elements.barTrackTitle) this.elements.barTrackTitle.innerText = track.name;
         if (this.elements.barTrackExt) this.elements.barTrackExt.innerText = track.label || 'MEDIA';

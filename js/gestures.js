@@ -576,7 +576,7 @@
                 if (typeof window.Trove.player.playNext === 'function') window.Trove.player.playNext();
                 else if (typeof window.Trove.player.next === 'function') window.Trove.player.next();
               } else {
-                if (typeof window.Trove.player.playPrev === 'function') window.Trove.player.playPrev();
+                if (typeof window.Trove.player.playPrev === 'function') window.Trove.player.playPrev(true);
                 else if (typeof window.Trove.player.previous === 'function') window.Trove.player.previous();
               }
             }
@@ -754,7 +754,7 @@
           if (bDiffX > 40 && absX > absY) {
             if (navigator.vibrate) navigator.vibrate(25);
             if (window.Trove.player) {
-              if (typeof window.Trove.player.playPrev === 'function') window.Trove.player.playPrev();
+              if (typeof window.Trove.player.playPrev === 'function') window.Trove.player.playPrev(true);
               else if (typeof window.Trove.player.previous === 'function') window.Trove.player.previous();
             }
             return;
