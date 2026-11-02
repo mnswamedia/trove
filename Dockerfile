@@ -26,6 +26,10 @@ RUN curl -fsSL https://github.com/pufferffish/wireproxy/releases/latest/download
     | tar -xz -C /usr/local/bin wireproxy \
  && chmod +x /usr/local/bin/wireproxy
 
+# wgcf: auto-generates Cloudflare WARP account & WireGuard configs
+RUN curl -fsSL https://github.com/ViRb3/wgcf/releases/download/v2.3.1/wgcf_2.3.1_linux_amd64 -o /usr/local/bin/wgcf \
+ && chmod +x /usr/local/bin/wgcf
+
 # Python deps: yt-dlp[default] pulls in yt-dlp-ejs (the EJS solver)
 RUN pip install --no-cache-dir -U "yt-dlp[default]" huggingface_hub requests PySocks mutagen \
  && find /usr/local/lib/python3.11 -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true \
