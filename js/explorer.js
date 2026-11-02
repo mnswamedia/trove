@@ -30,6 +30,7 @@
         fileList: document.getElementById('file-list'),
         breadcrumbs: document.getElementById('breadcrumbs'),
         refreshBtn: document.getElementById('refresh-btn'),
+        mobileRefreshBtn: document.getElementById('mobile-refresh-btn'),
         searchInput: document.getElementById('search-input'),
         clearSearchBtn: document.getElementById('clear-search-btn'),
         viewToggleBtn: document.getElementById('view-toggle-btn'),
@@ -134,7 +135,22 @@
     setLoading(loading) {
       const state = window.Trove.state || {};
       state.isLoading = loading;
-      if (this.elements.refreshBtn) this.elements.refreshBtn.disabled = loading;
+      if (this.elements.refreshBtn) {
+        this.elements.refreshBtn.disabled = loading;
+        const icon = this.elements.refreshBtn.querySelector('i');
+        if (icon) {
+          if (loading) icon.classList.add('animate-spin');
+          else icon.classList.remove('animate-spin');
+        }
+      }
+      if (this.elements.mobileRefreshBtn) {
+        this.elements.mobileRefreshBtn.disabled = loading;
+        const mIcon = this.elements.mobileRefreshBtn.querySelector('i');
+        if (mIcon) {
+          if (loading) mIcon.classList.add('animate-spin');
+          else mIcon.classList.remove('animate-spin');
+        }
+      }
       if (loading) {
         this.updateFooterStatus('Connecting to Hugging Face...');
       }
@@ -927,6 +943,15 @@
 
       if (this.elements.refreshBtn) {
         this.elements.refreshBtn.addEventListener('click', () => {
+          this.loadRepository(true);
+        });
+      }
+
+      if (this.elements.mobileRefreshBtn) {
+        this.elements.mobileRefreshBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const mobileNav = document.getElementById('mobile-nav-menu');
+          if (mobileNav) mobileNav.classList.add('hidden');
           this.loadRepository(true);
         });
       }

@@ -171,12 +171,16 @@
       if (!this.elements.activeQueueCounter) return;
       const playlists = window.Trove.playlists;
       const userQueue = (playlists && typeof playlists.getQueue === 'function') ? playlists.getQueue() : [];
+      let label = 'Queue empty';
       if (userQueue.length > 0) {
-        this.elements.activeQueueCounter.innerText = `${userQueue.length} in queue`;
+        label = `${userQueue.length} in queue`;
       } else if (this.queue.length > 0 && this.currentIndex >= 0) {
-        this.elements.activeQueueCounter.innerText = `${this.currentIndex + 1} / ${this.queue.length} in folder`;
-      } else {
-        this.elements.activeQueueCounter.innerText = 'Queue empty';
+        label = `${this.currentIndex + 1} / ${this.queue.length} in folder`;
+      }
+      this.elements.activeQueueCounter.innerText = label;
+      const btnQueue = document.getElementById('btn-queue-toggle');
+      if (btnQueue) {
+        btnQueue.title = `Queue: ${label} (Click to open list)`;
       }
     },
 

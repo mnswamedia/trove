@@ -349,7 +349,13 @@
       </nav>
 
       <!-- File List Card (Fills remaining height) -->
-      <div class="flex-1 flex flex-col min-h-0 bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#262c38] rounded-xl shadow-sm overflow-hidden transition-colors">
+      <div class="relative flex-1 flex flex-col min-h-0 bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#262c38] rounded-xl shadow-sm overflow-hidden transition-colors">
+        <!-- Pull to Refresh Floating Pill Indicator -->
+        <div id="pull-refresh-indicator" class="pointer-events-none absolute top-12 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/95 dark:bg-[#1c212c]/95 border border-almond-cream/80 dark:border-[#2f3747] shadow-lg opacity-0 -translate-y-12 transition-all duration-200 select-none">
+          <i data-lucide="refresh-cw" id="pull-refresh-icon" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f] transition-transform"></i>
+          <span id="pull-refresh-text" class="text-[11px] font-semibold text-stone-brown dark:text-[#f3f4f6]">Pull to refresh</span>
+        </div>
+
         <!-- Table Header: Column name row (Always in place) -->
         <div class="shrink-0 grid grid-cols-12 px-3 py-2 sm:px-4 sm:py-2.5 bg-almond-cream/25 dark:bg-[#1a1e26] border-b border-almond-cream dark:border-[#262c38] text-[11px] font-bold uppercase tracking-wider text-stone-brown/70 dark:text-[#8b95a5] select-none">
           <div id="col-sort-name" class="col-span-6 md:col-span-6 flex items-center gap-1 cursor-pointer hover:text-jet-black dark:hover:text-[#f3f4f6] transition" title="Sort by Name">
@@ -612,9 +618,9 @@
       <!-- Bottom Audio Volume & Utility Row (Generous vertical space with Queue, EQ and Volume Pill) -->
       <div class="flex items-center justify-between text-xs text-stone-brown dark:text-[#9aa4b2] pt-2.5 sm:pt-3 border-t border-almond-cream/60 dark:border-[#252a36]">
         <!-- Queue Counter (Clickable Trigger for Queue & Playlists Drawer) -->
-        <button id="btn-queue-toggle" type="button" class="flex items-center gap-1.5 font-mono text-xs text-stone-brown/70 dark:text-[#8b95a5] hover:text-black dark:hover:text-white transition px-2 py-1 rounded-xl border border-almond-cream/60 dark:border-[#282e3b] bg-white/50 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] cursor-pointer select-none" title="View Queue & Playlists">
+        <button id="btn-queue-toggle" type="button" class="flex items-center gap-1.5 font-mono text-xs text-stone-brown/70 dark:text-[#8b95a5] hover:text-black dark:hover:text-white transition px-2 sm:px-2.5 py-1.5 rounded-xl border border-almond-cream/60 dark:border-[#282e3b] bg-white/50 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] cursor-pointer select-none shrink-0" title="View Queue & Playlists">
           <i data-lucide="list-music" class="w-3.5 h-3.5 text-stone-brown/60 dark:text-[#8b95a5]"></i>
-          <span id="active-queue-counter">1 / 1 in queue</span>
+          <span id="active-queue-counter" class="hidden sm:inline">1 / 1 in queue</span>
         </button>
 
         <!-- Right Utilities: Add to Playlist, Related Tracks, EQ Button & Vertical Volume Pill -->
@@ -1493,6 +1499,7 @@
   <script src="./js/lyrics.js"></script>
   <script src="./js/playlists.js"></script>
   <script src="./js/explorer.js"></script>
+  <script src="./js/gestures.js"></script>
   <script src="./js/app.js"></script>
 </body>
 </html>
