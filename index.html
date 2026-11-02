@@ -358,18 +358,15 @@
 
         <!-- Table Header: Column name row (Always in place) -->
         <div class="shrink-0 grid grid-cols-12 px-3 py-2 sm:px-4 sm:py-2.5 bg-almond-cream/25 dark:bg-[#1a1e26] border-b border-almond-cream dark:border-[#262c38] text-[11px] font-bold uppercase tracking-wider text-stone-brown/70 dark:text-[#8b95a5] select-none">
-          <div id="col-sort-name" class="col-span-6 md:col-span-6 flex items-center gap-1 cursor-pointer hover:text-jet-black dark:hover:text-[#f3f4f6] transition" title="Sort by Name">
+          <div id="col-sort-name" class="col-span-8 md:col-span-8 flex items-center gap-1 cursor-pointer hover:text-jet-black dark:hover:text-[#f3f4f6] transition" title="Sort by Name">
             <span>Name</span>
             <span class="sort-indicator text-jet-black dark:text-[#c6ac8f]"></span>
           </div>
-          <div id="col-sort-size" class="col-span-4 md:col-span-4 flex items-center gap-1 cursor-pointer hover:text-jet-black dark:hover:text-[#f3f4f6] transition" title="Sort by Size">
+          <div id="col-sort-size" class="col-span-4 md:col-span-4 flex items-center justify-end gap-1 cursor-pointer hover:text-jet-black dark:hover:text-[#f3f4f6] transition pr-1 sm:pr-2" title="Sort by Size">
             <span>Type / Size</span>
             <span class="sort-indicator text-jet-black dark:text-[#c6ac8f]"></span>
           </div>
-          <div id="col-sort-date" class="col-span-2 md:col-span-2 flex items-center justify-end md:justify-between gap-1 cursor-pointer hover:text-jet-black dark:hover:text-[#f3f4f6] transition text-right" title="Sort by Date Downloaded">
-            <span class="hidden md:inline">Date Added</span>
-            <span class="sort-indicator text-jet-black dark:text-[#c6ac8f] hidden md:inline"></span>
-          </div>
+          <div id="col-sort-date" class="hidden"></div>
         </div>
 
         <!-- Files Container: ONLY THIS SCROLLS -->

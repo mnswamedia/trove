@@ -618,20 +618,19 @@
       if (state.viewMode === 'tree' && state.currentDirectory !== '' && !state.searchQuery) {
         html += `
           <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f] select-none">
-            <div class="grid grid-cols-12 items-center px-4 py-2.5 hover:bg-almond-cream/20 dark:hover:bg-[#1a1f28] cursor-pointer transition text-sm" data-action="go-parent">
-              <div class="col-span-6 md:col-span-6 flex items-center gap-3 min-w-0">
-                <div class="w-8 h-8 rounded-lg bg-almond-cream/60 dark:bg-[#202532] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0">
+            <div class="grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 hover:bg-almond-cream/20 dark:hover:bg-[#1a1f28] cursor-pointer transition text-sm" data-action="go-parent">
+              <div class="col-span-8 md:col-span-8 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-1">
+                <div class="w-9 h-9 rounded-lg bg-almond-cream/60 dark:bg-[#202532] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0">
                   <i data-lucide="corner-left-up" class="w-4 h-4"></i>
                 </div>
-                <div class="flex flex-col min-w-0">
+                <div class="flex flex-col min-w-0 flex-1">
                   <span class="font-semibold text-black dark:text-[#f3f4f6] truncate">..</span>
                   <span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">Parent Directory</span>
                 </div>
               </div>
-              <div class="col-span-4 md:col-span-4 flex items-center gap-1.5">
+              <div class="col-span-4 md:col-span-4 flex items-center justify-end pr-1 sm:pr-2">
                 <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">UP</span>
               </div>
-              <div class="col-span-2 md:col-span-2"></div>
             </div>
           </div>
         `;
@@ -644,7 +643,7 @@
 
         const pathSub = state.viewMode === 'flat' || state.searchQuery 
           ? item.path 
-          : (item.isDir ? 'Folder' : (item.ext ? `.${item.ext}` : ''));
+          : (item.isDir ? 'Folder' : '');
 
         let badgeClasses = 'bg-gray-100 text-stone-brown dark:bg-[#242a38] dark:text-[#9aa4b2]';
         let iconColor = 'bg-almond-cream/40 text-stone-brown dark:bg-[#202532] dark:text-[#c6ac8f]';
@@ -705,7 +704,7 @@
         }
 
         const actionBtnHtml = isPlayable ? `
-          <button type="button" class="btn-add-to-playlist p-2 px-2.5 sm:px-3 rounded-xl hover:bg-almond-cream/60 dark:hover:bg-[#252b37] text-stone-brown/70 hover:text-jet-black dark:text-[#9aa4b2] dark:hover:text-[#f3f4f6] transition shrink-0 ml-1 min-w-[38px] min-h-[38px] flex items-center justify-center select-none" title="Add to Playlist or Queue" data-path="${escapeHtml(item.path)}">
+          <button type="button" class="btn-add-to-playlist p-1.5 sm:p-2 rounded-xl hover:bg-almond-cream/60 dark:hover:bg-[#252b37] text-stone-brown/70 hover:text-jet-black dark:text-[#9aa4b2] dark:hover:text-[#f3f4f6] transition shrink-0 min-w-[34px] min-h-[34px] flex items-center justify-center select-none" title="Add to Playlist or Queue" data-path="${escapeHtml(item.path)}">
             <i data-lucide="list-plus" class="w-4 h-4"></i>
           </button>
         ` : '';
@@ -727,21 +726,18 @@
             </div>
             ` : ''}
             <div class="file-row relative bg-white dark:bg-[#15181f] grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 transition text-sm cursor-pointer select-none ${activeRowClass}" data-path="${escapeHtml(item.path)}" data-is-dir="${isFolder}" title="${escapeHtml(item.name)} (${isFolder ? 'Folder' : (isPlayable ? 'Click to play' : 'Click to open in new tab')})">
-              <div class="col-span-6 md:col-span-6 flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div class="col-span-8 md:col-span-8 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-1">
                 ${thumbSlotHtml}
-                <div class="flex flex-col min-w-0">
+                <div class="flex flex-col min-w-0 flex-1">
                   <span class="font-semibold text-black dark:text-[#f3f4f6] truncate ${isCurrentActive ? 'text-jet-black dark:text-white' : ''}">${escapeHtml(item.name)}</span>
-                  <span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">${escapeHtml(pathSub)}</span>
+                  ${pathSub ? `<span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">${escapeHtml(pathSub)}</span>` : ''}
                 </div>
               </div>
-              <div class="col-span-4 md:col-span-4 flex items-center gap-1.5 min-w-0">
+              <div class="col-span-4 md:col-span-4 flex items-center justify-end gap-1.5 sm:gap-2 min-w-0">
                 <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase ${badgeClasses} shrink-0">
                   ${escapeHtml(item.label)}
                 </span>
-                ${!isFolder ? `<span class="font-mono text-xs text-stone-brown dark:text-[#9aa4b2] truncate">- ${formatBytes(item.size)}</span>` : ''}
-              </div>
-              <div class="col-span-2 md:col-span-2 flex items-center justify-end md:justify-between text-xs ${isPlayable && isCurrentActive ? 'text-jet-black dark:text-[#c6ac8f] font-semibold' : 'text-stone-brown/70 dark:text-[#758092]'}">
-                <span class="hidden md:inline truncate" ${dateTooltip ? `title="${escapeHtml(dateTooltip)}"` : ''}>${escapeHtml(displayStatus)}</span>
+                ${!isFolder ? `<span class="font-mono text-xs text-stone-brown dark:text-[#9aa4b2] shrink-0 whitespace-nowrap">${formatBytes(item.size)}</span>` : ''}
                 ${actionBtnHtml}
               </div>
             </div>
