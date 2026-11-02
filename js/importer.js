@@ -248,9 +248,7 @@
           }
 
           if (window.Trove.activity) {
-            window.Trove.activity.showButton('Starting...', true, 'amber');
             window.Trove.activity.open(currentJobId);
-            window.Trove.activity.startPolling();
           }
         }, 700);
 

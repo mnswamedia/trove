@@ -1,20 +1,19 @@
 /**
- * Trove Media Vault - Activity & Workflow Monitor
- * GitHub Actions polling engine, step logs renderer, and status indicators.
+ * Trove Media Vault - Ingestion Activity Monitor
+ * Fetches and displays the latest ingestion run and item states from Cloudflare D1.
+ * On-demand manual refresh only — no continuous polling or background timers.
  */
 (function() {
   window.Trove = window.Trove || {};
 
   const CONFIG = window.APP_CONFIG || {};
   const storage = CONFIG.storage || {};
-  const { MotionAnim, formatDuration, escapeHtml } = window.Trove.utils || {};
+  const { MotionAnim, formatDuration, formatBytes, escapeHtml } = window.Trove.utils || {};
 
   const ActivityManager = {
     elements: {},
-    pollTimer: null,
-    lastKnownRunId: null,
-    lastKnownStatus: null,
-    currentJobId: null,
+    currentRunId: null,
+    isLoading: false,
 
     get isOpen() {
       return this.elements.modal && this.elements.modal.style.display === 'flex';
@@ -24,12 +23,11 @@
       this.elements = {
         modal: document.getElementById('activity-modal'),
         closeBtn: document.getElementById('close-activity-modal-btn'),
-        backdrop: document.getElementById('activity-backdrop'),
+        dismissBtn: document.getElementById('dismiss-activity-btn'),
+        refreshBtn: document.getElementById('refresh-activity-btn'),
+        refreshIcon: document.getElementById('activity-refresh-icon'),
         activityBtn: document.getElementById('activity-btn'),
-        activityBtnIcon: document.getElementById('activity-btn-icon'),
-        activityBtnLabel: document.getElementById('activity-btn-label'),
         mobileActivityBtn: document.getElementById('mobile-activity-btn'),
-        mobileActivityDot: document.getElementById('mobile-activity-dot'),
         activityStatusPill: document.getElementById('activity-status-pill'),
         activityPulseDot: document.getElementById('activity-pulse-dot'),
         activityStepInfo: document.getElementById('activity-step-info'),
@@ -38,6 +36,7 @@
         activityCounts: document.getElementById('activity-counts'),
         activityItemsList: document.getElementById('activity-items-list'),
         activityGithubLink: document.getElementById('activity-github-link'),
+        activityRunIdLabel: document.getElementById('activity-run-id-label'),
         mobileNavMenu: document.getElementById('mobile-nav-menu')
       };
 
@@ -61,6 +60,15 @@
       if (this.elements.closeBtn) {
         this.elements.closeBtn.addEventListener('click', () => this.close());
       }
+      if (this.elements.dismissBtn) {
+        this.elements.dismissBtn.addEventListener('click', () => this.close());
+      }
+      if (this.elements.refreshBtn) {
+        this.elements.refreshBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.fetchStatus(true);
+        });
+      }
       if (this.elements.modal) {
         this.elements.modal.addEventListener('click', (e) => {
           const card = this.elements.modal.firstElementChild;
@@ -69,30 +77,26 @@
           }
         });
       }
-      if (this.elements.backdrop) {
-        this.elements.backdrop.addEventListener('click', () => this.close());
-      }
     },
 
-    open(jobId = null) {
+    open(runId = null) {
       if (!this.elements.modal) return;
-      if (jobId) {
-        this.currentJobId = jobId;
+      if (runId) {
+        this.currentRunId = runId;
       } else {
-        this.currentJobId = sessionStorage.getItem('trove_current_job_id') || null;
+        this.currentRunId = sessionStorage.getItem('trove_current_run_id') || sessionStorage.getItem('trove_current_job_id') || null;
       }
+
       this.elements.modal.style.display = 'flex';
       if (window.lucide) window.lucide.createIcons();
-      this.poll(true);
       if (MotionAnim) MotionAnim.animateModalIn(this.elements.modal);
+
+      // Fetch latest on open
+      this.fetchStatus();
     },
 
     close() {
       if (!this.isOpen) return;
-      if (this.pollTimer) {
-        clearTimeout(this.pollTimer);
-        this.pollTimer = null;
-      }
       if (MotionAnim) {
         MotionAnim.animateModalOut(this.elements.modal, () => {
           this.elements.modal.style.display = 'none';
@@ -102,519 +106,244 @@
       }
     },
 
-    startPolling() {
-      if (this.pollTimer) clearTimeout(this.pollTimer);
-      this.poll(true);
-    },
+    async fetchStatus(isManual = false) {
+      if (this.isLoading) return;
+      this.isLoading = true;
 
-    setButtonIdle() {
-      if (!this.elements.activityBtn) return;
-      this.elements.activityBtn.className = 'hidden sm:inline-flex w-8 h-8 items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm select-none';
-      this.elements.activityBtn.title = 'Ingestion Activity';
-      if (this.elements.activityBtnIcon) {
-        this.elements.activityBtnIcon.setAttribute('data-lucide', 'activity');
-        this.elements.activityBtnIcon.className = 'w-4 h-4 text-stone-brown dark:text-[#c6ac8f]';
-      }
-      if (this.elements.activityBtnLabel) {
-        this.elements.activityBtnLabel.className = 'sr-only';
-        this.elements.activityBtnLabel.innerText = 'Activity';
-      }
-      if (window.lucide) window.lucide.createIcons();
-    },
-
-    showButton(label = 'Ingesting', isSpinning = true, variant = 'amber') {
-      if (!this.elements.activityBtn) return;
-
-      if (variant === 'green') {
-        this.elements.activityBtn.className = 'hidden sm:inline-flex h-8 px-2 sm:px-2.5 items-center gap-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-900 dark:text-emerald-300 hover:bg-emerald-500/25 transition shadow-sm select-none';
-        this.elements.activityBtn.title = 'Ingestion Completed - Click to view details';
-        if (this.elements.activityBtnIcon) {
-          this.elements.activityBtnIcon.setAttribute('data-lucide', 'check-circle-2');
-          this.elements.activityBtnIcon.className = 'w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0';
-        }
-        if (this.elements.activityBtnLabel) {
-          this.elements.activityBtnLabel.className = 'text-xs font-semibold font-mono hidden xs:inline';
-          this.elements.activityBtnLabel.innerText = label;
-        }
-      } else if (variant === 'red') {
-        this.elements.activityBtn.className = 'hidden sm:inline-flex h-8 px-2 sm:px-2.5 items-center gap-1.5 rounded-lg bg-red-500/15 border border-red-500/30 text-red-900 dark:text-red-300 hover:bg-red-500/25 transition shadow-sm select-none';
-        this.elements.activityBtn.title = 'Ingestion Failed - Click to view details';
-        if (this.elements.activityBtnIcon) {
-          this.elements.activityBtnIcon.setAttribute('data-lucide', 'alert-circle');
-          this.elements.activityBtnIcon.className = 'w-3.5 h-3.5 text-red-600 dark:text-red-400 shrink-0';
-        }
-        if (this.elements.activityBtnLabel) {
-          this.elements.activityBtnLabel.className = 'text-xs font-semibold font-mono hidden xs:inline';
-          this.elements.activityBtnLabel.innerText = label;
-        }
-      } else {
-        // Active Ingesting (Amber)
-        this.elements.activityBtn.className = 'hidden sm:inline-flex h-8 px-2 sm:px-2.5 items-center gap-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-900 dark:text-amber-300 hover:bg-amber-500/25 transition shadow-sm select-none';
-        this.elements.activityBtn.title = 'Ingestion in progress - Click to view details';
-        if (this.elements.activityBtnIcon) {
-          this.elements.activityBtnIcon.setAttribute('data-lucide', 'loader-2');
-          this.elements.activityBtnIcon.className = 'w-3.5 h-3.5 animate-spin text-amber-600 dark:text-amber-400 shrink-0';
-        }
-        if (this.elements.activityBtnLabel) {
-          this.elements.activityBtnLabel.className = 'text-xs font-semibold font-mono hidden xs:inline';
-          this.elements.activityBtnLabel.innerText = label;
-        }
+      if (this.elements.refreshIcon) {
+        this.elements.refreshIcon.classList.add('animate-spin');
       }
 
-      if (window.lucide) window.lucide.createIcons();
-    },
+      const workerUrl = CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/ingest') : null;
+      const workerToken = localStorage.getItem(storage.workerTokenKey) || '';
 
-    renderModal(run, steps = []) {
-      if (!this.elements.modal) return;
-
-      if (!run) {
-        if (this.elements.activityStatusPill) {
-          this.elements.activityStatusPill.innerText = 'Idle';
-          this.elements.activityStatusPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-100 text-stone-brown';
-          if (this.elements.activityPulseDot) this.elements.activityPulseDot.className = 'w-2.5 h-2.5 rounded-full bg-stone-brown/40';
-        }
-        if (this.elements.mobileActivityDot) this.elements.mobileActivityDot.classList.add('hidden');
-        if (this.elements.activityStepInfo) this.elements.activityStepInfo.innerText = 'No ingestion runs recorded yet.';
-        if (this.elements.activityTimeElapsed) this.elements.activityTimeElapsed.innerText = '00:00';
-        if (this.elements.activityProgressBar) {
-          this.elements.activityProgressBar.style.width = '0%';
-          this.elements.activityProgressBar.className = 'bg-jet-black h-full rounded-full transition-all duration-300';
-        }
-        if (this.elements.activityCounts) this.elements.activityCounts.innerText = 'Ready to import';
-        if (this.elements.activityItemsList) {
-          this.elements.activityItemsList.innerHTML = `
-            <div class="p-4 text-center text-xs text-stone-brown dark:text-[#9aa4b2] bg-almond-cream/15 dark:bg-[#1a1e26] rounded-xl border border-dashed border-almond-cream dark:border-[#2b3240] flex flex-col items-center gap-2">
-              <i data-lucide="info" class="w-4 h-4 text-stone-brown/60 dark:text-[#758092]"></i>
-              <span>No active downloads. Click the Import button (download icon) in the header to import songs from YouTube.</span>
-            </div>
-          `;
-        }
-        if (window.lucide) window.lucide.createIcons();
+      if (!workerUrl) {
+        this.renderEmpty('Cloudflare Worker endpoint not configured in settings.');
+        this._finishLoading();
         return;
       }
 
-      if (this.elements.activityGithubLink && run.html_url) {
-        this.elements.activityGithubLink.href = run.html_url;
-      }
+      try {
+        const reqRunId = this.currentRunId || '';
+        const fetchUrl = `${workerUrl.replace(/\/+$/, '')}/status${reqRunId ? '?run_id=' + encodeURIComponent(reqRunId) : ''}`;
+        const headers = {};
+        if (workerToken) {
+          headers['Authorization'] = `Bearer ${workerToken}`;
+          headers['X-API-Key'] = workerToken;
+        }
 
-      const isRunning = run.status === 'in_progress' || run.status === 'queued';
-      const isSuccess = run.status === 'completed' && run.conclusion === 'success';
-
-      const startTime = new Date(run.run_started_at || run.created_at).getTime();
-      const endTime = isRunning ? Date.now() : new Date(run.updated_at || run.completed_at || Date.now()).getTime();
-      const elapsedSec = Math.max(0, Math.floor((endTime - startTime) / 1000));
-
-      if (this.elements.activityTimeElapsed) {
-        this.elements.activityTimeElapsed.innerText = formatDuration(elapsedSec);
-      }
-
-      const visibleSteps = steps.filter(s => s.name !== 'Set up job' && s.name !== 'Complete job');
-      const totalSteps = Math.max(1, visibleSteps.length);
-      const completedStepsCount = visibleSteps.filter(s => s.status === 'completed' && s.conclusion === 'success').length;
-      const activeStep = visibleSteps.find(s => s.status === 'in_progress');
-
-      if (isRunning) {
-        const pct = Math.min(95, Math.round((completedStepsCount / totalSteps) * 100));
-        if (this.elements.activityProgressBar) {
-          this.elements.activityProgressBar.style.width = `${Math.max(10, pct)}%`;
-          this.elements.activityProgressBar.className = 'bg-amber-500 h-full rounded-full transition-all duration-300';
-        }
-        if (this.elements.activityStatusPill) {
-          this.elements.activityStatusPill.innerText = run.status === 'queued' ? 'Queued' : 'In Progress';
-          this.elements.activityStatusPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800';
-          if (this.elements.activityPulseDot) this.elements.activityPulseDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse';
-          if (this.elements.mobileActivityDot) this.elements.mobileActivityDot.classList.remove('hidden');
-        }
-        if (this.elements.activityStepInfo) {
-          this.elements.activityStepInfo.innerText = activeStep ? `Step: ${activeStep.name}` : (run.status === 'queued' ? 'Runner queued in GitHub Actions...' : 'Running workflow...');
-        }
-        if (this.elements.activityCounts) {
-          this.elements.activityCounts.innerText = `Step ${completedStepsCount + (activeStep ? 1 : 0)} of ${totalSteps}`;
-        }
-      } else if (isSuccess) {
-        if (this.elements.activityProgressBar) {
-          this.elements.activityProgressBar.style.width = '100%';
-          this.elements.activityProgressBar.className = 'bg-emerald-500 h-full rounded-full transition-all duration-300';
-        }
-        if (this.elements.activityStatusPill) {
-          this.elements.activityStatusPill.innerText = 'Completed';
-          this.elements.activityStatusPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800';
-          if (this.elements.activityPulseDot) this.elements.activityPulseDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
-          if (this.elements.mobileActivityDot) this.elements.mobileActivityDot.classList.add('hidden');
-        }
-        if (this.elements.activityStepInfo) {
-          this.elements.activityStepInfo.innerText = `Finished successfully in ${formatDuration(elapsedSec)}`;
-        }
-        if (this.elements.activityCounts) {
-          this.elements.activityCounts.innerText = `All ${totalSteps} steps completed`;
-        }
-      } else {
-        if (this.elements.activityProgressBar) {
-          this.elements.activityProgressBar.style.width = '100%';
-          this.elements.activityProgressBar.className = 'bg-red-500 h-full rounded-full transition-all duration-300';
-        }
-        if (this.elements.activityStatusPill) {
-          this.elements.activityStatusPill.innerText = run.conclusion ? run.conclusion.toUpperCase() : 'FAILED';
-          this.elements.activityStatusPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-800';
-          if (this.elements.activityPulseDot) this.elements.activityPulseDot.className = 'w-2.5 h-2.5 rounded-full bg-red-500';
-          if (this.elements.mobileActivityDot) this.elements.mobileActivityDot.classList.add('hidden');
-        }
-        if (this.elements.activityStepInfo) {
-          this.elements.activityStepInfo.innerText = `Run ended with: ${run.conclusion || 'failure'}`;
-        }
-        if (this.elements.activityCounts) {
-          this.elements.activityCounts.innerText = 'Check terminal logs for errors';
-        }
-      }
-
-      if (this.elements.activityItemsList) {
-        if (visibleSteps.length === 0) {
-          this.elements.activityItemsList.innerHTML = `
-            <div class="p-3 text-center text-xs text-stone-brown dark:text-[#9aa4b2] bg-almond-cream/15 dark:bg-[#1a1e26] rounded-xl border border-dashed border-almond-cream dark:border-[#2b3240]">
-              ${isRunning ? 'Connecting to runner...' : 'Workflow completed.'}
-            </div>
-          `;
+        const res = await fetch(fetchUrl, { headers, cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.run) {
+            this.render(data.run, data.items || []);
+          } else {
+            this.renderEmpty(data.message || 'No ingestion runs recorded yet.');
+          }
         } else {
-          let listHtml = '';
-          visibleSteps.forEach((st, idx) => {
-            let badge = '';
-            let rowBg = 'bg-almond-cream/15 border-almond-cream/60 dark:bg-[#1a1e26] dark:border-[#2b3240]';
-
-            if (st.status === 'completed' && st.conclusion === 'success') {
-              badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 shrink-0"><i data-lucide="check" class="w-3 h-3"></i>Done</span>';
-              rowBg = 'bg-emerald-50/50 border-emerald-200/60 dark:bg-emerald-950/30 dark:border-emerald-800/40';
-            } else if (st.status === 'in_progress') {
-              badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 shrink-0"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i>In Progress</span>';
-              rowBg = 'bg-amber-50/80 border-amber-300 dark:bg-amber-950/30 dark:border-amber-700/50';
-            } else if (st.conclusion === 'failure') {
-              badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 shrink-0"><i data-lucide="x" class="w-3 h-3"></i>Failed</span>';
-              rowBg = 'bg-red-50/60 border-red-200 dark:bg-red-950/30 dark:border-red-800/40';
-            } else {
-              badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-100 text-stone-brown dark:bg-[#202532] dark:text-[#9aa4b2] shrink-0"><i data-lucide="clock" class="w-3 h-3"></i>Queued</span>';
-            }
-
-            listHtml += `
-              <div class="p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2.5 transition ${rowBg}">
-                <div class="flex items-center gap-2 min-w-0 flex-1">
-                  <span class="font-mono text-[10px] text-stone-brown/60 dark:text-[#758092] shrink-0">#${idx + 1}</span>
-                  <span class="font-semibold text-black dark:text-[#f3f4f6] truncate" title="${escapeHtml(st.name)}">${escapeHtml(st.name)}</span>
-                </div>
-                ${badge}
-              </div>
-            `;
-          });
-          this.elements.activityItemsList.innerHTML = listHtml;
+          this.renderEmpty(`Worker returned status ${res.status}.`);
         }
+      } catch (err) {
+        console.warn('Activity fetch note:', err);
+        this.renderEmpty('Could not connect to Worker. Check network or settings.');
+      } finally {
+        this._finishLoading();
       }
+    },
 
+    _finishLoading() {
+      this.isLoading = false;
+      if (this.elements.refreshIcon) {
+        this.elements.refreshIcon.classList.remove('animate-spin');
+      }
       if (window.lucide) window.lucide.createIcons();
     },
 
-    renderWorkerProgress(run, items = []) {
-      if (!run) return false;
+    renderEmpty(message) {
+      if (this.elements.activityStatusPill) {
+        this.elements.activityStatusPill.innerText = 'Idle';
+        this.elements.activityStatusPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-100 dark:bg-[#202532] text-stone-brown dark:text-[#9aa4b2]';
+      }
+      if (this.elements.activityPulseDot) {
+        this.elements.activityPulseDot.className = 'w-2 h-2 rounded-full bg-stone-brown/40 dark:bg-[#758092]';
+      }
+      if (this.elements.activityStepInfo) this.elements.activityStepInfo.innerText = 'Ready';
+      if (this.elements.activityTimeElapsed) this.elements.activityTimeElapsed.innerText = '--:--';
+      if (this.elements.activityProgressBar) this.elements.activityProgressBar.style.width = '0%';
+      if (this.elements.activityCounts) this.elements.activityCounts.innerText = '0 / 0 completed';
+      if (this.elements.activityGithubLink) this.elements.activityGithubLink.classList.add('hidden');
+      if (this.elements.activityRunIdLabel) this.elements.activityRunIdLabel.innerText = '';
+      if (this.elements.activityItemsList) {
+        this.elements.activityItemsList.innerHTML = `
+          <div class="p-4 text-center text-xs text-stone-brown dark:text-[#9aa4b2] bg-almond-cream/15 dark:bg-[#1a1e26] rounded-xl border border-dashed border-almond-cream dark:border-[#2b3240] flex flex-col items-center gap-1.5">
+            <i data-lucide="info" class="w-4 h-4 text-stone-brown/60 dark:text-[#758092]"></i>
+            <span>${escapeHtml(message)}</span>
+          </div>
+        `;
+      }
+    },
 
+    render(run, items = []) {
       const isRunning = run.status === 'in_progress' || run.status === 'queued';
-      const isSuccess = run.status === 'completed';
+      const isCompleted = run.status === 'completed';
 
+      // Duration & elapsed time
       const startTime = run.started_at || run.created_at || Date.now();
       const endTime = isRunning ? Date.now() : (run.ended_at || run.updated_at || Date.now());
       const elapsedSec = Math.max(0, Math.floor((endTime - startTime) / 1000));
 
       if (this.elements.activityTimeElapsed) {
-        this.elements.activityTimeElapsed.innerText = formatDuration(elapsedSec);
+        this.elements.activityTimeElapsed.innerText = formatDuration ? formatDuration(elapsedSec) : `${elapsedSec}s`;
       }
 
-      const totalExpected = Math.max(run.total_tracks || items.length || 1, 1);
-      const succeededCount = run.succeeded_tracks || items.filter(it => it.status === 'succeeded' || it.status === 'skipped_archive').length;
-      const failedCount = run.failed_tracks || items.filter(it => it.status === 'failed').length;
+      // Counts
+      const totalExpected = Math.max(run.total_tracks || items.length || 0, 1);
+      const succeededCount = run.succeeded_tracks ?? items.filter(it => it.status === 'succeeded' || it.status === 'skipped_archive').length;
+      const failedCount = run.failed_tracks ?? items.filter(it => it.status === 'failed').length;
+      const processedCount = succeededCount + failedCount;
       const activeItem = items.find(it => it.status === 'downloading');
 
-      if (isRunning) {
-        const pct = Math.min(95, Math.max(8, Math.round(((succeededCount + failedCount) / totalExpected) * 100)));
-        if (this.elements.activityProgressBar) {
-          this.elements.activityProgressBar.style.width = `${pct}%`;
-          this.elements.activityProgressBar.className = 'bg-amber-500 h-full rounded-full transition-all duration-300';
+      // Header Pill & Pulse
+      if (this.elements.activityStatusPill && this.elements.activityPulseDot) {
+        if (isRunning) {
+          const pillText = run.status === 'queued' ? 'Queued' : 'In Progress';
+          this.elements.activityStatusPill.innerText = pillText;
+          this.elements.activityStatusPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300';
+          this.elements.activityPulseDot.className = 'w-2 h-2 rounded-full bg-amber-500 animate-pulse';
+        } else if (isCompleted) {
+          const pillText = failedCount > 0 ? 'Completed with errors' : 'Completed';
+          this.elements.activityStatusPill.innerText = pillText;
+          this.elements.activityStatusPill.className = failedCount > 0
+            ? 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+            : 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300';
+          this.elements.activityPulseDot.className = failedCount > 0 ? 'w-2 h-2 rounded-full bg-amber-500' : 'w-2 h-2 rounded-full bg-emerald-500';
+        } else {
+          this.elements.activityStatusPill.innerText = 'Failed';
+          this.elements.activityStatusPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 dark:bg-red-950/60 text-red-800 dark:text-red-300';
+          this.elements.activityPulseDot.className = 'w-2 h-2 rounded-full bg-red-500';
         }
-        if (this.elements.activityStatusPill) {
-          this.elements.activityStatusPill.innerText = run.status === 'queued' ? 'Queued' : 'In Progress';
-          this.elements.activityStatusPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300';
-          if (this.elements.activityPulseDot) this.elements.activityPulseDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse';
-          if (this.elements.mobileActivityDot) this.elements.mobileActivityDot.classList.remove('hidden');
-        }
-        if (this.elements.activityStepInfo) {
+      }
+
+      // Step Info
+      if (this.elements.activityStepInfo) {
+        if (isRunning) {
           this.elements.activityStepInfo.innerText = activeItem 
             ? `Downloading: ${activeItem.title || activeItem.url}` 
-            : (run.status === 'queued' ? 'Runner queued in GitHub Actions...' : `Processing ${totalExpected} target(s)...`);
-        }
-        if (this.elements.activityCounts) {
-          this.elements.activityCounts.innerText = `${succeededCount + failedCount} of ${totalExpected} processed`;
-        }
-      } else if (isSuccess) {
-        if (this.elements.activityProgressBar) {
-          this.elements.activityProgressBar.style.width = '100%';
-          this.elements.activityProgressBar.className = failedCount > 0 ? 'bg-amber-500 h-full rounded-full' : 'bg-emerald-500 h-full rounded-full transition-all duration-300';
-        }
-        if (this.elements.activityStatusPill) {
-          this.elements.activityStatusPill.innerText = failedCount > 0 ? 'Completed with errors' : 'Completed';
-          this.elements.activityStatusPill.className = failedCount > 0 
-            ? 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
-            : 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300';
-          if (this.elements.activityPulseDot) this.elements.activityPulseDot.className = failedCount > 0 ? 'w-2.5 h-2.5 rounded-full bg-amber-500' : 'w-2.5 h-2.5 rounded-full bg-emerald-500';
-          if (this.elements.mobileActivityDot) this.elements.mobileActivityDot.classList.add('hidden');
-        }
-        if (this.elements.activityStepInfo) {
-          this.elements.activityStepInfo.innerText = `Finished in ${formatDuration(elapsedSec)} (${succeededCount} imported${failedCount ? ', ' + failedCount + ' failed' : ''})`;
-        }
-        if (this.elements.activityCounts) {
-          this.elements.activityCounts.innerText = `${succeededCount}/${totalExpected} succeeded`;
-        }
-      } else {
-        if (this.elements.activityProgressBar) {
-          this.elements.activityProgressBar.style.width = '100%';
-          this.elements.activityProgressBar.className = 'bg-red-500 h-full rounded-full';
-        }
-        if (this.elements.activityStatusPill) {
-          this.elements.activityStatusPill.innerText = 'Failed';
-          this.elements.activityStatusPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-800';
-          if (this.elements.activityPulseDot) this.elements.activityPulseDot.className = 'w-2.5 h-2.5 rounded-full bg-red-500';
-          if (this.elements.mobileActivityDot) this.elements.mobileActivityDot.classList.add('hidden');
-        }
-        if (this.elements.activityStepInfo) {
+            : (run.status === 'queued' ? 'Queued in GitHub Actions...' : `Processing ${totalExpected} track(s)...`);
+        } else if (isCompleted) {
+          this.elements.activityStepInfo.innerText = `Finished (${succeededCount} imported${failedCount ? ', ' + failedCount + ' failed' : ''})`;
+        } else {
           this.elements.activityStepInfo.innerText = 'Ingest run failed';
         }
       }
 
+      // Progress bar
+      if (this.elements.activityProgressBar) {
+        if (isRunning) {
+          const pct = Math.min(95, Math.max(8, Math.round((processedCount / totalExpected) * 100)));
+          this.elements.activityProgressBar.style.width = `${pct}%`;
+          this.elements.activityProgressBar.className = 'bg-amber-500 h-full rounded-full transition-all duration-300';
+        } else if (isCompleted) {
+          this.elements.activityProgressBar.style.width = '100%';
+          this.elements.activityProgressBar.className = failedCount > 0 ? 'bg-amber-500 h-full rounded-full' : 'bg-emerald-500 h-full rounded-full';
+        } else {
+          this.elements.activityProgressBar.style.width = '100%';
+          this.elements.activityProgressBar.className = 'bg-red-500 h-full rounded-full';
+        }
+      }
+
+      // Counts text
+      if (this.elements.activityCounts) {
+        this.elements.activityCounts.innerText = `${succeededCount} / ${totalExpected} completed`;
+      }
+
+      // GitHub Actions Link
+      if (this.elements.activityGithubLink) {
+        if (run.github_run_id) {
+          const defaultRepo = (CONFIG.github?.owner && CONFIG.github?.repo) ? `${CONFIG.github.owner}/${CONFIG.github.repo}` : 'mnswamedia/trove';
+          const rawRepo = localStorage.getItem(storage.ghRepoKey) || defaultRepo;
+          this.elements.activityGithubLink.href = `https://github.com/${rawRepo}/actions/runs/${run.github_run_id}`;
+          this.elements.activityGithubLink.classList.remove('hidden');
+          this.elements.activityGithubLink.classList.add('inline-flex');
+        } else {
+          this.elements.activityGithubLink.classList.add('hidden');
+        }
+      }
+
+      // Run ID Label
+      if (this.elements.activityRunIdLabel) {
+        this.elements.activityRunIdLabel.innerText = run.id || '';
+      }
+
+      // Items List
       if (this.elements.activityItemsList) {
         if (items.length === 0) {
           this.elements.activityItemsList.innerHTML = `
             <div class="p-3 text-center text-xs text-stone-brown dark:text-[#9aa4b2] bg-almond-cream/15 dark:bg-[#1a1e26] rounded-xl border border-dashed border-almond-cream dark:border-[#2b3240]">
-              ${isRunning ? 'Waiting for songs to start...' : 'No songs recorded.'}
+              ${isRunning ? 'Waiting for songs to begin...' : 'No tracks recorded.'}
             </div>
           `;
         } else {
           let listHtml = '';
           items.forEach((it, idx) => {
-            let badge = '';
-            let rowBg = 'bg-almond-cream/15 border-almond-cream/60 dark:bg-[#1a1e26] dark:border-[#2b3240]';
-            const displayTitle = it.title || it.url || `Track #${it.track_index || (idx + 1)}`;
             const trackNum = it.track_index || (idx + 1);
+            const displayTitle = it.title || it.url || `Track #${trackNum}`;
 
-            let subtext = '';
+            let badgeHtml = '';
+            let rowBg = 'bg-almond-cream/15 border-almond-cream/60 dark:bg-[#1a1e26] dark:border-[#2b3240]';
+            let metaHtml = '';
+
             if (it.status === 'succeeded') {
-              badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 shrink-0"><i data-lucide="check" class="w-3 h-3"></i>Done</span>';
-              rowBg = 'bg-emerald-50/50 border-emerald-200/60 dark:bg-emerald-950/30 dark:border-emerald-800/40';
-              if (it.size_bytes) {
-                const sz = (it.size_bytes / (1024 * 1024)).toFixed(1) + ' MB';
-                subtext = `<span class="text-[10px] text-stone-brown/60 dark:text-[#8b95a5]">${sz}</span>`;
+              badgeHtml = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 shrink-0"><i data-lucide="check" class="w-3 h-3"></i>Done</span>';
+              rowBg = 'bg-emerald-50/40 border-emerald-200/50 dark:bg-emerald-950/20 dark:border-emerald-800/30';
+              const parts = [];
+              if (it.size_bytes) parts.push(formatBytes ? formatBytes(it.size_bytes) : `${Math.round(it.size_bytes / 1024)} KB`);
+              if (it.duration_seconds) parts.push(formatDuration ? formatDuration(it.duration_seconds) : `${it.duration_seconds}s`);
+              if (parts.length > 0) {
+                metaHtml = `<span class="text-[10px] text-stone-brown/60 dark:text-[#8b95a5]">${parts.join(' • ')}</span>`;
               }
             } else if (it.status === 'skipped_archive') {
-              badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 shrink-0"><i data-lucide="check-check" class="w-3 h-3"></i>Cached</span>';
-              rowBg = 'bg-blue-50/50 border-blue-200/60 dark:bg-blue-950/30 dark:border-blue-800/40';
-              subtext = '<span class="text-[10px] text-blue-600 dark:text-blue-400">Already in library</span>';
-            } else if (it.status === 'downloading' || it.status === 'in_progress') {
-              badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 shrink-0"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i>Downloading</span>';
-              rowBg = 'bg-amber-50/80 border-amber-300 dark:bg-amber-950/30 dark:border-amber-700/50';
-              subtext = '<span class="text-[10px] text-amber-600 dark:text-amber-400 animate-pulse">Downloading via WARP...</span>';
+              badgeHtml = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 shrink-0"><i data-lucide="check-check" class="w-3 h-3"></i>Cached</span>';
+              rowBg = 'bg-blue-50/40 border-blue-200/50 dark:bg-blue-950/20 dark:border-blue-800/30';
+              metaHtml = '<span class="text-[10px] text-blue-600 dark:text-blue-400">Already in library</span>';
+            } else if (it.status === 'downloading') {
+              badgeHtml = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 shrink-0"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i>Downloading</span>';
+              rowBg = 'bg-amber-50/50 border-amber-300/60 dark:bg-amber-950/20 dark:border-amber-700/40';
+              metaHtml = '<span class="text-[10px] text-amber-600 dark:text-amber-400">Downloading stream via WARP...</span>';
             } else if (it.status === 'failed') {
-              badge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 shrink-0" title="${escapeHtml(it.error || 'Failed')}"><i data-lucide="alert-circle" class="w-3 h-3"></i>Failed</span>`;
-              rowBg = 'bg-red-50/60 border-red-200 dark:bg-red-950/30 dark:border-red-800/40';
+              badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 shrink-0" title="${escapeHtml(it.error || 'Failed')}"><i data-lucide="alert-circle" class="w-3 h-3"></i>Failed</span>`;
+              rowBg = 'bg-red-50/40 border-red-200/50 dark:bg-red-950/20 dark:border-red-800/30';
               if (it.error) {
-                subtext = `<span class="text-[10px] text-red-600 dark:text-red-400 truncate" title="${escapeHtml(it.error)}">${escapeHtml(it.error)}</span>`;
+                metaHtml = `<span class="text-[10px] text-red-600 dark:text-red-400 truncate" title="${escapeHtml(it.error)}">${escapeHtml(it.error)}</span>`;
               }
             } else {
               // Pending
-              badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-100 text-stone-brown dark:bg-[#202532] dark:text-[#9aa4b2] shrink-0"><i data-lucide="clock" class="w-3 h-3"></i>Queued</span>';
-              subtext = '<span class="text-[10px] text-stone-brown/60 dark:text-[#758092]">Waiting in queue...</span>';
+              badgeHtml = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-100 text-stone-brown dark:bg-[#202532] dark:text-[#9aa4b2] shrink-0"><i data-lucide="clock" class="w-3 h-3"></i>Queued</span>';
+              metaHtml = '<span class="text-[10px] text-stone-brown/60 dark:text-[#758092]">Waiting in queue...</span>';
             }
 
             listHtml += `
               <div class="p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2.5 transition ${rowBg}">
-                <div class="flex items-center gap-2 min-w-0 flex-1">
+                <div class="flex items-center gap-2.5 min-w-0 flex-1">
                   <span class="font-mono text-[10px] text-stone-brown/60 dark:text-[#758092] shrink-0">#${trackNum}</span>
                   <div class="flex flex-col min-w-0 flex-1">
                     <span class="font-semibold text-black dark:text-[#f3f4f6] truncate" title="${escapeHtml(displayTitle)}">${escapeHtml(displayTitle)}</span>
-                    ${subtext}
+                    ${metaHtml}
                   </div>
                 </div>
-                ${badge}
+                ${badgeHtml}
               </div>
             `;
           });
           this.elements.activityItemsList.innerHTML = listHtml;
         }
       }
-
-      if (window.lucide) window.lucide.createIcons();
-      return true;
-    },
-
-    async poll(isManual = false) {
-      if (!this.elements.modal || this.elements.modal.style.display !== 'flex') {
-        if (this.pollTimer) {
-          clearTimeout(this.pollTimer);
-          this.pollTimer = null;
-        }
-        return;
-      }
-
-      // 1. Try Cloudflare Worker Telemetry first (Live Song-by-Song updates every 2s)
-      const workerUrl = CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/ingest') : null;
-      const workerToken = localStorage.getItem(storage.workerTokenKey) || '';
-
-      if (workerUrl) {
-        try {
-          const reqRunId = this.currentJobId || sessionStorage.getItem('trove_current_run_id') || sessionStorage.getItem('trove_current_job_id') || '';
-          const fetchUrl = `${workerUrl.replace(/\/+$/, '')}/status${reqRunId ? '?run_id=' + encodeURIComponent(reqRunId) : ''}`;
-          const headers = {};
-          if (workerToken) {
-            headers['Authorization'] = `Bearer ${workerToken}`;
-            headers['X-API-Key'] = workerToken;
-          }
-          const wRes = await fetch(fetchUrl, { headers, cache: 'no-store' });
-          if (wRes.ok) {
-            const wData = await wRes.json();
-            const activeRun = wData.run || wData.job;
-            const activeItems = wData.items || wData.events || [];
-            if (wData.success && activeRun) {
-              const isHandled = this.renderWorkerProgress(activeRun, activeItems);
-              if (isHandled) {
-                const isRunning = activeRun.status === 'in_progress' || activeRun.status === 'queued';
-                if (isRunning) {
-                  this.lastKnownStatus = 'in_progress';
-                  this.showButton('Ingesting...', true, 'amber');
-                  if (this.elements.modal && this.elements.modal.style.display === 'flex') {
-                    if (this.pollTimer) clearTimeout(this.pollTimer);
-                    this.pollTimer = setTimeout(() => this.poll(false), 2000); // 2-second live worker polling
-                  }
-                  return;
-                } else {
-                  if (this.lastKnownStatus === 'in_progress') {
-                    this.lastKnownStatus = 'completed';
-                    const hasFailures = activeRun.failed_tracks > 0 || activeItems.some(e => e.status === 'failed');
-                    this.showButton(hasFailures ? 'Completed (warnings)' : 'Done', false, hasFailures ? 'amber' : 'green');
-                    if (window.Trove.explorer) {
-                      window.Trove.explorer.loadRepository(true);
-                    }
-                    setTimeout(() => this.setButtonIdle(), 7000);
-                  }
-                  if (this.elements.modal && this.elements.modal.style.display === 'flex') {
-                    if (this.pollTimer) clearTimeout(this.pollTimer);
-                    this.pollTimer = setTimeout(() => this.poll(false), 5000);
-                  }
-                  return;
-                }
-              }
-            }
-          }
-        } catch (wErr) {
-          console.warn('Worker telemetry poll note:', wErr);
-        }
-      }
-
-      const ghToken = localStorage.getItem(storage.ghTokenKey) || '';
-      const defaultRepo = (CONFIG.github?.owner && CONFIG.github?.repo) ? `${CONFIG.github.owner}/${CONFIG.github.repo}` : 'mnswa/trove';
-      const rawRepo = localStorage.getItem(storage.ghRepoKey) || defaultRepo;
-      const [owner, repoName] = rawRepo.split('/').map(s => s.trim());
-      const workflowFile = CONFIG.github?.workflowFile || 'ingest.yml';
-
-      let nextDelay = 5000;
-
-      try {
-        const runsUrl = `https://api.github.com/repos/${owner}/${repoName}/actions/workflows/${workflowFile}/runs?per_page=5&_t=${Date.now()}`;
-        const headers = {
-          'Accept': 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28'
-        };
-        if (ghToken) headers['Authorization'] = `Bearer ${ghToken}`;
-
-        const res = await fetch(runsUrl, { headers, cache: 'no-store' });
-
-        if (res.ok) {
-          const data = await res.json();
-          const runs = data.workflow_runs || [];
-
-          if (runs.length > 0) {
-            const latestRun = runs[0];
-            const isRunning = latestRun.status === 'in_progress' || latestRun.status === 'queued';
-
-            let steps = [];
-            try {
-              const jobsUrl = `https://api.github.com/repos/${owner}/${repoName}/actions/runs/${latestRun.id}/jobs?_t=${Date.now()}`;
-              const jobsRes = await fetch(jobsUrl, { headers, cache: 'no-store' });
-              if (jobsRes.ok) {
-                const jobsData = await jobsRes.json();
-                const job = (jobsData.jobs || [])[0];
-                if (job && Array.isArray(job.steps)) {
-                  steps = job.steps;
-                }
-              }
-            } catch (_) {}
-
-            this.renderModal(latestRun, steps);
-
-            if (isRunning) {
-              nextDelay = 3000;
-              this.lastKnownRunId = latestRun.id;
-              this.lastKnownStatus = 'in_progress';
-
-              const activeStep = steps.find(s => s.status === 'in_progress');
-              const btnLabel = activeStep ? activeStep.name.replace(/^Run Ingest Script$/, 'Ingesting').substring(0, 15) : 'Ingesting...';
-              this.showButton(btnLabel, true, 'amber');
-            } else {
-              if (this.lastKnownStatus === 'in_progress' && this.lastKnownRunId === latestRun.id) {
-                this.lastKnownStatus = 'completed';
-                this.showButton(latestRun.conclusion === 'success' ? 'Done' : 'Failed', false, latestRun.conclusion === 'success' ? 'green' : 'red');
-                if (latestRun.conclusion === 'success' && window.Trove.explorer) {
-                  window.Trove.explorer.loadRepository(true);
-                }
-                setTimeout(() => {
-                  this.setButtonIdle();
-                }, 7000);
-              } else {
-                this.setButtonIdle();
-              }
-              nextDelay = 5000;
-            }
-          } else {
-            this.renderModal(null);
-            this.setButtonIdle();
-            nextDelay = 6000;
-          }
-        } else {
-          if (this.elements.modal && this.elements.modal.style.display === 'flex') {
-            if (res.status === 401 || res.status === 403) {
-              if (this.elements.activityStepInfo) this.elements.activityStepInfo.innerText = 'GitHub authentication error. Check GitHub Token.';
-            } else if (res.status === 404) {
-              if (this.elements.activityStepInfo) this.elements.activityStepInfo.innerText = `Workflow '${workflowFile}' not found in ${owner}/${repoName}.`;
-            }
-          }
-          this.setButtonIdle();
-          nextDelay = 6000;
-        }
-      } catch (err) {
-        console.warn('Error polling GitHub Actions API:', err);
-        nextDelay = 6000;
-      }
-
-      if (this.elements.modal && this.elements.modal.style.display === 'flex') {
-        if (this.pollTimer) clearTimeout(this.pollTimer);
-        this.pollTimer = setTimeout(() => this.poll(false), nextDelay);
-      } else {
-        if (this.pollTimer) {
-          clearTimeout(this.pollTimer);
-          this.pollTimer = null;
-        }
-      }
     }
   };
 
-  // Export
   window.Trove.activity = ActivityManager;
 
-  // Backward compatibility aliases
-  window.showActivityModal = () => ActivityManager.open();
-  window.hideActivityModal = () => ActivityManager.close();
-  window.pollActiveIngestion = (manual) => ActivityManager.poll(manual);
-  window.startActiveIngestionPolling = () => ActivityManager.startPolling();
+  document.addEventListener('DOMContentLoaded', () => {
+    ActivityManager.init();
+  });
 })();
-

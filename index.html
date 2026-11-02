@@ -1215,60 +1215,67 @@
       </div>
     </div>
   </div>
+  <!-- Ingestion Activity Modal -->
   <div id="activity-modal" class="fixed inset-0 bg-jet-black/50 dark:bg-black/70 backdrop-blur-sm z-[110] flex items-center justify-center p-3 sm:p-4" style="display: none;">
     <div class="bg-white dark:bg-[#15181f] border border-almond-cream dark:border-[#2b3240] rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
       
       <!-- Modal Header -->
       <div class="px-4 py-3 border-b border-almond-cream dark:border-[#2b3240] flex items-center justify-between bg-almond-cream/20 dark:bg-[#1a1e26]">
-        <div class="flex items-center gap-2">
-          <div class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" id="activity-pulse-dot"></div>
-          <h2 class="text-sm font-bold text-jet-black dark:text-[#f3f4f6]">Ingestion Activity</h2>
-          <span id="activity-status-pill" class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">In Progress</span>
+        <div class="flex items-center gap-2 min-w-0">
+          <div class="w-2 h-2 rounded-full bg-stone-brown/40 dark:bg-[#758092]" id="activity-pulse-dot"></div>
+          <h2 class="text-sm font-bold text-jet-black dark:text-[#f3f4f6] truncate">Ingestion Activity</h2>
+          <span id="activity-status-pill" class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-100 dark:bg-[#202532] text-stone-brown dark:text-[#9aa4b2] shrink-0">Idle</span>
         </div>
-        <button id="close-activity-modal-btn" class="p-1 rounded-lg text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white hover:bg-almond-cream/50 dark:hover:bg-[#202532] transition" title="Close">
+        <button id="close-activity-modal-btn" class="p-1.5 rounded-lg text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white hover:bg-almond-cream/50 dark:hover:bg-[#202532] transition" title="Close">
           <i data-lucide="x" class="w-4 h-4"></i>
         </button>
       </div>
 
       <!-- Modal Body -->
-      <div class="p-4 overflow-y-auto flex-1 flex flex-col gap-3 min-h-0">
+      <div class="p-4 overflow-y-auto flex-1 flex flex-col gap-3.5 min-h-0">
         <!-- Overview Card -->
-        <div class="bg-almond-cream/25 dark:bg-[#1a1e26] border border-almond-cream dark:border-[#2b3240] rounded-xl p-3 flex flex-col gap-2">
-          <div class="flex items-center justify-between text-xs font-mono">
-            <span class="text-stone-brown dark:text-[#9aa4b2] font-medium truncate max-w-[280px]" id="activity-step-info">Connecting to runner...</span>
-            <span class="text-jet-black dark:text-[#f3f4f6] font-semibold shrink-0" id="activity-time-elapsed">00:00</span>
+        <div class="bg-almond-cream/20 dark:bg-[#1a1e26] border border-almond-cream dark:border-[#2b3240] rounded-xl p-3.5 flex flex-col gap-2.5">
+          <div class="flex items-center justify-between text-xs min-w-0">
+            <span id="activity-step-info" class="font-semibold text-jet-black dark:text-[#f3f4f6] truncate">Ready</span>
+            <span id="activity-time-elapsed" class="font-mono text-stone-brown dark:text-[#9aa4b2] text-[11px] shrink-0 ml-2">--:--</span>
           </div>
           <!-- Progress Bar -->
           <div class="w-full bg-almond-cream/60 dark:bg-[#2b3240] rounded-full h-1.5 overflow-hidden">
             <div id="activity-progress-bar" class="bg-jet-black dark:bg-[#f3f4f6] h-full rounded-full transition-all duration-300" style="width: 0%;"></div>
           </div>
-          <div class="flex items-center justify-between text-[11px] text-stone-brown/70 dark:text-[#758092] pt-0.5">
-            <span id="activity-counts">0 of 0 completed</span>
-            <a id="activity-github-link" href="#" target="_blank" rel="noopener noreferrer" class="text-stone-brown dark:text-[#c6ac8f] hover:text-black dark:hover:text-white underline font-medium inline-flex items-center gap-1">
-              <span>View Terminal</span>
+          <div class="flex items-center justify-between text-[11px] text-stone-brown/70 dark:text-[#758092] pt-0.5 font-mono">
+            <span id="activity-counts">0 / 0 completed</span>
+            <a id="activity-github-link" href="#" target="_blank" rel="noopener noreferrer" class="hidden text-stone-brown dark:text-[#c6ac8f] hover:text-black dark:hover:text-white font-sans font-medium underline items-center gap-1">
+              <span>View Actions</span>
               <i data-lucide="external-link" class="w-3 h-3"></i>
             </a>
           </div>
         </div>
 
-        <!-- Runner Steps List -->
-        <div class="flex flex-col gap-1.5">
-          <div class="text-[10px] font-bold uppercase tracking-wider text-stone-brown/60 dark:text-[#758092] px-1 select-none">Workflow Steps</div>
-          <div id="activity-items-list" class="flex flex-col gap-1.5 max-h-60 overflow-y-auto pr-1">
-            <div class="p-3 text-center text-xs text-stone-brown dark:text-[#9aa4b2] bg-almond-cream/15 dark:bg-[#1a1e26] rounded-xl border border-dashed border-almond-cream dark:border-[#2b3240]">
-              Connecting to runner...
+        <!-- Tracks List -->
+        <div class="flex flex-col gap-2 flex-1 min-h-0">
+          <div class="flex items-center justify-between px-1 select-none">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-stone-brown/60 dark:text-[#758092]">Batch Tracks</span>
+            <span id="activity-run-id-label" class="text-[10px] font-mono text-stone-brown/40 dark:text-[#505a6b]"></span>
+          </div>
+          <div id="activity-items-list" class="flex flex-col gap-1.5 max-h-64 overflow-y-auto pr-1">
+            <div class="p-4 text-center text-xs text-stone-brown dark:text-[#9aa4b2] bg-almond-cream/15 dark:bg-[#1a1e26] rounded-xl border border-dashed border-almond-cream dark:border-[#2b3240] flex flex-col items-center gap-1.5">
+              <i data-lucide="info" class="w-4 h-4 text-stone-brown/60 dark:text-[#758092]"></i>
+              <span>No active ingestion. Click Import to download songs from YouTube.</span>
             </div>
           </div>
         </div>
       </div>
 
       <!-- Modal Footer -->
-      <div class="px-4 py-2.5 border-t border-almond-cream dark:border-[#2b3240] bg-almond-cream/10 dark:bg-[#1a1e26] flex items-center justify-between text-xs text-stone-brown dark:text-[#9aa4b2]">
-        <div class="flex items-center gap-1.5">
-          <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-          <span class="text-[11px]">Live updates every 3s</span>
-        </div>
-        <button id="dismiss-activity-btn" class="px-3.5 py-1 font-semibold text-xs rounded-lg bg-white dark:bg-[#202532] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] transition">Close</button>
+      <div class="px-4 py-2.5 border-t border-almond-cream dark:border-[#2b3240] bg-almond-cream/10 dark:bg-[#1a1e26] flex items-center justify-between">
+        <button id="refresh-activity-btn" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-semibold text-xs bg-white dark:bg-[#202532] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] text-jet-black dark:text-[#f3f4f6] border border-khaki-beige dark:border-[#353c4d] transition shadow-sm select-none">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f]" id="activity-refresh-icon"></i>
+          <span>Refresh</span>
+        </button>
+        <button id="dismiss-activity-btn" type="button" class="px-4 py-1.5 font-semibold text-xs rounded-xl bg-jet-black text-white dark:bg-[#f3f4f6] dark:text-[#0e1116] hover:bg-jet-black/80 dark:hover:bg-white transition shadow-sm">
+          Close
+        </button>
       </div>
 
     </div>
