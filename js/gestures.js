@@ -2,9 +2,10 @@
  * Trove Media Vault - Native Mobile Touch Gestures Engine
  *
  * Implements 60/120fps hardware-accelerated gestures without external dependencies:
- *   1. Pull-Down to Refresh (Vault Explorer)
- *   2. Swipe Track Right to Add to Queue (File Rows)
- *   3. Swipe Player to Skip & Minimize (Expanded Artwork + Mini-Player Bar)
+ *   1. Pull-Down to Refresh (Vault Explorer #file-list)
+ *   2. Swipe Track Right to Add to Queue (Revealing green action underlayer with icon)
+ *   3. Expanded Player Gestures (Drag down to minimize, swipe left/right to skip tracks)
+ *   4. Mini-Player Bar Gestures (Swipe up to expand, swipe left/right to skip tracks)
  */
 (function() {
   window.Trove = window.Trove || {};
@@ -16,7 +17,8 @@
     init() {
       this.initPullToRefresh();
       this.initRowSwipeToQueue();
-      this.initPlayerGestures();
+      this.initExpandedPlayerGestures();
+      this.initBottomBarGestures();
     },
 
     // 1. PULL-DOWN TO REFRESH
@@ -138,17 +140,19 @@
       if (!fileList) return;
 
       let activeRow = null;
+      let activeReveal = null;
       let startX = 0;
       let startY = 0;
       let isHorizontal = false;
       let isDetermined = false;
       let currentDeltaX = 0;
-      const SWIPE_THRESHOLD = 70;
+      const SWIPE_THRESHOLD = 75;
 
       fileList.addEventListener('touchstart', (e) => {
         const row = e.target.closest('.file-row');
         if (!row || row.dataset.isDir === 'true') {
           activeRow = null;
+          activeReveal = null;
           return;
         }
 
@@ -156,6 +160,9 @@
         if (e.target.closest('.btn-add-to-playlist')) return;
 
         activeRow = row;
+        const wrapper = row.closest('.file-row-wrapper');
+        activeReveal = wrapper ? wrapper.querySelector('.swipe-queue-reveal') : null;
+
         startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
         isHorizontal = false;
@@ -180,24 +187,47 @@
             isHorizontal = true;
             this.isSwipingRow = true;
             activeRow.classList.add('select-none');
+
+            // Fallback: If underlayer missing, inject dynamically
+            if (!activeReveal && activeRow.parentElement) {
+              const underlayer = document.createElement('div');
+              underlayer.className = 'swipe-queue-reveal absolute inset-y-0 left-0 w-full bg-emerald-600 dark:bg-emerald-600 flex items-center px-4 text-white font-semibold text-xs select-none pointer-events-none transition-colors';
+              underlayer.innerHTML = `
+                <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs">
+                  <svg class="w-4 h-4 shrink-0 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 12H3"/><path d="M16 6H3"/><path d="M16 18H3"/><path d="M18 9v6"/><path d="M21 12h-6"/></svg>
+                  <span class="tracking-wider text-[11px] font-bold uppercase text-white">Add to Queue</span>
+                </div>
+              `;
+              activeRow.parentElement.insertBefore(underlayer, activeRow);
+              activeReveal = underlayer;
+            }
           } else {
             isHorizontal = false;
             activeRow = null;
+            activeReveal = null;
             return;
           }
         }
 
         if (isHorizontal && diffX > 0) {
           if (e.cancelable) e.preventDefault();
-          currentDeltaX = Math.min(diffX, 110);
+          // Rubber band effect beyond 125px
+          currentDeltaX = diffX > 125 ? 125 + (diffX - 125) * 0.28 : diffX;
           activeRow.style.transition = 'none';
           activeRow.style.transform = `translateX(${currentDeltaX}px)`;
 
           // Visual cue when threshold crossed
-          if (currentDeltaX >= SWIPE_THRESHOLD) {
-            activeRow.classList.add('bg-emerald-50/70', 'dark:bg-emerald-950/40');
-          } else {
-            activeRow.classList.remove('bg-emerald-50/70', 'dark:bg-emerald-950/40');
+          if (activeReveal) {
+            const badge = activeReveal.querySelector('div');
+            if (currentDeltaX >= SWIPE_THRESHOLD) {
+              activeReveal.classList.remove('bg-emerald-600', 'dark:bg-emerald-600');
+              activeReveal.classList.add('bg-emerald-500', 'dark:bg-emerald-500');
+              if (badge) badge.classList.add('scale-105', 'bg-white/30');
+            } else {
+              activeReveal.classList.add('bg-emerald-600', 'dark:bg-emerald-600');
+              activeReveal.classList.remove('bg-emerald-500', 'dark:bg-emerald-500');
+              if (badge) badge.classList.remove('scale-105', 'bg-white/30');
+            }
           }
         }
       }, { passive: false });
@@ -206,7 +236,9 @@
         if (!activeRow) return;
 
         const row = activeRow;
+        const reveal = activeReveal;
         activeRow = null;
+        activeReveal = null;
 
         if (isHorizontal && currentDeltaX >= SWIPE_THRESHOLD) {
           if (navigator.vibrate) navigator.vibrate(30);
@@ -217,24 +249,26 @@
 
           if (item && window.Trove.playlists && typeof window.Trove.playlists.addToQueue === 'function') {
             window.Trove.playlists.addToQueue(item);
-            if (window.Trove.utils && window.Trove.utils.showToast) {
-              window.Trove.utils.showToast(`Added "${item.name}" to queue`);
-            }
           }
         }
 
         // Animate row back smoothly
-        row.style.transition = 'transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1), background-color 0.24s ease';
+        row.style.transition = 'transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1)';
         row.style.transform = 'translateX(0)';
         setTimeout(() => {
           row.style.transition = '';
           row.style.transform = '';
-          row.classList.remove('bg-emerald-50/70', 'dark:bg-emerald-950/40', 'select-none');
-          // Reset swiping state shortly after to block accidental row click
+          row.classList.remove('select-none');
+          if (reveal) {
+            reveal.classList.add('bg-emerald-600', 'dark:bg-emerald-600');
+            reveal.classList.remove('bg-emerald-500', 'dark:bg-emerald-500');
+            const badge = reveal.querySelector('div');
+            if (badge) badge.classList.remove('scale-105', 'bg-white/30');
+          }
           setTimeout(() => {
             this.isSwipingRow = false;
-          }, 60);
-        }, 240);
+          }, 80);
+        }, 250);
       };
 
       fileList.addEventListener('touchend', endRowSwipe, { passive: true });
@@ -249,139 +283,262 @@
       }, true);
     },
 
-    // 3. SWIPE PLAYER TO SKIP / MINIMIZE
-    initPlayerGestures() {
-      // A. Expanded Player Artwork & Stage
+    // 3. EXPANDED PLAYER GESTURES (SWIPE DOWN TO MINIMIZE, SWIPE LEFT/RIGHT TO SKIP)
+    initExpandedPlayerGestures() {
       const expandedPlayer = document.getElementById('expanded-player');
-      const stageMusic = document.getElementById('stage-music');
       const coverArt = document.getElementById('expanded-cover-art');
+      if (!expandedPlayer) return;
 
-      if (expandedPlayer && (coverArt || stageMusic)) {
-        const targetStage = coverArt || stageMusic;
-        let startX = 0;
-        let startY = 0;
-        let diffX = 0;
-        let diffY = 0;
-        let isMoving = false;
+      let startX = 0;
+      let startY = 0;
+      let diffX = 0;
+      let diffY = 0;
+      let isTracking = false;
+      let gestureMode = null; // 'down' | 'horizontal' | null
+      let isDetermined = false;
 
-        targetStage.addEventListener('touchstart', (e) => {
-          // Don't intercept if touching interactive controls
-          if (e.target.closest('button, input, a, select')) return;
-          startX = e.touches[0].clientX;
-          startY = e.touches[0].clientY;
-          diffX = 0;
-          diffY = 0;
-          isMoving = true;
-        }, { passive: true });
+      expandedPlayer.addEventListener('touchstart', (e) => {
+        // Only active when player is actually expanded
+        const playerState = window.Trove.player || {};
+        if (playerState.isExpanded === false) return;
 
-        targetStage.addEventListener('touchmove', (e) => {
-          if (!isMoving) return;
-          diffX = e.touches[0].clientX - startX;
-          diffY = e.touches[0].clientY - startY;
+        // Ignore touches on interactive controls (buttons, range sliders, select, lyrics scrolling)
+        if (e.target.closest('button, input, select, a, #lyrics-scroll-body, #expanded-lyrics-container')) return;
 
-          // Drag down on player stage gives slight pull feedback
-          if (diffY > 15 && Math.abs(diffY) > Math.abs(diffX)) {
-            if (e.cancelable) e.preventDefault();
-          }
-        }, { passive: false });
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        diffX = 0;
+        diffY = 0;
+        isTracking = true;
+        gestureMode = null;
+        isDetermined = false;
+      }, { passive: true });
 
-        const endStageGesture = () => {
-          if (!isMoving) return;
-          isMoving = false;
+      expandedPlayer.addEventListener('touchmove', (e) => {
+        if (!isTracking) return;
 
-          const absX = Math.abs(diffX);
-          const absY = Math.abs(diffY);
+        const currentX = e.touches[0].clientX;
+        const currentY = e.touches[0].clientY;
+        diffX = currentX - startX;
+        diffY = currentY - startY;
 
-          // 1. Vertical Swipe Down -> Minimize Player
-          if (diffY > 70 && absY > absX * 1.2) {
-            if (navigator.vibrate) navigator.vibrate(20);
-            if (window.Trove.player && typeof window.Trove.player.minimize === 'function') {
-              window.Trove.player.minimize();
-            }
+        const absX = Math.abs(diffX);
+        const absY = Math.abs(diffY);
+
+        if (!isDetermined && (absX > 8 || absY > 8)) {
+          isDetermined = true;
+          // Downward drag to minimize
+          if (diffY > 8 && diffY > absX * 0.9) {
+            gestureMode = 'down';
+          } else if (absX > 8 && absX > absY * 0.9) {
+            // Horizontal swipe to skip
+            gestureMode = 'horizontal';
+          } else {
+            gestureMode = null;
+            isTracking = false;
             return;
           }
+        }
 
-          // 2. Horizontal Swipe -> Next / Previous
-          if (absX >= 55 && absX > absY) {
-            if (navigator.vibrate) navigator.vibrate(25);
-            if (diffX < 0) {
-              // Swipe Left -> Next
-              if (coverArt) {
-                coverArt.style.transition = 'transform 0.15s ease-out, opacity 0.15s ease-out';
-                coverArt.style.transform = 'translateX(-30px)';
-                coverArt.style.opacity = '0.7';
-                setTimeout(() => {
-                  coverArt.style.transform = 'translateX(20px)';
-                  if (window.Trove.player) window.Trove.player.next();
-                  setTimeout(() => {
-                    coverArt.style.transition = 'transform 0.2s ease-out, opacity 0.2s ease-out';
-                    coverArt.style.transform = 'translateX(0)';
-                    coverArt.style.opacity = '1';
-                  }, 40);
-                }, 150);
-              } else if (window.Trove.player) {
-                window.Trove.player.next();
+        if (gestureMode === 'down') {
+          if (diffY > 0) {
+            if (e.cancelable) e.preventDefault();
+            // Fluid downward sheet movement with rubber-band damping
+            expandedPlayer.style.transition = 'none';
+            expandedPlayer.style.transform = `translateY(${diffY}px)`;
+            const opacity = Math.max(0.65, 1 - (diffY / 550));
+            expandedPlayer.style.opacity = `${opacity}`;
+          }
+        } else if (gestureMode === 'horizontal') {
+          if (e.cancelable) e.preventDefault();
+          // Visual horizontal drag feedback on the album cover art
+          if (coverArt) {
+            coverArt.style.transition = 'none';
+            coverArt.style.transform = `translateX(${diffX * 0.45}px)`;
+            const fade = Math.max(0.4, 1 - (absX / 280));
+            coverArt.style.opacity = `${fade}`;
+          }
+        }
+      }, { passive: false });
+
+      const finishExpandedGesture = () => {
+        if (!isTracking) return;
+        isTracking = false;
+
+        if (gestureMode === 'down') {
+          const THRESHOLD_MINIMIZE = 85;
+          if (diffY >= THRESHOLD_MINIMIZE) {
+            if (navigator.vibrate) navigator.vibrate(20);
+            // Animate sheet sliding away smoothly
+            expandedPlayer.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.22s ease';
+            expandedPlayer.style.transform = 'translateY(100%)';
+            expandedPlayer.style.opacity = '0';
+            setTimeout(() => {
+              expandedPlayer.style.transition = '';
+              expandedPlayer.style.transform = '';
+              expandedPlayer.style.opacity = '';
+              if (window.Trove.player && typeof window.Trove.player.minimize === 'function') {
+                window.Trove.player.minimize();
               }
-            } else {
-              // Swipe Right -> Previous
-              if (coverArt) {
-                coverArt.style.transition = 'transform 0.15s ease-out, opacity 0.15s ease-out';
-                coverArt.style.transform = 'translateX(30px)';
-                coverArt.style.opacity = '0.7';
-                setTimeout(() => {
-                  coverArt.style.transform = 'translateX(-20px)';
-                  if (window.Trove.player) window.Trove.player.previous();
+            }, 210);
+          } else {
+            // Snap back up
+            expandedPlayer.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.22s ease';
+            expandedPlayer.style.transform = 'translateY(0%)';
+            expandedPlayer.style.opacity = '1';
+            setTimeout(() => {
+              expandedPlayer.style.transition = '';
+              expandedPlayer.style.transform = '';
+              expandedPlayer.style.opacity = '';
+            }, 230);
+          }
+        } else if (gestureMode === 'horizontal') {
+          const THRESHOLD_SKIP = 48;
+          const absX = Math.abs(diffX);
+
+          if (absX >= THRESHOLD_SKIP) {
+            if (navigator.vibrate) navigator.vibrate(25);
+            const isNext = diffX < 0; // Swipe Left = Next, Swipe Right = Previous
+
+            if (coverArt) {
+              // Slide out in swipe direction
+              coverArt.style.transition = 'transform 0.16s ease-out, opacity 0.16s ease-out';
+              coverArt.style.transform = `translateX(${isNext ? -90 : 90}px)`;
+              coverArt.style.opacity = '0.1';
+
+              setTimeout(() => {
+                if (window.Trove.player) {
+                  if (isNext) {
+                    if (typeof window.Trove.player.playNext === 'function') window.Trove.player.playNext();
+                    else if (typeof window.Trove.player.next === 'function') window.Trove.player.next();
+                  } else {
+                    if (typeof window.Trove.player.playPrev === 'function') window.Trove.player.playPrev();
+                    else if (typeof window.Trove.player.previous === 'function') window.Trove.player.previous();
+                  }
+                }
+                // Prepare slide in from opposite side
+                coverArt.style.transition = 'none';
+                coverArt.style.transform = `translateX(${isNext ? 90 : -90}px)`;
+                coverArt.style.opacity = '0.2';
+
+                requestAnimationFrame(() => {
+                  coverArt.style.transition = 'transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.24s ease';
+                  coverArt.style.transform = 'translateX(0)';
+                  coverArt.style.opacity = '1';
                   setTimeout(() => {
-                    coverArt.style.transition = 'transform 0.2s ease-out, opacity 0.2s ease-out';
-                    coverArt.style.transform = 'translateX(0)';
-                    coverArt.style.opacity = '1';
-                  }, 40);
-                }, 150);
-              } else if (window.Trove.player) {
-                window.Trove.player.previous();
+                    coverArt.style.transition = '';
+                    coverArt.style.transform = '';
+                    coverArt.style.opacity = '';
+                  }, 250);
+                });
+              }, 160);
+            } else if (window.Trove.player) {
+              if (isNext) {
+                if (typeof window.Trove.player.playNext === 'function') window.Trove.player.playNext();
+                else if (typeof window.Trove.player.next === 'function') window.Trove.player.next();
+              } else {
+                if (typeof window.Trove.player.playPrev === 'function') window.Trove.player.playPrev();
+                else if (typeof window.Trove.player.previous === 'function') window.Trove.player.previous();
               }
             }
+          } else if (coverArt) {
+            // Snap cover back to center
+            coverArt.style.transition = 'transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.2s ease';
+            coverArt.style.transform = 'translateX(0)';
+            coverArt.style.opacity = '1';
+            setTimeout(() => {
+              coverArt.style.transition = '';
+              coverArt.style.transform = '';
+              coverArt.style.opacity = '';
+            }, 210);
           }
-        };
+        }
 
-        targetStage.addEventListener('touchend', endStageGesture, { passive: true });
-        targetStage.addEventListener('touchcancel', endStageGesture, { passive: true });
-      }
+        diffX = 0;
+        diffY = 0;
+        gestureMode = null;
+      };
 
-      // B. Mini-Player Bottom Bar (Swipe left/right to skip, swipe up to expand)
+      expandedPlayer.addEventListener('touchend', finishExpandedGesture, { passive: true });
+      expandedPlayer.addEventListener('touchcancel', finishExpandedGesture, { passive: true });
+    },
+
+    // 4. MINI-PLAYER BOTTOM BAR GESTURES (SWIPE UP TO EXPAND, SWIPE LEFT/RIGHT TO SKIP)
+    initBottomBarGestures() {
       const bottomPlayBar = document.getElementById('bottom-play-bar');
-      if (bottomPlayBar) {
-        let bStartX = 0;
-        let bStartY = 0;
-        let bDiffX = 0;
-        let bDiffY = 0;
-        let bMoving = false;
+      if (!bottomPlayBar) return;
 
-        bottomPlayBar.addEventListener('touchstart', (e) => {
-          // Ignore touches on actual buttons
-          if (e.target.closest('button, input, a')) return;
-          bStartX = e.touches[0].clientX;
-          bStartY = e.touches[0].clientY;
-          bDiffX = 0;
-          bDiffY = 0;
-          bMoving = true;
-        }, { passive: true });
+      let bStartX = 0;
+      let bStartY = 0;
+      let bDiffX = 0;
+      let bDiffY = 0;
+      let isBarTracking = false;
+      let isBarDetermined = false;
+      let isBarSwiping = false;
 
-        bottomPlayBar.addEventListener('touchmove', (e) => {
-          if (!bMoving) return;
-          bDiffX = e.touches[0].clientX - bStartX;
-          bDiffY = e.touches[0].clientY - bStartY;
-        }, { passive: true });
+      bottomPlayBar.addEventListener('touchstart', (e) => {
+        // Ignore touches on playback buttons or inputs
+        if (e.target.closest('button, input, a')) return;
+        bStartX = e.touches[0].clientX;
+        bStartY = e.touches[0].clientY;
+        bDiffX = 0;
+        bDiffY = 0;
+        isBarTracking = true;
+        isBarDetermined = false;
+        isBarSwiping = false;
+      }, { passive: true });
 
-        const endBottomBarGesture = () => {
-          if (!bMoving) return;
-          bMoving = false;
+      bottomPlayBar.addEventListener('touchmove', (e) => {
+        if (!isBarTracking) return;
+        bDiffX = e.touches[0].clientX - bStartX;
+        bDiffY = e.touches[0].clientY - bStartY;
+        const absX = Math.abs(bDiffX);
+        const absY = Math.abs(bDiffY);
+
+        if (!isBarDetermined && (absX > 8 || absY > 8)) {
+          isBarDetermined = true;
+          isBarSwiping = true;
+        }
+
+        if (isBarSwiping) {
+          if (absX > absY) {
+            if (e.cancelable) e.preventDefault();
+            // Subtle horizontal nudge feedback
+            bottomPlayBar.style.transform = `translateX(${bDiffX * 0.22}px)`;
+          } else if (bDiffY < 0) {
+            if (e.cancelable) e.preventDefault();
+            // Subtle lift feedback on swipe up
+            bottomPlayBar.style.transform = `translateY(${bDiffY * 0.3}px)`;
+          }
+        }
+      }, { passive: false });
+
+      const finishBottomBarGesture = () => {
+        if (!isBarTracking) return;
+        isBarTracking = false;
+
+        bottomPlayBar.style.transition = 'transform 0.22s ease-out';
+        bottomPlayBar.style.transform = '';
+        setTimeout(() => {
+          bottomPlayBar.style.transition = '';
+        }, 230);
+
+        if (isBarSwiping) {
+          // Suppress the click event on bar-expand-trigger
+          const suppressClick = (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          };
+          bottomPlayBar.addEventListener('click', suppressClick, { capture: true, once: true });
+          setTimeout(() => {
+            bottomPlayBar.removeEventListener('click', suppressClick, { capture: true });
+          }, 250);
 
           const absX = Math.abs(bDiffX);
           const absY = Math.abs(bDiffY);
 
           // 1. Swipe Up -> Expand Player
-          if (bDiffY < -40 && absY > absX) {
+          if (bDiffY < -35 && absY > absX) {
             if (navigator.vibrate) navigator.vibrate(20);
             if (window.Trove.player && typeof window.Trove.player.expand === 'function') {
               window.Trove.player.expand();
@@ -389,28 +546,30 @@
             return;
           }
 
-          // 2. Swipe Left -> Next
-          if (bDiffX < -45 && absX > absY) {
+          // 2. Swipe Left -> Next Track
+          if (bDiffX < -40 && absX > absY) {
             if (navigator.vibrate) navigator.vibrate(25);
-            if (window.Trove.player && typeof window.Trove.player.next === 'function') {
-              window.Trove.player.next();
+            if (window.Trove.player) {
+              if (typeof window.Trove.player.playNext === 'function') window.Trove.player.playNext();
+              else if (typeof window.Trove.player.next === 'function') window.Trove.player.next();
             }
             return;
           }
 
-          // 3. Swipe Right -> Previous
-          if (bDiffX > 45 && absX > absY) {
+          // 3. Swipe Right -> Previous Track
+          if (bDiffX > 40 && absX > absY) {
             if (navigator.vibrate) navigator.vibrate(25);
-            if (window.Trove.player && typeof window.Trove.player.previous === 'function') {
-              window.Trove.player.previous();
+            if (window.Trove.player) {
+              if (typeof window.Trove.player.playPrev === 'function') window.Trove.player.playPrev();
+              else if (typeof window.Trove.player.previous === 'function') window.Trove.player.previous();
             }
             return;
           }
-        };
+        }
+      };
 
-        bottomPlayBar.addEventListener('touchend', endBottomBarGesture, { passive: true });
-        bottomPlayBar.addEventListener('touchcancel', endBottomBarGesture, { passive: true });
-      }
+      bottomPlayBar.addEventListener('touchend', finishBottomBarGesture, { passive: true });
+      bottomPlayBar.addEventListener('touchcancel', finishBottomBarGesture, { passive: true });
     }
   };
 
@@ -423,4 +582,3 @@
     GesturesManager.init();
   }
 })();
-

@@ -584,7 +584,8 @@
         this.renderQueue();
       }
 
-      if (showToast) showToast(`Added "${track.name}" to queue`);
+      const displayName = (track.name || '').replace(/\.[a-zA-Z0-9]+$/, '');
+      if (showToast) showToast(`Added "${displayName}" to queue`);
     },
 
     removeFromQueue(index) {

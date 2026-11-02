@@ -168,17 +168,17 @@
     if (!toast) {
       toast = document.createElement('div');
       toast.id = 'trove-toast';
-      toast.className = 'fixed bottom-24 sm:bottom-20 left-1/2 -translate-x-1/2 z-[130] px-4 py-2 bg-jet-black/95 dark:bg-[#1e222c]/95 border border-khaki-beige dark:border-[#353c4d] text-white dark:text-[#f3f4f6] text-xs font-semibold rounded-full shadow-2xl transition-all duration-300 pointer-events-none opacity-0 translate-y-3 select-none flex items-center gap-2';
       document.body.appendChild(toast);
     }
-    toast.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span>${escapeHtml(message)}</span>`;
-    toast.classList.remove('opacity-0', 'translate-y-3');
+    toast.className = 'fixed bottom-24 sm:bottom-20 left-1/2 -translate-x-1/2 z-[140] px-5 py-3 sm:px-6 sm:py-3.5 max-w-[90vw] sm:max-w-md bg-jet-black/95 dark:bg-[#1a1f2c]/95 backdrop-blur-md border border-stone-brown/30 dark:border-[#3a4459] text-white dark:text-[#f3f4f6] text-xs sm:text-sm font-semibold rounded-full shadow-[0_12px_36px_rgba(0,0,0,0.35)] dark:shadow-[0_12px_36px_rgba(0,0,0,0.7)] transition-all duration-300 pointer-events-none opacity-0 translate-y-4 select-none flex items-center gap-2.5 overflow-hidden';
+    toast.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span><span class="truncate min-w-0 font-medium">${escapeHtml(message)}</span>`;
+    toast.classList.remove('opacity-0', 'translate-y-4');
     toast.classList.add('opacity-100', 'translate-y-0');
 
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
       toast.classList.remove('opacity-100', 'translate-y-0');
-      toast.classList.add('opacity-0', 'translate-y-3');
+      toast.classList.add('opacity-0', 'translate-y-4');
     }, duration);
   }
 
@@ -235,7 +235,7 @@
       try {
         const { animate } = window.Motion;
         const stagger = window.Motion.stagger || ((val) => (i) => i * val);
-        const rows = fileListEl.querySelectorAll('.file-row');
+        const rows = fileListEl.querySelectorAll('.file-row-wrapper, .file-row');
         if (!rows || rows.length === 0) return;
 
         const visibleSlice = Array.from(rows).slice(0, 30);

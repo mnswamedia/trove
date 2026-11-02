@@ -617,21 +617,23 @@
 
       if (state.viewMode === 'tree' && state.currentDirectory !== '' && !state.searchQuery) {
         html += `
-          <div class="grid grid-cols-12 items-center px-4 py-2.5 hover:bg-almond-cream/20 dark:hover:bg-[#1a1f28] cursor-pointer transition text-sm" data-action="go-parent">
-            <div class="col-span-7 md:col-span-6 flex items-center gap-3 min-w-0">
-              <div class="w-8 h-8 rounded-lg bg-almond-cream/60 dark:bg-[#202532] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0">
-                <i data-lucide="corner-left-up" class="w-4 h-4"></i>
+          <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f]">
+            <div class="grid grid-cols-12 items-center px-4 py-2.5 hover:bg-almond-cream/20 dark:hover:bg-[#1a1f28] cursor-pointer transition text-sm" data-action="go-parent">
+              <div class="col-span-7 md:col-span-6 flex items-center gap-3 min-w-0">
+                <div class="w-8 h-8 rounded-lg bg-almond-cream/60 dark:bg-[#202532] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0">
+                  <i data-lucide="corner-left-up" class="w-4 h-4"></i>
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <span class="font-semibold text-black dark:text-[#f3f4f6] truncate">..</span>
+                  <span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">Parent Directory</span>
+                </div>
               </div>
-              <div class="flex flex-col min-w-0">
-                <span class="font-semibold text-black dark:text-[#f3f4f6] truncate">..</span>
-                <span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">Parent Directory</span>
+              <div class="col-span-2 md:col-span-2">
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">UP</span>
               </div>
+              <div class="col-span-3 md:col-span-2 font-mono text-xs text-stone-brown/60 dark:text-[#758092] text-right md:text-left">--</div>
+              <div class="hidden md:block col-span-2 text-xs text-stone-brown/60 dark:text-[#758092]">Directory</div>
             </div>
-            <div class="col-span-2 md:col-span-2">
-              <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">UP</span>
-            </div>
-            <div class="col-span-3 md:col-span-2 font-mono text-xs text-stone-brown/60 dark:text-[#758092] text-right md:text-left">--</div>
-            <div class="hidden md:block col-span-2 text-xs text-stone-brown/60 dark:text-[#758092]">Directory</div>
           </div>
         `;
       }
@@ -668,8 +670,8 @@
         }
 
         const activeRowClass = isCurrentActive 
-          ? 'bg-almond-cream/30 dark:bg-[#202736] border-l-4 border-l-jet-black dark:border-l-[#c6ac8f] font-medium' 
-          : 'hover:bg-almond-cream/15 dark:hover:bg-[#1a1f28]';
+          ? 'bg-almond-cream/40 dark:bg-[#202736] border-l-4 border-l-jet-black dark:border-l-[#c6ac8f] font-medium' 
+          : 'bg-white dark:bg-[#15181f] hover:bg-almond-cream/15 dark:hover:bg-[#1a1f28]';
 
         let thumbSlotHtml = '';
         if (isPlayable) {
@@ -710,25 +712,35 @@
         ` : '';
 
         html += `
-          <div class="file-row grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 transition text-sm cursor-pointer ${activeRowClass}" data-path="${escapeHtml(item.path)}" data-is-dir="${isFolder}" title="${escapeHtml(item.name)} (${isFolder ? 'Folder' : (isPlayable ? 'Click to play' : 'Click to open in new tab')})">
-            <div class="col-span-6 md:col-span-6 flex items-center gap-2.5 sm:gap-3 min-w-0">
-              ${thumbSlotHtml}
-              <div class="flex flex-col min-w-0">
-                <span class="font-semibold text-black dark:text-[#f3f4f6] truncate ${isCurrentActive ? 'text-jet-black dark:text-white' : ''}">${escapeHtml(item.name)}</span>
-                <span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">${escapeHtml(pathSub)}</span>
+          <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f]">
+            ${isPlayable ? `
+            <div class="swipe-queue-reveal absolute inset-y-0 left-0 w-full bg-emerald-600 dark:bg-emerald-600 flex items-center px-4 text-white font-semibold text-xs select-none pointer-events-none transition-colors">
+              <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs">
+                <i data-lucide="list-plus" class="w-4 h-4 shrink-0 text-white"></i>
+                <span class="tracking-wider text-[11px] font-bold uppercase text-white">Add to Queue</span>
               </div>
             </div>
-            <div class="col-span-2 md:col-span-2">
-              <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase ${badgeClasses}">
-                ${escapeHtml(item.label)}
-              </span>
-            </div>
-            <div class="col-span-3 md:col-span-2 font-mono text-xs text-stone-brown dark:text-[#9aa4b2] text-right md:text-left truncate">
-              ${isFolder ? '--' : formatBytes(item.size)}
-            </div>
-            <div class="col-span-1 md:col-span-2 flex items-center justify-end md:justify-between text-xs ${isPlayable && isCurrentActive ? 'text-jet-black dark:text-[#c6ac8f] font-semibold' : 'text-stone-brown/70 dark:text-[#758092]'}">
-              <span class="hidden md:inline truncate" ${dateTooltip ? `title="${escapeHtml(dateTooltip)}"` : ''}>${escapeHtml(displayStatus)}</span>
-              ${actionBtnHtml}
+            ` : ''}
+            <div class="file-row relative bg-white dark:bg-[#15181f] grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 transition text-sm cursor-pointer ${activeRowClass}" data-path="${escapeHtml(item.path)}" data-is-dir="${isFolder}" title="${escapeHtml(item.name)} (${isFolder ? 'Folder' : (isPlayable ? 'Click to play' : 'Click to open in new tab')})">
+              <div class="col-span-6 md:col-span-6 flex items-center gap-2.5 sm:gap-3 min-w-0">
+                ${thumbSlotHtml}
+                <div class="flex flex-col min-w-0">
+                  <span class="font-semibold text-black dark:text-[#f3f4f6] truncate ${isCurrentActive ? 'text-jet-black dark:text-white' : ''}">${escapeHtml(item.name)}</span>
+                  <span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">${escapeHtml(pathSub)}</span>
+                </div>
+              </div>
+              <div class="col-span-2 md:col-span-2">
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase ${badgeClasses}">
+                  ${escapeHtml(item.label)}
+                </span>
+              </div>
+              <div class="col-span-3 md:col-span-2 font-mono text-xs text-stone-brown dark:text-[#9aa4b2] text-right md:text-left truncate">
+                ${isFolder ? '--' : formatBytes(item.size)}
+              </div>
+              <div class="col-span-1 md:col-span-2 flex items-center justify-end md:justify-between text-xs ${isPlayable && isCurrentActive ? 'text-jet-black dark:text-[#c6ac8f] font-semibold' : 'text-stone-brown/70 dark:text-[#758092]'}">
+                <span class="hidden md:inline truncate" ${dateTooltip ? `title="${escapeHtml(dateTooltip)}"` : ''}>${escapeHtml(displayStatus)}</span>
+                ${actionBtnHtml}
+              </div>
             </div>
           </div>
         `;

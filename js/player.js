@@ -637,6 +637,14 @@
       this.playTrack(this.queue[prevIndex]);
     },
 
+    next() {
+      this.playNext();
+    },
+
+    previous() {
+      this.playPrev();
+    },
+
     seekTo(seconds) {
       const activeEl = this.getActiveElement();
       if (activeEl && !isNaN(activeEl.duration)) {
