@@ -309,9 +309,17 @@ export async function handleIngest(request, env, url) {
         run = await env.DB.prepare(`SELECT * FROM ingest_runs WHERE id = ?`).bind(runId).first();
       } else if (githubRunId) {
         run = await env.DB.prepare(`SELECT * FROM ingest_runs WHERE github_run_id = ?`).bind(githubRunId).first();
-      } else {
-        // Default: return latest run
-        run = await env.DB.prepare(`SELECT * FROM ingest_runs ORDER BY created_at DESC LIMIT 1`).first();
+      }
+
+      if (!run) {
+        // Default / Fallback: return active running batch first, or the most recent run
+        run = await env.DB.prepare(`
+          SELECT * FROM ingest_runs
+          ORDER BY
+            CASE WHEN status IN ('in_progress', 'queued') THEN 0 ELSE 1 END ASC,
+            created_at DESC
+          LIMIT 1
+        `).first();
       }
 
       if (!run) {
