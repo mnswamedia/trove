@@ -574,6 +574,11 @@
             if (navigator.vibrate) navigator.vibrate(25);
             const isNext = diffX < 0; // Swipe Left = Next, Swipe Right = Previous
 
+            if (coverArt) {
+              coverArt.style.transition = 'opacity 0.2s ease-out';
+              coverArt.style.opacity = '0.5';
+            }
+
             if (window.Trove.player) {
               if (isNext) {
                 if (typeof window.Trove.player.playNext === 'function') window.Trove.player.playNext();
@@ -583,8 +588,6 @@
                 else if (typeof window.Trove.player.previous === 'function') window.Trove.player.previous();
               }
             }
-
-            this.animateCoverPop();
           }
         }
 
