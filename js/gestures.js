@@ -288,8 +288,8 @@
               activeRow.style.transform = `translate3d(${currentDeltaX}px, 0, 0)`;
 
               if (currentDeltaX > 0 && revealQueue) {
-                revealQueue.style.zIndex = '1';
-                if (revealPlaylist) revealPlaylist.style.zIndex = '0';
+                revealQueue.style.display = 'flex';
+                if (revealPlaylist) revealPlaylist.style.display = 'none';
                 const scale = Math.min(1.08, 0.8 + (currentDeltaX / SWIPE_THRESHOLD) * 0.28);
                 if (queueBadge) queueBadge.style.transform = `scale(${scale})`;
 
@@ -307,8 +307,8 @@
                   }
                 }
               } else if (currentDeltaX < 0 && revealPlaylist) {
-                revealPlaylist.style.zIndex = '1';
-                if (revealQueue) revealQueue.style.zIndex = '0';
+                revealPlaylist.style.display = 'flex';
+                if (revealQueue) revealQueue.style.display = 'none';
                 const absDelta = Math.abs(currentDeltaX);
                 const scale = Math.min(1.08, 0.8 + (absDelta / SWIPE_THRESHOLD) * 0.28);
                 if (playlistBadge) playlistBadge.style.transform = `scale(${scale})`;
@@ -373,28 +373,41 @@
           }
         }
 
-        // Hardware-accelerated CSS transition spring return
-        row.style.transition = 'transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.15)';
+        // Hardware-accelerated CSS transition glide return
+        row.style.transition = 'transform 0.24s cubic-bezier(0.22, 1, 0.36, 1)';
         row.style.transform = 'translate3d(0, 0, 0)';
-        setTimeout(() => {
+
+        let hasHandledReset = false;
+        const handleRowReset = () => {
+          if (hasHandledReset) return;
+          hasHandledReset = true;
+          row.removeEventListener('transitionend', handleRowReset);
+
           row.style.transition = '';
           row.style.transform = '';
           row.style.willChange = '';
           row.classList.remove('select-none');
+
           if (qReveal) {
+            qReveal.style.display = 'none';
             qReveal.classList.add('bg-emerald-600', 'dark:bg-emerald-600');
             qReveal.classList.remove('bg-emerald-500', 'dark:bg-emerald-500');
             if (qBadge) { qBadge.style.transform = ''; qBadge.classList.remove('bg-white/30'); }
           }
           if (pReveal) {
+            pReveal.style.display = 'none';
             pReveal.classList.add('bg-amber-600', 'dark:bg-amber-600');
             pReveal.classList.remove('bg-amber-500', 'dark:bg-amber-500');
             if (pBadge) { pBadge.style.transform = ''; pBadge.classList.remove('bg-white/30'); }
           }
+
           setTimeout(() => {
             this.isSwipingRow = false;
-          }, 80);
-        }, 260);
+          }, 60);
+        };
+
+        row.addEventListener('transitionend', handleRowReset);
+        setTimeout(handleRowReset, 280);
       };
 
       fileList.addEventListener('touchend', endRowSwipe, { passive: true });
@@ -580,12 +593,18 @@
             const isNext = diffX < 0; // Swipe Left = Next, Swipe Right = Previous
 
             if (coverArt) {
-              // Slide out in swipe direction with slight tilt
-              coverArt.style.transition = 'transform 0.18s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.15s ease-out';
-              coverArt.style.transform = `translate3d(${isNext ? -130 : 130}px, 0, 0) rotate(${isNext ? -12 : 12}deg)`;
+              // Phase 1: Slide out current cover in swipe direction
+              coverArt.style.transition = 'transform 0.16s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.14s ease-out';
+              coverArt.style.transform = `translate3d(${isNext ? -120 : 120}px, 0, 0) rotate(${isNext ? -8 : 8}deg)`;
               coverArt.style.opacity = '0';
 
-              setTimeout(() => {
+              let hasHandledExit = false;
+              const handleExit = () => {
+                if (hasHandledExit) return;
+                hasHandledExit = true;
+                coverArt.removeEventListener('transitionend', handleExit);
+
+                // Phase 2: Trigger track change while cover is invisible
                 if (window.Trove.player) {
                   if (isNext) {
                     if (typeof window.Trove.player.playNext === 'function') window.Trove.player.playNext();
@@ -595,23 +614,38 @@
                     else if (typeof window.Trove.player.previous === 'function') window.Trove.player.previous();
                   }
                 }
-                // Prepare entry from opposite side with scale
-                coverArt.style.transition = 'none';
-                coverArt.style.transform = `translate3d(${isNext ? 90 : -90}px, 0, 0) rotate(${isNext ? 8 : -8}deg) scale(0.93)`;
-                coverArt.style.opacity = '0.3';
 
-                requestAnimationFrame(() => {
-                  coverArt.style.transition = 'transform 0.30s cubic-bezier(0.175, 0.885, 0.32, 1.1), opacity 0.24s ease-out';
-                  coverArt.style.transform = 'translate3d(0, 0, 0) rotate(0deg) scale(1)';
-                  coverArt.style.opacity = '1';
-                  setTimeout(() => {
-                    coverArt.style.transition = '';
-                    coverArt.style.transform = '';
-                    coverArt.style.opacity = '';
-                    coverArt.style.willChange = '';
-                  }, 310);
-                });
-              }, 170);
+                // Phase 3: Instant reposition on opposite side (no transition)
+                coverArt.style.transition = 'none';
+                coverArt.style.transform = `translate3d(${isNext ? 80 : -80}px, 0, 0) rotate(${isNext ? 6 : -6}deg) scale(0.95)`;
+                coverArt.style.opacity = '0';
+
+                // Force layout reflow so the browser commits the off-screen start coordinates
+                void coverArt.offsetWidth;
+
+                // Phase 4: Smooth glide into resting center (0, 0, 0) with zero overshoot
+                coverArt.style.transition = 'transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease-out';
+                coverArt.style.transform = 'translate3d(0, 0, 0) rotate(0deg) scale(1)';
+                coverArt.style.opacity = '1';
+
+                let hasHandledEntry = false;
+                const handleEntry = () => {
+                  if (hasHandledEntry) return;
+                  hasHandledEntry = true;
+                  coverArt.removeEventListener('transitionend', handleEntry);
+                  coverArt.style.transition = '';
+                  coverArt.style.transform = '';
+                  coverArt.style.opacity = '';
+                  coverArt.style.willChange = '';
+                };
+
+                coverArt.addEventListener('transitionend', handleEntry);
+                setTimeout(handleEntry, 340);
+              };
+
+              coverArt.addEventListener('transitionend', handleExit);
+              setTimeout(handleExit, 200);
+
             } else if (window.Trove.player) {
               if (isNext) {
                 if (typeof window.Trove.player.playNext === 'function') window.Trove.player.playNext();
@@ -622,16 +656,23 @@
               }
             }
           } else if (coverArt) {
-            // Spring back to center
-            coverArt.style.transition = 'transform 0.24s cubic-bezier(0.175, 0.885, 0.32, 1.15), opacity 0.2s ease-out';
+            // Spring smoothly back to center
+            coverArt.style.transition = 'transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease-out';
             coverArt.style.transform = 'translate3d(0, 0, 0) rotate(0deg) scale(1)';
             coverArt.style.opacity = '1';
-            setTimeout(() => {
+
+            let hasHandledReset = false;
+            const handleReset = () => {
+              if (hasHandledReset) return;
+              hasHandledReset = true;
+              coverArt.removeEventListener('transitionend', handleReset);
               coverArt.style.transition = '';
               coverArt.style.transform = '';
               coverArt.style.opacity = '';
               coverArt.style.willChange = '';
-            }, 250);
+            };
+            coverArt.addEventListener('transitionend', handleReset);
+            setTimeout(handleReset, 300);
           }
         }
 

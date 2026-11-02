@@ -332,19 +332,24 @@ code, .font-mono {
 .file-row-wrapper {
   contain: layout paint;
   position: relative;
+  overflow: hidden;
+}
+
+.swipe-queue-reveal,
+.swipe-playlist-reveal {
+  position: absolute;
+  inset-block: 0;
+  width: 100%;
+  z-index: 1;
 }
 
 .file-row {
+  position: relative;
+  z-index: 10;
   touch-action: pan-y;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  transform: translate3d(0, 0, 0);
-  transition: background-color 0.15s ease, border-color 0.15s ease !important;
-}
-
-.gesture-dragging {
-  transition: none !important;
-  will-change: transform !important;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 #expanded-player {
