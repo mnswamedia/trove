@@ -282,6 +282,11 @@
     if (authUsername) authUsername.value = repo.owner || 'mnswa';
     if (repoBadge) repoBadge.innerText = repo.isPrivate ? 'Private Bucket' : 'Public Bucket';
 
+    const versionEl = document.getElementById('footer-version');
+    if (versionEl && CONFIG.version) {
+      versionEl.innerText = CONFIG.version;
+    }
+
     // Initialize all modules in sequence
     if (window.Trove.settings) window.Trove.settings.init();
     if (window.Trove.equalizer) window.Trove.equalizer.init();
