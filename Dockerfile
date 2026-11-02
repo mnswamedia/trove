@@ -35,7 +35,4 @@ RUN pip install --no-cache-dir -U "yt-dlp[default]" huggingface_hub requests PyS
  && find /usr/local/lib/python3.11 -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true \
  && yt-dlp --version && ffmpeg -version && hf --help >/dev/null
 
-COPY docker/run-with-warp.sh /usr/local/bin/run-with-warp
-RUN chmod +x /usr/local/bin/run-with-warp
-
 WORKDIR /work

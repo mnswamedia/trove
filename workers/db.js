@@ -45,30 +45,42 @@ export async function ensureSchema(db) {
       )
     `),
 
-    // Ingest Jobs Tracking Table
+    // Ingestion Runs (Overarching batch workflow tracking)
     db.prepare(`
-      CREATE TABLE IF NOT EXISTS ingest_jobs (
+      CREATE TABLE IF NOT EXISTS ingest_runs (
         id TEXT PRIMARY KEY,
-        run_id TEXT,
+        github_run_id TEXT,
         status TEXT NOT NULL DEFAULT 'queued',
-        targets_count INTEGER DEFAULT 0,
+        total_tracks INTEGER NOT NULL DEFAULT 0,
+        succeeded_tracks INTEGER NOT NULL DEFAULT 0,
+        failed_tracks INTEGER NOT NULL DEFAULT 0,
         format TEXT DEFAULT 'm4a',
+        bucket_id TEXT DEFAULT 'mnswa/trove_dataset',
+        started_at INTEGER,
+        ended_at INTEGER,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
     `),
 
-    // Ingest Events & Live Song Status Table
+    // Ingestion Items (One row per target song: pending -> downloading -> succeeded / failed)
     db.prepare(`
-      CREATE TABLE IF NOT EXISTS ingest_events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        job_id TEXT NOT NULL,
+      CREATE TABLE IF NOT EXISTS ingest_items (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        track_index INTEGER NOT NULL,
+        url TEXT NOT NULL,
         song_id TEXT,
-        url TEXT,
         title TEXT,
-        status TEXT NOT NULL,
+        format TEXT DEFAULT 'm4a',
+        size_bytes INTEGER DEFAULT 0,
+        duration_seconds INTEGER DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'pending',
         error TEXT,
-        timestamp INTEGER NOT NULL
+        started_at INTEGER,
+        ended_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
       )
     `),
 
@@ -77,8 +89,9 @@ export async function ensureSchema(db) {
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_track_metrics_play_count ON track_metrics(play_count DESC)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_track_metrics_last_played ON track_metrics(last_played_at DESC)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_play_history_played_at ON play_history(played_at DESC)`),
-    db.prepare(`CREATE INDEX IF NOT EXISTS idx_ingest_events_job ON ingest_events(job_id, timestamp ASC)`),
-    db.prepare(`CREATE INDEX IF NOT EXISTS idx_ingest_jobs_updated ON ingest_jobs(updated_at DESC)`)
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_ingest_runs_created ON ingest_runs(created_at DESC)`),
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_ingest_items_run ON ingest_items(run_id, track_index ASC)`),
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_ingest_items_status ON ingest_items(status)`)
   ]);
 
   schemaInitialized = true;

@@ -310,42 +310,41 @@
       if (window.lucide) window.lucide.createIcons();
     },
 
-    renderWorkerProgress(job, events = []) {
-      if (!job) return false;
+    renderWorkerProgress(run, items = []) {
+      if (!run) return false;
 
-      const isRunning = job.status === 'in_progress' || job.status === 'queued';
-      const isSuccess = job.status === 'completed';
+      const isRunning = run.status === 'in_progress' || run.status === 'queued';
+      const isSuccess = run.status === 'completed';
 
-      const startTime = job.created_at || Date.now();
-      const endTime = isRunning ? Date.now() : (job.updated_at || Date.now());
+      const startTime = run.started_at || run.created_at || Date.now();
+      const endTime = isRunning ? Date.now() : (run.ended_at || run.updated_at || Date.now());
       const elapsedSec = Math.max(0, Math.floor((endTime - startTime) / 1000));
 
       if (this.elements.activityTimeElapsed) {
         this.elements.activityTimeElapsed.innerText = formatDuration(elapsedSec);
       }
 
-      const songEvents = events.filter(e => e.status !== 'queued' && (e.song_id || e.url || e.title));
-      const displayEvents = songEvents.length > 0 ? songEvents : events;
-
-      const totalExpected = Math.max(job.targets_count || 1, displayEvents.length || 1);
-      const succeededCount = displayEvents.filter(e => e.status === 'succeeded').length;
-      const failedCount = displayEvents.filter(e => e.status === 'failed').length;
-      const activeEvent = displayEvents.find(e => e.status === 'downloading');
+      const totalExpected = Math.max(run.total_tracks || items.length || 1, 1);
+      const succeededCount = run.succeeded_tracks || items.filter(it => it.status === 'succeeded' || it.status === 'skipped_archive').length;
+      const failedCount = run.failed_tracks || items.filter(it => it.status === 'failed').length;
+      const activeItem = items.find(it => it.status === 'downloading');
 
       if (isRunning) {
-        const pct = Math.min(95, Math.max(10, Math.round(((succeededCount + failedCount) / totalExpected) * 100)));
+        const pct = Math.min(95, Math.max(8, Math.round(((succeededCount + failedCount) / totalExpected) * 100)));
         if (this.elements.activityProgressBar) {
           this.elements.activityProgressBar.style.width = `${pct}%`;
           this.elements.activityProgressBar.className = 'bg-amber-500 h-full rounded-full transition-all duration-300';
         }
         if (this.elements.activityStatusPill) {
-          this.elements.activityStatusPill.innerText = job.status === 'queued' ? 'Queued' : 'In Progress';
+          this.elements.activityStatusPill.innerText = run.status === 'queued' ? 'Queued' : 'In Progress';
           this.elements.activityStatusPill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300';
           if (this.elements.activityPulseDot) this.elements.activityPulseDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse';
           if (this.elements.mobileActivityDot) this.elements.mobileActivityDot.classList.remove('hidden');
         }
         if (this.elements.activityStepInfo) {
-          this.elements.activityStepInfo.innerText = activeEvent ? `Downloading: ${activeEvent.title || activeEvent.url}` : (job.status === 'queued' ? 'Runner queued in GitHub Actions...' : `Processing ${totalExpected} target(s)...`);
+          this.elements.activityStepInfo.innerText = activeItem 
+            ? `Downloading: ${activeItem.title || activeItem.url}` 
+            : (run.status === 'queued' ? 'Runner queued in GitHub Actions...' : `Processing ${totalExpected} target(s)...`);
         }
         if (this.elements.activityCounts) {
           this.elements.activityCounts.innerText = `${succeededCount + failedCount} of ${totalExpected} processed`;
@@ -364,7 +363,7 @@
           if (this.elements.mobileActivityDot) this.elements.mobileActivityDot.classList.add('hidden');
         }
         if (this.elements.activityStepInfo) {
-          this.elements.activityStepInfo.innerText = `Finished in ${formatDuration(elapsedSec)} (${succeededCount} added${failedCount ? ', ' + failedCount + ' failed' : ''})`;
+          this.elements.activityStepInfo.innerText = `Finished in ${formatDuration(elapsedSec)} (${succeededCount} imported${failedCount ? ', ' + failedCount + ' failed' : ''})`;
         }
         if (this.elements.activityCounts) {
           this.elements.activityCounts.innerText = `${succeededCount}/${totalExpected} succeeded`;
@@ -381,44 +380,60 @@
           if (this.elements.mobileActivityDot) this.elements.mobileActivityDot.classList.add('hidden');
         }
         if (this.elements.activityStepInfo) {
-          this.elements.activityStepInfo.innerText = 'Ingest job failed';
+          this.elements.activityStepInfo.innerText = 'Ingest run failed';
         }
       }
 
       if (this.elements.activityItemsList) {
-        if (displayEvents.length === 0) {
+        if (items.length === 0) {
           this.elements.activityItemsList.innerHTML = `
             <div class="p-3 text-center text-xs text-stone-brown dark:text-[#9aa4b2] bg-almond-cream/15 dark:bg-[#1a1e26] rounded-xl border border-dashed border-almond-cream dark:border-[#2b3240]">
-              ${isRunning ? 'Waiting for song events from runner...' : 'No song events recorded.'}
+              ${isRunning ? 'Waiting for songs to start...' : 'No songs recorded.'}
             </div>
           `;
         } else {
           let listHtml = '';
-          displayEvents.forEach((ev, idx) => {
+          items.forEach((it, idx) => {
             let badge = '';
             let rowBg = 'bg-almond-cream/15 border-almond-cream/60 dark:bg-[#1a1e26] dark:border-[#2b3240]';
-            const displayTitle = ev.title || ev.url || `Item #${idx + 1}`;
+            const displayTitle = it.title || it.url || `Track #${it.track_index || (idx + 1)}`;
+            const trackNum = it.track_index || (idx + 1);
 
-            if (ev.status === 'succeeded' || ev.status === 'completed') {
+            let subtext = '';
+            if (it.status === 'succeeded') {
               badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 shrink-0"><i data-lucide="check" class="w-3 h-3"></i>Done</span>';
               rowBg = 'bg-emerald-50/50 border-emerald-200/60 dark:bg-emerald-950/30 dark:border-emerald-800/40';
-            } else if (ev.status === 'downloading' || ev.status === 'in_progress') {
+              if (it.size_bytes) {
+                const sz = (it.size_bytes / (1024 * 1024)).toFixed(1) + ' MB';
+                subtext = `<span class="text-[10px] text-stone-brown/60 dark:text-[#8b95a5]">${sz}</span>`;
+              }
+            } else if (it.status === 'skipped_archive') {
+              badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 shrink-0"><i data-lucide="check-check" class="w-3 h-3"></i>Cached</span>';
+              rowBg = 'bg-blue-50/50 border-blue-200/60 dark:bg-blue-950/30 dark:border-blue-800/40';
+              subtext = '<span class="text-[10px] text-blue-600 dark:text-blue-400">Already in library</span>';
+            } else if (it.status === 'downloading' || it.status === 'in_progress') {
               badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 shrink-0"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i>Downloading</span>';
               rowBg = 'bg-amber-50/80 border-amber-300 dark:bg-amber-950/30 dark:border-amber-700/50';
-            } else if (ev.status === 'failed') {
-              badge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 shrink-0" title="${escapeHtml(ev.error || 'Failed')}"><i data-lucide="alert-circle" class="w-3 h-3"></i>Failed</span>`;
+              subtext = '<span class="text-[10px] text-amber-600 dark:text-amber-400 animate-pulse">Downloading via WARP...</span>';
+            } else if (it.status === 'failed') {
+              badge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 shrink-0" title="${escapeHtml(it.error || 'Failed')}"><i data-lucide="alert-circle" class="w-3 h-3"></i>Failed</span>`;
               rowBg = 'bg-red-50/60 border-red-200 dark:bg-red-950/30 dark:border-red-800/40';
+              if (it.error) {
+                subtext = `<span class="text-[10px] text-red-600 dark:text-red-400 truncate" title="${escapeHtml(it.error)}">${escapeHtml(it.error)}</span>`;
+              }
             } else {
+              // Pending
               badge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-100 text-stone-brown dark:bg-[#202532] dark:text-[#9aa4b2] shrink-0"><i data-lucide="clock" class="w-3 h-3"></i>Queued</span>';
+              subtext = '<span class="text-[10px] text-stone-brown/60 dark:text-[#758092]">Waiting in queue...</span>';
             }
 
             listHtml += `
               <div class="p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2.5 transition ${rowBg}">
                 <div class="flex items-center gap-2 min-w-0 flex-1">
-                  <span class="font-mono text-[10px] text-stone-brown/60 dark:text-[#758092] shrink-0">#${idx + 1}</span>
-                  <div class="flex flex-col min-w-0">
+                  <span class="font-mono text-[10px] text-stone-brown/60 dark:text-[#758092] shrink-0">#${trackNum}</span>
+                  <div class="flex flex-col min-w-0 flex-1">
                     <span class="font-semibold text-black dark:text-[#f3f4f6] truncate" title="${escapeHtml(displayTitle)}">${escapeHtml(displayTitle)}</span>
-                    ${ev.error ? `<span class="text-[10px] text-red-600 dark:text-red-400 truncate">${escapeHtml(ev.error)}</span>` : ''}
+                    ${subtext}
                   </div>
                 </div>
                 ${badge}
@@ -448,8 +463,8 @@
 
       if (workerUrl) {
         try {
-          const reqJobId = this.currentJobId || sessionStorage.getItem('trove_current_job_id') || '';
-          const fetchUrl = `${workerUrl.replace(/\/+$/, '')}/progress${reqJobId ? '?job_id=' + encodeURIComponent(reqJobId) : ''}`;
+          const reqRunId = this.currentJobId || sessionStorage.getItem('trove_current_run_id') || sessionStorage.getItem('trove_current_job_id') || '';
+          const fetchUrl = `${workerUrl.replace(/\/+$/, '')}/status${reqRunId ? '?run_id=' + encodeURIComponent(reqRunId) : ''}`;
           const headers = {};
           if (workerToken) {
             headers['Authorization'] = `Bearer ${workerToken}`;
@@ -458,10 +473,12 @@
           const wRes = await fetch(fetchUrl, { headers, cache: 'no-store' });
           if (wRes.ok) {
             const wData = await wRes.json();
-            if (wData.success && wData.job) {
-              const isHandled = this.renderWorkerProgress(wData.job, wData.events || []);
+            const activeRun = wData.run || wData.job;
+            const activeItems = wData.items || wData.events || [];
+            if (wData.success && activeRun) {
+              const isHandled = this.renderWorkerProgress(activeRun, activeItems);
               if (isHandled) {
-                const isRunning = wData.job.status === 'in_progress' || wData.job.status === 'queued';
+                const isRunning = activeRun.status === 'in_progress' || activeRun.status === 'queued';
                 if (isRunning) {
                   this.lastKnownStatus = 'in_progress';
                   this.showButton('Ingesting...', true, 'amber');
@@ -473,7 +490,7 @@
                 } else {
                   if (this.lastKnownStatus === 'in_progress') {
                     this.lastKnownStatus = 'completed';
-                    const hasFailures = (wData.events || []).some(e => e.status === 'failed');
+                    const hasFailures = activeRun.failed_tracks > 0 || activeItems.some(e => e.status === 'failed');
                     this.showButton(hasFailures ? 'Completed (warnings)' : 'Done', false, hasFailures ? 'amber' : 'green');
                     if (window.Trove.explorer) {
                       window.Trove.explorer.loadRepository(true);

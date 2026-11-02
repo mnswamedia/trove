@@ -193,8 +193,9 @@
           }
 
           const resData = await response.json();
-          currentJobId = resData.job_id;
+          currentJobId = resData.run_id || resData.job_id;
           if (currentJobId) {
+            sessionStorage.setItem('trove_current_run_id', currentJobId);
             sessionStorage.setItem('trove_current_job_id', currentJobId);
           }
         } else {
