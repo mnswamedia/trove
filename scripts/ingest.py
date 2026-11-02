@@ -639,11 +639,24 @@ def main():
             now_epoch = int(time.time())
             now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-            # Collect any thumbnail images saved to workdir and ensure they are inside covers_dir
-            for img in Path(workdir).glob("*.*"):
+            # Collect and optimize thumbnail images to the Golden Ratio (max 600px, -q:v 3, ~35-50KB)
+            for img in list(Path(workdir).glob("*.*")) + list(Path(covers_dir).glob("*.*")):
                 if img.is_file() and img.suffix.lstrip(".").lower() in ("jpg", "jpeg", "png", "webp"):
                     dest = Path(covers_dir) / f"{img.stem}.jpg"
-                    if img != dest:
+                    tmp_opt = Path(covers_dir) / f"{img.stem}_tmp_opt.jpg"
+                    opt_res = subprocess.run([
+                        "ffmpeg", "-v", "error", "-i", str(img),
+                        "-vf", "scale='min(600,iw)':'min(600,ih)':force_original_aspect_ratio=decrease",
+                        "-q:v", "3", str(tmp_opt), "-y"
+                    ], capture_output=True)
+                    if opt_res.returncode == 0 and tmp_opt.exists() and tmp_opt.stat().st_size > 400:
+                        if img.exists() and img != dest:
+                            try:
+                                os.remove(img)
+                            except Exception:
+                                pass
+                        shutil.move(str(tmp_opt), str(dest))
+                    elif img != dest:
                         try:
                             shutil.move(str(img), str(dest))
                         except Exception:
