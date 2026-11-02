@@ -654,15 +654,15 @@
         <!-- Right Utilities: Add to Playlist, Related Tracks, EQ Button & Vertical Volume Pill -->
         <div class="flex items-center gap-1.5 sm:gap-2">
           <!-- Add Current Track to Playlist Button -->
-          <button id="btn-player-add-playlist" type="button" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-white/80 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition text-stone-brown dark:text-[#c6ac8f] text-xs font-semibold select-none shadow-sm" title="Add Track to Playlist or Queue">
+          <button id="btn-player-add-playlist" type="button" class="flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-2 min-h-[36px] min-w-[68px] sm:min-w-[76px] rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-white/80 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition text-stone-brown dark:text-[#c6ac8f] text-xs font-semibold select-none shadow-sm cursor-pointer" title="Add Track to Playlist or Queue">
             <i data-lucide="bookmark-plus" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f]"></i>
-            <span class="hidden xs:inline">Save</span>
+            <span>Save</span>
           </button>
 
           <!-- Related Recommendations Trigger Button -->
-          <button id="btn-related-toggle" type="button" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-white/80 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition text-stone-brown dark:text-[#c6ac8f] text-xs font-semibold select-none shadow-sm" title="Related Recommendations">
+          <button id="btn-related-toggle" type="button" class="flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-2 min-h-[36px] min-w-[76px] sm:min-w-[84px] rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-white/80 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition text-stone-brown dark:text-[#c6ac8f] text-xs font-semibold select-none shadow-sm cursor-pointer" title="Related Recommendations">
             <i data-lucide="sparkles" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f]"></i>
-            <span class="hidden xs:inline">Related</span>
+            <span>Related</span>
           </button>
 
           <!-- Equalizer Bottom Sheet Trigger Button -->
@@ -1533,6 +1533,89 @@
               </div>
               <span class="text-[10px] text-stone-brown/60 dark:text-[#758092]">Shared secret token for Bearer authentication.</span>
             </div>
+          </div>
+        </div>
+
+        <!-- Section 4: Cache & Storage Management -->
+        <div class="border-t border-almond-cream dark:border-[#262c38] pt-4 flex flex-col gap-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+              <h3 class="text-xs font-bold uppercase tracking-wider text-black dark:text-[#f3f4f6]">Storage & Cache Purge</h3>
+            </div>
+            <div class="flex items-center gap-2">
+              <button type="button" id="btn-purge-select-all" class="text-[11px] font-mono text-accent-brown dark:text-[#c6ac8f] hover:underline cursor-pointer">Select All</button>
+              <span class="text-stone-brown/40 dark:text-[#4a5568]">&bull;</span>
+              <button type="button" id="btn-purge-deselect-all" class="text-[11px] font-mono text-stone-brown/60 dark:text-[#758092] hover:underline cursor-pointer">Deselect</button>
+            </div>
+          </div>
+
+          <p class="text-[11px] text-stone-brown/70 dark:text-[#9aa4b2]">
+            Free up device storage or reset cached media, covers, and local tokens. Select which categories to wipe:
+          </p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <!-- Media Blobs (Offline Audio/Video) -->
+            <label class="flex items-start gap-2.5 p-2.5 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-almond-cream/20 dark:bg-[#181c25] hover:bg-almond-cream/30 dark:hover:bg-[#1e2330] cursor-pointer transition select-none">
+              <input type="checkbox" id="purge-chk-media" class="purge-chk mt-0.5 rounded border-khaki-beige dark:border-[#353c4d] text-rose-600 focus:ring-0" checked>
+              <div class="flex flex-col">
+                <span class="text-xs font-semibold text-black dark:text-[#f3f4f6]">Media Files (Audio / Video)</span>
+                <span class="text-[10px] text-stone-brown/70 dark:text-[#758092]">Offline cached audio & video blobs in IndexedDB</span>
+              </div>
+            </label>
+
+            <!-- Thumbnails & Covers -->
+            <label class="flex items-start gap-2.5 p-2.5 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-almond-cream/20 dark:bg-[#181c25] hover:bg-almond-cream/30 dark:hover:bg-[#1e2330] cursor-pointer transition select-none">
+              <input type="checkbox" id="purge-chk-thumbs" class="purge-chk mt-0.5 rounded border-khaki-beige dark:border-[#353c4d] text-rose-600 focus:ring-0" checked>
+              <div class="flex flex-col">
+                <span class="text-xs font-semibold text-black dark:text-[#f3f4f6]">Thumbnails & Cover Art</span>
+                <span class="text-[10px] text-stone-brown/70 dark:text-[#758092]">Cached cover images in IndexedDB & memory</span>
+              </div>
+            </label>
+
+            <!-- File Tree & Directory Structure -->
+            <label class="flex items-start gap-2.5 p-2.5 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-almond-cream/20 dark:bg-[#181c25] hover:bg-almond-cream/30 dark:hover:bg-[#1e2330] cursor-pointer transition select-none">
+              <input type="checkbox" id="purge-chk-tree" class="purge-chk mt-0.5 rounded border-khaki-beige dark:border-[#353c4d] text-rose-600 focus:ring-0" checked>
+              <div class="flex flex-col">
+                <span class="text-xs font-semibold text-black dark:text-[#f3f4f6]">Dataset File Tree</span>
+                <span class="text-[10px] text-stone-brown/70 dark:text-[#758092]">Cached repository folder listings & metadata</span>
+              </div>
+            </label>
+
+            <!-- Playlists & Queue -->
+            <label class="flex items-start gap-2.5 p-2.5 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-almond-cream/20 dark:bg-[#181c25] hover:bg-almond-cream/30 dark:hover:bg-[#1e2330] cursor-pointer transition select-none">
+              <input type="checkbox" id="purge-chk-queue" class="purge-chk mt-0.5 rounded border-khaki-beige dark:border-[#353c4d] text-rose-600 focus:ring-0">
+              <div class="flex flex-col">
+                <span class="text-xs font-semibold text-black dark:text-[#f3f4f6]">Queue & Playback History</span>
+                <span class="text-[10px] text-stone-brown/70 dark:text-[#758092]">Active queue, playback position, recent tracks</span>
+              </div>
+            </label>
+
+            <!-- Access Tokens & Credentials -->
+            <label class="flex items-start gap-2.5 p-2.5 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-almond-cream/20 dark:bg-[#181c25] hover:bg-almond-cream/30 dark:hover:bg-[#1e2330] cursor-pointer transition select-none">
+              <input type="checkbox" id="purge-chk-tokens" class="purge-chk mt-0.5 rounded border-khaki-beige dark:border-[#353c4d] text-rose-600 focus:ring-0">
+              <div class="flex flex-col">
+                <span class="text-xs font-semibold text-rose-600 dark:text-rose-400">Tokens & Configuration</span>
+                <span class="text-[10px] text-stone-brown/70 dark:text-[#758092]">Hugging Face, GitHub PAT & Worker tokens</span>
+              </div>
+            </label>
+
+            <!-- PWA & Service Worker -->
+            <label class="flex items-start gap-2.5 p-2.5 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-almond-cream/20 dark:bg-[#181c25] hover:bg-almond-cream/30 dark:hover:bg-[#1e2330] cursor-pointer transition select-none">
+              <input type="checkbox" id="purge-chk-sw" class="purge-chk mt-0.5 rounded border-khaki-beige dark:border-[#353c4d] text-rose-600 focus:ring-0">
+              <div class="flex flex-col">
+                <span class="text-xs font-semibold text-black dark:text-[#f3f4f6]">Service Worker & App Shell</span>
+                <span class="text-[10px] text-stone-brown/70 dark:text-[#758092]">PWA cache storage & cached scripts/styles</span>
+              </div>
+            </label>
+          </div>
+
+          <div class="flex items-center justify-between pt-1">
+            <span id="purge-status-label" class="text-[11px] font-mono text-stone-brown/60 dark:text-[#758092]">Select items and click Purge</span>
+            <button type="button" id="btn-purge-cache" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition shadow-sm cursor-pointer">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              <span>Purge Selected Cache</span>
+            </button>
           </div>
         </div>
 

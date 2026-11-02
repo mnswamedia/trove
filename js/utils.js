@@ -568,6 +568,38 @@
     }
   }
 
+  async function clearMediaIDB() {
+    try {
+      const db = await getIDB();
+      if (!db) return false;
+      return new Promise((resolve) => {
+        const tx = db.transaction(IDB_STORE_MEDIA, 'readwrite');
+        const store = tx.objectStore(IDB_STORE_MEDIA);
+        const req = store.clear();
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => resolve(false);
+      });
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async function clearThumbsIDB() {
+    try {
+      const db = await getIDB();
+      if (!db) return false;
+      return new Promise((resolve) => {
+        const tx = db.transaction(IDB_STORE_THUMBS, 'readwrite');
+        const store = tx.objectStore(IDB_STORE_THUMBS);
+        const req = store.clear();
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => resolve(false);
+      });
+    } catch (e) {
+      return false;
+    }
+  }
+
   // Export to Trove namespace
   window.Trove.utils = {
     getFileInfo,
@@ -585,8 +617,10 @@
     getIDB,
     saveThumbnailBlobToIDB,
     getThumbnailBlobFromIDB,
+    clearThumbsIDB,
     saveMediaToIDB,
-    getMediaFromIDB
+    getMediaFromIDB,
+    clearMediaIDB
   };
 
   // Backwards compatibility alias

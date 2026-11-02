@@ -617,7 +617,7 @@
 
       if (state.viewMode === 'tree' && state.currentDirectory !== '' && !state.searchQuery) {
         html += `
-          <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f]">
+          <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f] select-none">
             <div class="grid grid-cols-12 items-center px-4 py-2.5 hover:bg-almond-cream/20 dark:hover:bg-[#1a1f28] cursor-pointer transition text-sm" data-action="go-parent">
               <div class="col-span-7 md:col-span-6 flex items-center gap-3 min-w-0">
                 <div class="w-8 h-8 rounded-lg bg-almond-cream/60 dark:bg-[#202532] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0">
@@ -706,13 +706,13 @@
         }
 
         const actionBtnHtml = isPlayable ? `
-          <button type="button" class="btn-add-to-playlist p-1.5 rounded-lg hover:bg-almond-cream/60 dark:hover:bg-[#252b37] text-stone-brown/70 hover:text-jet-black dark:text-[#9aa4b2] dark:hover:text-[#f3f4f6] transition shrink-0 ml-1" title="Add to Playlist or Queue" data-path="${escapeHtml(item.path)}">
+          <button type="button" class="btn-add-to-playlist p-2 px-2.5 sm:px-3 rounded-xl hover:bg-almond-cream/60 dark:hover:bg-[#252b37] text-stone-brown/70 hover:text-jet-black dark:text-[#9aa4b2] dark:hover:text-[#f3f4f6] transition shrink-0 ml-1 min-w-[38px] min-h-[38px] flex items-center justify-center select-none" title="Add to Playlist or Queue" data-path="${escapeHtml(item.path)}">
             <i data-lucide="list-plus" class="w-4 h-4"></i>
           </button>
         ` : '';
 
         html += `
-          <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f]">
+          <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f] select-none">
             ${isPlayable ? `
             <div class="swipe-queue-reveal absolute inset-y-0 left-0 w-full bg-emerald-600 dark:bg-emerald-600 items-center px-4 text-white font-semibold text-xs select-none pointer-events-none transition-colors" style="display: none;">
               <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs transition-transform duration-150">
@@ -727,7 +727,7 @@
               </div>
             </div>
             ` : ''}
-            <div class="file-row relative bg-white dark:bg-[#15181f] grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 transition text-sm cursor-pointer ${activeRowClass}" data-path="${escapeHtml(item.path)}" data-is-dir="${isFolder}" title="${escapeHtml(item.name)} (${isFolder ? 'Folder' : (isPlayable ? 'Click to play' : 'Click to open in new tab')})">
+            <div class="file-row relative bg-white dark:bg-[#15181f] grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 transition text-sm cursor-pointer select-none ${activeRowClass}" data-path="${escapeHtml(item.path)}" data-is-dir="${isFolder}" title="${escapeHtml(item.name)} (${isFolder ? 'Folder' : (isPlayable ? 'Click to play' : 'Click to open in new tab')})">
               <div class="col-span-6 md:col-span-6 flex items-center gap-2.5 sm:gap-3 min-w-0">
                 ${thumbSlotHtml}
                 <div class="flex flex-col min-w-0">
@@ -841,16 +841,30 @@
 
       this.thumbnailObserver = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
+          const slot = entry.target;
           if (entry.isIntersecting) {
-            const slot = entry.target;
-            this.thumbnailObserver.unobserve(slot);
-            const path = slot.dataset.filePath;
-            if (path && !player.thumbnailCache?.has(path)) {
-              this.enqueueThumbnailExtraction(path);
+            // Cancel any pending timer on this slot
+            if (slot._thumbTimer) clearTimeout(slot._thumbTimer);
+            // Wait 180ms to ensure the user paused scrolling and didn't just skim past
+            slot._thumbTimer = setTimeout(() => {
+              delete slot._thumbTimer;
+              if (this.thumbnailObserver) {
+                this.thumbnailObserver.unobserve(slot);
+              }
+              const path = slot.dataset.filePath;
+              if (path && !player.thumbnailCache?.has(path)) {
+                this.enqueueThumbnailExtraction(path);
+              }
+            }, 180);
+          } else {
+            // User skimmed past before dwelling -> cancel pending request immediately
+            if (slot._thumbTimer) {
+              clearTimeout(slot._thumbTimer);
+              delete slot._thumbTimer;
             }
           }
         });
-      }, { rootMargin: '150px', threshold: 0.05 });
+      }, { rootMargin: '80px', threshold: 0.05 });
 
       const slots = this.elements.fileList.querySelectorAll('.list-thumb-slot');
       slots.forEach(slot => {

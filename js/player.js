@@ -383,21 +383,20 @@
         this.elements.expandedCoverImg.classList.add('hidden');
         this.elements.expandedCoverImg.style.transition = 'none';
         this.elements.expandedCoverImg.style.opacity = '0';
-        this.elements.expandedCoverImg.style.transform = 'scale(0.95)';
         this.elements.expandedCoverImg.removeAttribute('src');
       }
       if (this.elements.expandedCoverFallback) {
         this.elements.expandedCoverFallback.classList.remove('hidden');
-        this.elements.expandedCoverFallback.style.transition = 'opacity 0.25s ease-out';
-        this.elements.expandedCoverFallback.style.opacity = '0.7';
+        this.elements.expandedCoverFallback.style.transition = 'none';
+        this.elements.expandedCoverFallback.style.opacity = '1';
         if (this.elements.expandedCoverIcon) {
           this.elements.expandedCoverIcon.setAttribute('data-lucide', isVideo ? 'video' : 'music');
         }
       }
       if (this.elements.expandedCoverArt) {
-        this.elements.expandedCoverArt.style.transition = 'opacity 0.25s ease-out, transform 0.25s ease-out';
-        this.elements.expandedCoverArt.style.opacity = '0.85';
-        this.elements.expandedCoverArt.style.transform = 'scale(0.98)';
+        this.elements.expandedCoverArt.style.transition = '';
+        this.elements.expandedCoverArt.style.transform = '';
+        this.elements.expandedCoverArt.style.opacity = '';
       }
       if (this.elements.barThumbImg) {
         this.elements.barThumbImg.classList.add('hidden');
@@ -417,42 +416,16 @@
       if (thumbUrl && !isVideo) {
         const img = new Image();
         img.onload = () => {
-          // Guard: verify track is still active
           if (!this.currentTrack || this.currentTrack.path !== item.path) return;
           const coverImg = this.elements.expandedCoverImg;
           const fallback = this.elements.expandedCoverFallback;
-          const coverArt = this.elements.expandedCoverArt;
 
           if (coverImg) {
             coverImg.src = thumbUrl;
             coverImg.classList.remove('hidden');
-            coverImg.style.transition = 'none';
-            coverImg.style.opacity = '0';
-            coverImg.style.transform = 'scale(0.95)';
-
-            void coverImg.offsetWidth; // Force layout commit
-
-            // Deliberate pause between track switch & artwork appearance for smooth, calm pacing
-            setTimeout(() => {
-              if (!this.currentTrack || this.currentTrack.path !== item.path) return;
-
-              // Graceful, slow cinematic reveal (0.65s)
-              coverImg.style.transition = 'transform 0.65s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s ease-out';
-              coverImg.style.opacity = '1';
-              coverImg.style.transform = 'scale(1)';
-
-              if (coverArt) {
-                coverArt.style.transition = 'transform 0.65s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s ease-out';
-                coverArt.style.opacity = '1';
-                coverArt.style.transform = 'scale(1)';
-              }
-
-              setTimeout(() => {
-                if (fallback && this.currentTrack && this.currentTrack.path === item.path) {
-                  fallback.classList.add('hidden');
-                }
-              }, 600);
-            }, 180);
+            coverImg.style.transition = 'opacity 0.2s ease-out';
+            coverImg.style.opacity = '1';
+            if (fallback) fallback.classList.add('hidden');
           }
 
           if (this.elements.barThumbImg) {
@@ -464,11 +437,6 @@
         img.src = thumbUrl;
       } else if (!thumbUrl) {
         this.resetArtworkToBase(item);
-        if (this.elements.expandedCoverArt) {
-          this.elements.expandedCoverArt.style.transition = 'opacity 0.35s ease-out, transform 0.35s ease-out';
-          this.elements.expandedCoverArt.style.opacity = '1';
-          this.elements.expandedCoverArt.style.transform = 'scale(1)';
-        }
       }
 
       if (thumbUrl && this.currentTrack && this.currentTrack.path === item.path) {

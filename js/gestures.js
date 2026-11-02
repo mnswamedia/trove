@@ -457,7 +457,6 @@
         isDetermined = false;
 
         expandedPlayer.style.willChange = 'transform, opacity';
-        if (coverArt) coverArt.style.willChange = 'transform, opacity';
       }, { passive: true });
 
       expandedPlayer.addEventListener('touchmove', (e) => {
@@ -480,12 +479,10 @@
           } else if (absX > 8 && absX > absY * 1.1) {
             // Horizontal swipe to skip track
             gestureMode = 'horizontal';
-            if (coverArt) coverArt.style.transition = 'none';
           } else {
             gestureMode = null;
             isTracking = false;
             expandedPlayer.style.willChange = '';
-            if (coverArt) coverArt.style.willChange = '';
             return;
           }
         }
@@ -573,11 +570,6 @@
           if (absX >= THRESHOLD_SKIP) {
             if (navigator.vibrate) navigator.vibrate(25);
             const isNext = diffX < 0; // Swipe Left = Next, Swipe Right = Previous
-
-            if (coverArt) {
-              coverArt.style.transition = 'opacity 0.2s ease-out';
-              coverArt.style.opacity = '0.5';
-            }
 
             if (window.Trove.player) {
               if (isNext) {
