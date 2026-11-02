@@ -507,11 +507,10 @@
                 expandedPlayer.style.transform = `translate3d(0, ${pullDown}px, 0) scale(${scale})`;
                 expandedPlayer.style.opacity = `${opacity}`;
               } else if (gestureMode === 'horizontal' && coverArt) {
-                // Visual horizontal travel with subtle 3D rotational tilt on cover art
-                const travelX = diffX * 0.65;
-                const tilt = (diffX / 300) * 7;
-                const fade = Math.max(0.45, 1 - (absX / 320));
-                coverArt.style.transform = `translate3d(${travelX}px, 0, 0) rotate(${tilt}deg)`;
+                // Subtle tactile center compression as finger drags horizontally
+                const scale = Math.max(0.92, 1 - (absX / 650));
+                const fade = Math.max(0.6, 1 - (absX / 300));
+                coverArt.style.transform = `scale(${scale})`;
                 coverArt.style.opacity = `${fade}`;
               }
             });
@@ -592,61 +591,7 @@
             if (navigator.vibrate) navigator.vibrate(25);
             const isNext = diffX < 0; // Swipe Left = Next, Swipe Right = Previous
 
-            if (coverArt) {
-              // Phase 1: Slide out current cover in swipe direction
-              coverArt.style.transition = 'transform 0.16s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.14s ease-out';
-              coverArt.style.transform = `translate3d(${isNext ? -120 : 120}px, 0, 0) rotate(${isNext ? -8 : 8}deg)`;
-              coverArt.style.opacity = '0';
-
-              let hasHandledExit = false;
-              const handleExit = () => {
-                if (hasHandledExit) return;
-                hasHandledExit = true;
-                coverArt.removeEventListener('transitionend', handleExit);
-
-                // Phase 2: Trigger track change while cover is invisible
-                if (window.Trove.player) {
-                  if (isNext) {
-                    if (typeof window.Trove.player.playNext === 'function') window.Trove.player.playNext();
-                    else if (typeof window.Trove.player.next === 'function') window.Trove.player.next();
-                  } else {
-                    if (typeof window.Trove.player.playPrev === 'function') window.Trove.player.playPrev();
-                    else if (typeof window.Trove.player.previous === 'function') window.Trove.player.previous();
-                  }
-                }
-
-                // Phase 3: Instant reposition on opposite side (no transition)
-                coverArt.style.transition = 'none';
-                coverArt.style.transform = `translate3d(${isNext ? 80 : -80}px, 0, 0) rotate(${isNext ? 6 : -6}deg) scale(0.95)`;
-                coverArt.style.opacity = '0';
-
-                // Force layout reflow so the browser commits the off-screen start coordinates
-                void coverArt.offsetWidth;
-
-                // Phase 4: Smooth glide into resting center (0, 0, 0) with zero overshoot
-                coverArt.style.transition = 'transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease-out';
-                coverArt.style.transform = 'translate3d(0, 0, 0) rotate(0deg) scale(1)';
-                coverArt.style.opacity = '1';
-
-                let hasHandledEntry = false;
-                const handleEntry = () => {
-                  if (hasHandledEntry) return;
-                  hasHandledEntry = true;
-                  coverArt.removeEventListener('transitionend', handleEntry);
-                  coverArt.style.transition = '';
-                  coverArt.style.transform = '';
-                  coverArt.style.opacity = '';
-                  coverArt.style.willChange = '';
-                };
-
-                coverArt.addEventListener('transitionend', handleEntry);
-                setTimeout(handleEntry, 340);
-              };
-
-              coverArt.addEventListener('transitionend', handleExit);
-              setTimeout(handleExit, 200);
-
-            } else if (window.Trove.player) {
+            if (window.Trove.player) {
               if (isNext) {
                 if (typeof window.Trove.player.playNext === 'function') window.Trove.player.playNext();
                 else if (typeof window.Trove.player.next === 'function') window.Trove.player.next();
@@ -655,24 +600,26 @@
                 else if (typeof window.Trove.player.previous === 'function') window.Trove.player.previous();
               }
             }
+
+            this.animateCoverPop();
           } else if (coverArt) {
-            // Spring smoothly back to center
-            coverArt.style.transition = 'transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease-out';
-            coverArt.style.transform = 'translate3d(0, 0, 0) rotate(0deg) scale(1)';
+            // Return back from partial compress smoothly
+            coverArt.style.transition = 'transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease-out';
+            coverArt.style.transform = 'scale(1)';
             coverArt.style.opacity = '1';
 
-            let hasHandledReset = false;
-            const handleReset = () => {
-              if (hasHandledReset) return;
-              hasHandledReset = true;
-              coverArt.removeEventListener('transitionend', handleReset);
+            let resetDone = false;
+            const onReset = () => {
+              if (resetDone) return;
+              resetDone = true;
+              coverArt.removeEventListener('transitionend', onReset);
               coverArt.style.transition = '';
               coverArt.style.transform = '';
               coverArt.style.opacity = '';
               coverArt.style.willChange = '';
             };
-            coverArt.addEventListener('transitionend', handleReset);
-            setTimeout(handleReset, 300);
+            coverArt.addEventListener('transitionend', onReset);
+            setTimeout(onReset, 240);
           }
         }
 
@@ -687,6 +634,33 @@
 
       expandedPlayer.addEventListener('touchend', finishExpandedGesture, { passive: true });
       expandedPlayer.addEventListener('touchcancel', finishExpandedGesture, { passive: true });
+    },
+
+    // Grow from center outward (0 to 100% opacity, 0.9 to 1.0 scale)
+    animateCoverPop() {
+      const coverArt = document.getElementById('expanded-cover-art');
+      if (!coverArt) return;
+      coverArt.style.transition = 'none';
+      coverArt.style.transform = 'scale(0.90)';
+      coverArt.style.opacity = '0';
+      void coverArt.offsetWidth; // Force layout commit
+
+      coverArt.style.transition = 'transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.24s ease-out';
+      coverArt.style.transform = 'scale(1)';
+      coverArt.style.opacity = '1';
+
+      let done = false;
+      const onDone = () => {
+        if (done) return;
+        done = true;
+        coverArt.removeEventListener('transitionend', onDone);
+        coverArt.style.transition = '';
+        coverArt.style.transform = '';
+        coverArt.style.opacity = '';
+        coverArt.style.willChange = '';
+      };
+      coverArt.addEventListener('transitionend', onDone);
+      setTimeout(onDone, 320);
     },
 
     // Double-Tap Ripple Feedback Indicator (-10s / +10s)

@@ -1143,6 +1143,9 @@
         this.elements.btnExpandedNext.addEventListener('click', () => {
           if (MotionAnim) MotionAnim.pulseButton(this.elements.btnExpandedNext);
           this.playNext();
+          if (window.Trove.gestures?.animateCoverPop) {
+            window.Trove.gestures.animateCoverPop();
+          }
         });
       }
 
@@ -1157,6 +1160,9 @@
         this.elements.btnExpandedPrev.addEventListener('click', () => {
           if (MotionAnim) MotionAnim.pulseButton(this.elements.btnExpandedPrev);
           this.playPrev();
+          if (window.Trove.gestures?.animateCoverPop) {
+            window.Trove.gestures.animateCoverPop();
+          }
         });
       }
 
