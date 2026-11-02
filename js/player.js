@@ -300,13 +300,13 @@
     resetArtworkToBase(item) {
       const isVideo = item && item.category === 'video';
       if (this.elements.expandedCoverImg) {
-        this.elements.expandedCoverImg.classList.add('opacity-0', 'hidden');
-        this.elements.expandedCoverImg.classList.remove('opacity-100');
+        this.elements.expandedCoverImg.classList.add('hidden');
+        this.elements.expandedCoverImg.style.opacity = '0';
+        this.elements.expandedCoverImg.style.transform = 'scale(0.92)';
         this.elements.expandedCoverImg.removeAttribute('src');
       }
       if (this.elements.expandedCoverFallback) {
-        this.elements.expandedCoverFallback.classList.remove('hidden', 'opacity-0');
-        this.elements.expandedCoverFallback.classList.add('opacity-100');
+        this.elements.expandedCoverFallback.classList.remove('hidden');
         if (this.elements.expandedCoverIcon) {
           this.elements.expandedCoverIcon.setAttribute('data-lucide', isVideo ? 'video' : 'music');
         }
@@ -331,22 +331,24 @@
         img.onload = () => {
           // Guard: verify track is still active
           if (!this.currentTrack || this.currentTrack.path !== item.path) return;
-          if (this.elements.expandedCoverImg) {
-            this.elements.expandedCoverImg.src = thumbUrl;
-            this.elements.expandedCoverImg.classList.remove('hidden');
-            this.elements.expandedCoverImg.classList.add('transition-opacity', 'duration-300');
-            requestAnimationFrame(() => {
-              if (this.elements.expandedCoverImg) {
-                this.elements.expandedCoverImg.classList.remove('opacity-0');
-                this.elements.expandedCoverImg.classList.add('opacity-100');
-              }
-            });
-            setTimeout(() => {
-              if (this.elements.expandedCoverFallback && this.currentTrack && this.currentTrack.path === item.path) {
-                this.elements.expandedCoverFallback.classList.add('hidden');
-              }
-            }, 320);
+          const coverImg = this.elements.expandedCoverImg;
+          const fallback = this.elements.expandedCoverFallback;
+
+          if (coverImg) {
+            coverImg.src = thumbUrl;
+            coverImg.classList.remove('hidden');
+            coverImg.style.transition = 'none';
+            coverImg.style.opacity = '0';
+            coverImg.style.transform = 'scale(0.92)';
+            if (fallback) fallback.classList.add('hidden');
+
+            void coverImg.offsetWidth; // Force layout commit
+
+            coverImg.style.transition = 'transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease-out';
+            coverImg.style.opacity = '1';
+            coverImg.style.transform = 'scale(1)';
           }
+
           if (this.elements.barThumbImg) {
             this.elements.barThumbImg.src = thumbUrl;
             this.elements.barThumbImg.classList.remove('hidden');

@@ -499,19 +499,8 @@
               if (!isTracking) return;
 
               if (gestureMode === 'down' && diffY > 0) {
-                // Pure GPU compositor properties: translate3d + scale + opacity
-                // NO dynamic border-radius changes to eliminate CPU rasterization jank!
-                const pullDown = diffY * 0.85;
-                const scale = Math.max(0.92, 1 - (pullDown / 2500));
-                const opacity = Math.max(0.72, 1 - (pullDown / 650));
-                expandedPlayer.style.transform = `translate3d(0, ${pullDown}px, 0) scale(${scale})`;
-                expandedPlayer.style.opacity = `${opacity}`;
-              } else if (gestureMode === 'horizontal' && coverArt) {
-                // Subtle tactile center compression as finger drags horizontally
-                const scale = Math.max(0.92, 1 - (absX / 650));
-                const fade = Math.max(0.6, 1 - (absX / 300));
-                coverArt.style.transform = `scale(${scale})`;
-                coverArt.style.opacity = `${fade}`;
+                // Direct 1:1 hardware translate3d - no scaling or opacity during drag to eliminate GPU overhead
+                expandedPlayer.style.transform = `translate3d(0, ${diffY}px, 0)`;
               }
             });
           }
@@ -548,7 +537,6 @@
               this.triggerDoubleTapFeedback('right');
             }
             expandedPlayer.style.willChange = '';
-            coverArt.style.willChange = '';
             return;
           } else if (targetIsCover) {
             lastTapTime = now;
@@ -560,32 +548,27 @@
           const THRESHOLD_MINIMIZE = 80;
           if (diffY >= THRESHOLD_MINIMIZE) {
             if (navigator.vibrate) navigator.vibrate(20);
-            // Single, clean dismissal: animate directly off-screen
-            expandedPlayer.style.transition = 'transform 0.24s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease-out';
-            expandedPlayer.style.transform = 'translate3d(0, 100%, 0) scale(0.9)';
-            expandedPlayer.style.opacity = '0';
+            expandedPlayer.style.transition = 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1)';
+            expandedPlayer.style.transform = 'translate3d(0, 100%, 0)';
             setTimeout(() => {
               expandedPlayer.style.willChange = '';
               expandedPlayer.style.transform = '';
-              expandedPlayer.style.opacity = '';
+              expandedPlayer.style.transition = '';
               if (window.Trove.player && typeof window.Trove.player.minimize === 'function') {
                 window.Trove.player.minimize(true);
               }
-            }, 230);
+            }, 210);
           } else {
-            // Elastic spring back to fullscreen
-            expandedPlayer.style.transition = 'transform 0.26s cubic-bezier(0.175, 0.885, 0.32, 1.1), opacity 0.22s ease-out';
-            expandedPlayer.style.transform = 'translate3d(0, 0, 0) scale(1)';
-            expandedPlayer.style.opacity = '1';
+            expandedPlayer.style.transition = 'transform 0.2s cubic-bezier(0.25, 1, 0.5, 1)';
+            expandedPlayer.style.transform = 'translate3d(0, 0, 0)';
             setTimeout(() => {
               expandedPlayer.style.transition = '';
               expandedPlayer.style.transform = '';
-              expandedPlayer.style.opacity = '';
               expandedPlayer.style.willChange = '';
-            }, 270);
+            }, 220);
           }
         } else if (gestureMode === 'horizontal') {
-          const THRESHOLD_SKIP = 48;
+          const THRESHOLD_SKIP = 45;
 
           if (absX >= THRESHOLD_SKIP) {
             if (navigator.vibrate) navigator.vibrate(25);
@@ -602,34 +585,13 @@
             }
 
             this.animateCoverPop();
-          } else if (coverArt) {
-            // Return back from partial compress smoothly
-            coverArt.style.transition = 'transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease-out';
-            coverArt.style.transform = 'scale(1)';
-            coverArt.style.opacity = '1';
-
-            let resetDone = false;
-            const onReset = () => {
-              if (resetDone) return;
-              resetDone = true;
-              coverArt.removeEventListener('transitionend', onReset);
-              coverArt.style.transition = '';
-              coverArt.style.transform = '';
-              coverArt.style.opacity = '';
-              coverArt.style.willChange = '';
-            };
-            coverArt.addEventListener('transitionend', onReset);
-            setTimeout(onReset, 240);
           }
         }
 
         diffX = 0;
         diffY = 0;
         gestureMode = null;
-        if (!isDetermined) {
-          expandedPlayer.style.willChange = '';
-          if (coverArt) coverArt.style.willChange = '';
-        }
+        expandedPlayer.style.willChange = '';
       };
 
       expandedPlayer.addEventListener('touchend', finishExpandedGesture, { passive: true });
