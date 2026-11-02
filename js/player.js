@@ -750,14 +750,8 @@
 
       if (this.isPlaying) {
         if (this.elements.barPlayingIndicator) this.elements.barPlayingIndicator.classList.remove('hidden');
-        if (this.elements.expandedCoverArt) {
-          this.elements.expandedCoverArt.classList.add('ring-2', 'ring-khaki-beige/40');
-        }
       } else {
         if (this.elements.barPlayingIndicator) this.elements.barPlayingIndicator.classList.add('hidden');
-        if (this.elements.expandedCoverArt) {
-          this.elements.expandedCoverArt.classList.remove('ring-2', 'ring-khaki-beige/40');
-        }
       }
 
       if (window.lucide) window.lucide.createIcons();
