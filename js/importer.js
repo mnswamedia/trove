@@ -8,7 +8,7 @@
   const CONFIG = window.APP_CONFIG || {};
   const repo = CONFIG.repo || {};
   const storage = CONFIG.storage || {};
-  const { MotionAnim, cleanAllInputUrls } = window.Trove.utils || {};
+  const { MotionAnim, cleanAllInputUrls, showToast } = window.Trove.utils || {};
 
   const ImportManager = {
     elements: {},
@@ -20,6 +20,7 @@
     init() {
       this.elements = {
         modal: document.getElementById('import-modal'),
+        backdrop: document.getElementById('import-backdrop'),
         openBtn: document.getElementById('import-btn'),
         mobileOpenBtn: document.getElementById('mobile-import-btn'),
         closeBtn: document.getElementById('close-import-modal-btn'),
@@ -69,13 +70,13 @@
       }, 50);
 
       if (window.lucide) window.lucide.createIcons();
-      if (MotionAnim) MotionAnim.animateModalIn(this.elements.modal);
+      if (MotionAnim) MotionAnim.animateSheetIn(this.elements.modal);
     },
 
     close() {
       if (!this.isOpen) return;
       if (MotionAnim) {
-        MotionAnim.animateModalOut(this.elements.modal, () => {
+        MotionAnim.animateSheetOut(this.elements.modal, () => {
           this.elements.modal.style.display = 'none';
         });
       } else {
@@ -236,7 +237,7 @@
         }
 
         if (this.elements.statusText) this.elements.statusText.innerText = 'Dispatched successfully!';
-        if (this.elements.statusSubtext) this.elements.statusSubtext.innerText = 'Opening live Activity Monitor...';
+        if (this.elements.statusSubtext) this.elements.statusSubtext.innerText = 'Sent to runner.';
 
         setTimeout(() => {
           this.close();
@@ -247,10 +248,9 @@
             this.elements.startBtn.classList.remove('opacity-50', 'pointer-events-none');
           }
 
-          if (window.Trove.activity) {
-            window.Trove.activity.open(currentJobId);
-          }
-        }, 700);
+          const toastFn = showToast || window.Trove.utils?.showToast;
+          if (toastFn) toastFn('Ingestion workflow dispatched successfully!');
+        }, 500);
 
       } catch (err) {
         this.showError(err.message || 'Error triggering GitHub Actions runner.');
@@ -281,9 +281,12 @@
       if (this.elements.cancelBtn) {
         this.elements.cancelBtn.addEventListener('click', () => this.close());
       }
+      if (this.elements.backdrop) {
+        this.elements.backdrop.addEventListener('click', () => this.close());
+      }
       if (this.elements.modal) {
         this.elements.modal.addEventListener('click', (e) => {
-          const card = this.elements.modal.firstElementChild;
+          const card = this.elements.modal.querySelector('.relative');
           if (card && !card.contains(e.target)) {
             this.close();
           }

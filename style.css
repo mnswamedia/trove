@@ -193,12 +193,12 @@ html.dark #filter-dropdown-menu,
 body.dark #filter-dropdown-menu,
 html.dark #mobile-nav-menu,
 body.dark #mobile-nav-menu,
-html.dark #activity-modal > div,
-body.dark #activity-modal > div,
-html.dark #import-modal > div,
-body.dark #import-modal > div,
-html.dark #auth-modal > div,
-body.dark #auth-modal > div {
+html.dark #activity-modal .relative,
+body.dark #activity-modal .relative,
+html.dark #import-modal .relative,
+body.dark #import-modal .relative,
+html.dark #add-to-playlist-modal .relative,
+body.dark #add-to-playlist-modal .relative {
   background-color: #15181f !important;
   border-color: #2b3240 !important;
   color: #f3f4f6 !important;

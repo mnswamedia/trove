@@ -22,6 +22,7 @@
     init() {
       this.elements = {
         modal: document.getElementById('activity-modal'),
+        backdrop: document.getElementById('activity-backdrop'),
         closeBtn: document.getElementById('close-activity-modal-btn'),
         dismissBtn: document.getElementById('dismiss-activity-btn'),
         refreshBtn: document.getElementById('refresh-activity-btn'),
@@ -69,9 +70,12 @@
           this.fetchStatus(true);
         });
       }
+      if (this.elements.backdrop) {
+        this.elements.backdrop.addEventListener('click', () => this.close());
+      }
       if (this.elements.modal) {
         this.elements.modal.addEventListener('click', (e) => {
-          const card = this.elements.modal.firstElementChild;
+          const card = this.elements.modal.querySelector('.relative');
           if (card && !card.contains(e.target)) {
             this.close();
           }
@@ -89,7 +93,7 @@
 
       this.elements.modal.style.display = 'flex';
       if (window.lucide) window.lucide.createIcons();
-      if (MotionAnim) MotionAnim.animateModalIn(this.elements.modal);
+      if (MotionAnim) MotionAnim.animateSheetIn(this.elements.modal);
 
       // Fetch latest on open
       this.fetchStatus();
@@ -98,13 +102,19 @@
     close() {
       if (!this.isOpen) return;
       if (MotionAnim) {
-        MotionAnim.animateModalOut(this.elements.modal, () => {
+        MotionAnim.animateSheetOut(this.elements.modal, () => {
           this.elements.modal.style.display = 'none';
         });
       } else {
         this.elements.modal.style.display = 'none';
       }
     },
+
+    // Backward compatibility stubs
+    startPolling() {},
+    stopPolling() {},
+    showButton() {},
+    hideButton() {},
 
     async fetchStatus(isManual = false) {
       if (this.isLoading) return;

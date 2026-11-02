@@ -113,8 +113,9 @@
         btnDeletePlaylist: document.getElementById('btn-delete-playlist'),
         syncBadge: document.getElementById('playlists-sync-badge'),
 
-        // Add to Playlist Modal
+        // Add to Playlist Drawer
         addModal: document.getElementById('add-to-playlist-modal'),
+        addBackdrop: document.getElementById('add-playlist-backdrop'),
         closeAddModal: document.getElementById('close-add-playlist-modal'),
         addModalTrackName: document.getElementById('add-modal-track-name'),
         btnQuickAddQueue: document.getElementById('btn-quick-add-to-queue'),
@@ -167,10 +168,13 @@
         });
       }
 
-      // Outside click dismiss for Add Modal
+      // Dismiss for Add Drawer
+      if (this.elements.addBackdrop) {
+        this.elements.addBackdrop.addEventListener('click', () => this.closeAddModal());
+      }
       if (this.elements.addModal) {
         this.elements.addModal.addEventListener('click', (e) => {
-          const card = this.elements.addModal.firstElementChild;
+          const card = this.elements.addModal.querySelector('.relative');
           if (card && !card.contains(e.target)) {
             this.closeAddModal();
           }
@@ -699,7 +703,8 @@
 
       if (this.elements.addModal) {
         this.elements.addModal.style.display = 'flex';
-        if (MotionAnim) MotionAnim.animateModalIn(this.elements.addModal);
+        if (window.lucide) window.lucide.createIcons();
+        if (MotionAnim) MotionAnim.animateSheetIn(this.elements.addModal);
       }
     },
 
@@ -707,7 +712,7 @@
       if (!this.elements.addModal || this.elements.addModal.style.display === 'none') return;
       this.pendingAddTrack = null;
       if (MotionAnim) {
-        MotionAnim.animateModalOut(this.elements.addModal, () => {
+        MotionAnim.animateSheetOut(this.elements.addModal, () => {
           this.elements.addModal.style.display = 'none';
         });
       } else {
