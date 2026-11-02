@@ -3,7 +3,7 @@
  * All dynamic parameters, bucket/dataset paths, extensions, and storage keys are defined here.
  */
 window.APP_CONFIG = {
-  version: 'v47',
+  version: 'v48',
   repo: {
     id: 'mnswa/trove_dataset',
     owner: 'mnswa',

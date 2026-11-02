@@ -888,23 +888,34 @@
         if (!item) continue;
 
         try {
-          const mediaEntry = await player.getMediaBlobAndUrl(item);
-          if (mediaEntry && mediaEntry.blob) {
-            const thumbUrl = await player.extractThumbnail(mediaEntry.blob, item);
-            if (thumbUrl && this.elements.fileList) {
-              const slots = this.elements.fileList.querySelectorAll('.list-thumb-slot');
-              slots.forEach(slot => {
-                if (slot.dataset.filePath === path) {
-                  const img = slot.querySelector('.list-thumb-img');
-                  const iconWrapper = slot.querySelector('.list-thumb-icon-wrapper');
-                  if (img && iconWrapper) {
-                    img.src = thumbUrl;
-                    img.classList.remove('hidden');
-                    iconWrapper.classList.add('hidden');
-                  }
-                }
-              });
+          // 1. Check IDB, dedicated covers/ folder, or sidecar metadata
+          // WITHOUT downloading the multi-megabyte media file!
+          let thumbUrl = null;
+          if (typeof player.getCoverThumbnail === 'function') {
+            thumbUrl = await player.getCoverThumbnail(item);
+          }
+
+          // 2. Fall back to downloading full media file ONLY if dedicated cover doesn't exist
+          if (!thumbUrl) {
+            const mediaEntry = await player.getMediaBlobAndUrl(item);
+            if (mediaEntry && mediaEntry.blob) {
+              thumbUrl = await player.extractThumbnail(mediaEntry.blob, item);
             }
+          }
+
+          if (thumbUrl && this.elements.fileList) {
+            const slots = this.elements.fileList.querySelectorAll('.list-thumb-slot');
+            slots.forEach(slot => {
+              if (slot.dataset.filePath === path) {
+                const img = slot.querySelector('.list-thumb-img');
+                const iconWrapper = slot.querySelector('.list-thumb-icon-wrapper');
+                if (img && iconWrapper) {
+                  img.src = thumbUrl;
+                  img.classList.remove('hidden');
+                  iconWrapper.classList.add('hidden');
+                }
+              }
+            });
           }
         } catch (_) {}
       }

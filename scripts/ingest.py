@@ -522,6 +522,8 @@ def main():
     workdir = tempfile.mkdtemp(prefix="trove_ingest_")
     metadata_dir = os.path.join(workdir, "metadata")
     os.makedirs(metadata_dir, exist_ok=True)
+    covers_dir = os.path.join(workdir, "covers")
+    os.makedirs(covers_dir, exist_ok=True)
     archive_file = os.path.join(workdir, "all_songs.txt")
 
     start_epoch = int(time.time())
@@ -554,6 +556,7 @@ def main():
         print(f"\n--> Running yt-dlp to download media ({media_format})...")
         out_template = os.path.join(workdir, "%(title)s.%(ext)s")
         meta_template = os.path.join(metadata_dir, "%(title)s.json")
+        cover_template = os.path.join(covers_dir, "%(title)s.%(ext)s")
 
         base_cmd = [
             "yt-dlp",
@@ -561,11 +564,14 @@ def main():
             "--force-ipv4",
             "--download-archive", archive_file,
             "--embed-thumbnail",
+            "--write-thumbnail",
+            "--convert-thumbnails", "jpg",
             "--add-metadata",
             "--print-to-file",
             "%(.{title,artist,creator,channel,uploader,album,album_artist,release_date,upload_date,duration,track,track_number,genre,description,thumbnail,id,webpage_url,tags,filesize})j",
             meta_template,
             "-o", out_template,
+            "-o", f"thumbnail:{cover_template}",
             "--remote-components", "ejs:github",
             "--extractor-args", f"youtube:player_client={YOUTUBE_PLAYER_CLIENTS}",
             "--print", "before_dl:[%(epoch>%Y-%m-%d %H:%M:%S)s] Downloading: %(title)s.%(ext)s",
@@ -609,6 +615,7 @@ def main():
 
         uploaded_media_paths = set()
         uploaded_meta_paths = set()
+        uploaded_cover_paths = set()
         total_uploaded = 0
         chunk_number = 0
 
@@ -632,8 +639,21 @@ def main():
             now_epoch = int(time.time())
             now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+            # Collect any thumbnail images saved to workdir and ensure they are inside covers_dir
+            for img in Path(workdir).glob("*.*"):
+                if img.is_file() and img.suffix.lstrip(".").lower() in ("jpg", "jpeg", "png", "webp"):
+                    dest = Path(covers_dir) / f"{img.stem}.jpg"
+                    if img != dest:
+                        try:
+                            shutil.move(str(img), str(dest))
+                        except Exception:
+                            pass
+
             json_files = list(Path(metadata_dir).glob("*.json"))
             json_by_stem = {jf.stem: jf for jf in json_files}
+
+            cover_files = list(Path(covers_dir).glob("*.*"))
+            cover_by_stem = {cf.stem: cf for cf in cover_files if cf.suffix.lstrip(".").lower() in ("jpg", "jpeg", "png", "webp")}
 
             files_to_push = []
 
@@ -641,6 +661,7 @@ def main():
                 size_bytes = mf.stat().st_size
                 file_format = mf.suffix.lstrip(".").lower()
                 jf = json_by_stem.get(mf.stem)
+                cf = cover_by_stem.get(mf.stem)
 
                 data = {}
                 if jf and jf.exists():
@@ -654,6 +675,7 @@ def main():
                 data["trove_ingested_at"] = now_epoch
                 data["trove_ingested_at_iso"] = now_iso
                 data["trove_media_file"] = mf.name
+                data["trove_cover_file"] = cf.name if cf else ""
                 data["trove_media_format"] = file_format
                 data["trove_media_bytes"] = size_bytes
                 data["trove_media_size"] = format_bytes_py(size_bytes)
@@ -685,6 +707,7 @@ def main():
                     "filename": mf.name,
                     "path": mf.name,
                     "metadata_path": f"metadata/{jf.name}" if jf else "",
+                    "cover_path": f"covers/{cf.name}" if cf else "",
                     "title": title,
                     "artist": artist,
                     "album": album,
@@ -714,6 +737,8 @@ def main():
                 files_to_push.append((str(mf), mf.name, "media"))
                 if jf and str(jf) not in uploaded_meta_paths:
                     files_to_push.append((str(jf), f"metadata/{jf.name}", "meta"))
+                if cf and str(cf) not in uploaded_cover_paths:
+                    files_to_push.append((str(cf), f"covers/{cf.name}", "cover"))
 
             # Sort manifest by ingested_at descending (newest downloads first)
             existing_downloads.sort(key=lambda x: x.get("ingested_at") or 0, reverse=True)
@@ -732,8 +757,8 @@ def main():
                 ok = upload_file_to_hf(l_path, r_path, bucket_id, env, token)
                 return item, ok
 
-            # Upload media, metadata, manifest, and ledger concurrently (saves ~4-8s)
-            max_workers = min(4, len(files_to_push))
+            # Upload media, metadata, manifest, ledger, and covers concurrently (saves ~4-8s)
+            max_workers = min(6, len(files_to_push))
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                 for (local_path, remote_path, ftype), success in executor.map(_push_worker, files_to_push):
                     if success:
@@ -747,6 +772,12 @@ def main():
                                 pass
                         elif ftype == "meta":
                             uploaded_meta_paths.add(local_path)
+                        elif ftype == "cover":
+                            uploaded_cover_paths.add(local_path)
+                            try:
+                                os.remove(local_path)
+                            except Exception:
+                                pass
 
             total_uploaded += chunk_uploaded
             print(f"    ✓ Chunk #{chunk_number} complete: {chunk_uploaded} media file(s) uploaded. (Total library entries: {len(existing_downloads)})")

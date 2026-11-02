@@ -59,6 +59,47 @@
     }
   }
 
+  async function getDedicatedCover(item) {
+    if (!item || !item.name) return null;
+    const baseName = item.name.replace(/\.[a-zA-Z0-9]+$/, '');
+    const encodedBase = encodeURIComponent(baseName);
+    const isBucket = repo.isBucket !== false;
+    const state = window.Trove.state || {};
+
+    // Common formats for covers: .jpg, .jpeg, .png, .webp
+    const exts = ['jpg', 'jpeg', 'png', 'webp'];
+    for (const ext of exts) {
+      const fileName = `${encodedBase}.${ext}`;
+      const candidateUrls = isBucket ? [
+        `https://huggingface.co/buckets/${repo.id}/resolve/covers/${fileName}`,
+        `https://huggingface.co/buckets/${repo.id}/raw/covers/${fileName}`,
+        `${api.bucketsBase}/${repo.id}/raw/covers/${fileName}`,
+        `${api.bucketsBase}/${repo.id}/resolve/covers/${fileName}`,
+        `https://huggingface.co/api/buckets/${repo.id}/raw/covers/${fileName}`
+      ] : [
+        `https://huggingface.co/datasets/${repo.id}/resolve/${repo.branch || 'main'}/covers/${fileName}`,
+        `https://huggingface.co/datasets/${repo.id}/raw/${repo.branch || 'main'}/covers/${fileName}`,
+        `${api.datasetsBase}/${repo.id}/resolve/${repo.branch || 'main'}/covers/${fileName}`
+      ];
+
+      for (const url of candidateUrls) {
+        try {
+          const headers = state.token ? { 'Authorization': `Bearer ${state.token}` } : {};
+          const res = await fetch(url, { headers });
+          if (res.ok) {
+            const blob = await res.blob();
+            if (blob && blob.size > 0) {
+              const thumbUrl = URL.createObjectURL(blob);
+              saveThumbnailBlobToIDB(item.path, blob);
+              return thumbUrl;
+            }
+          }
+        } catch (_) {}
+      }
+    }
+    return null;
+  }
+
   async function getSidecarThumbnail(item) {
     if (!item || !item.name) return null;
     const baseName = item.name.replace(/\.[a-zA-Z0-9]+$/, '');
@@ -240,6 +281,40 @@
       } catch (_) {}
     },
 
+    async getCoverThumbnail(item) {
+      if (!item) return null;
+      if (this.thumbnailCache.has(item.path)) {
+        return this.thumbnailCache.get(item.path);
+      }
+
+      const idbBlob = await getThumbnailBlobFromIDB(item.path);
+      if (idbBlob) {
+        const thumbUrl = URL.createObjectURL(idbBlob);
+        this.thumbnailCache.set(item.path, thumbUrl);
+        return thumbUrl;
+      }
+
+      // 1. Try dedicated cover in covers/ folder (Fastest, ~30KB)
+      try {
+        const dedicatedCover = await getDedicatedCover(item);
+        if (dedicatedCover) {
+          this.thumbnailCache.set(item.path, dedicatedCover);
+          return dedicatedCover;
+        }
+      } catch (_) {}
+
+      // 2. Try sidecar metadata JSON (metadata/<name>.json)
+      try {
+        const sidecarThumb = await getSidecarThumbnail(item);
+        if (sidecarThumb) {
+          this.thumbnailCache.set(item.path, sidecarThumb);
+          return sidecarThumb;
+        }
+      } catch (_) {}
+
+      return null;
+    },
+
     async extractThumbnail(blob, item) {
       if (this.thumbnailCache.has(item.path)) {
         return this.thumbnailCache.get(item.path);
@@ -251,6 +326,15 @@
         this.thumbnailCache.set(item.path, thumbUrl);
         return thumbUrl;
       }
+
+      // Check dedicated covers first before parsing large blob
+      try {
+        const dedicatedCover = await getDedicatedCover(item);
+        if (dedicatedCover) {
+          this.thumbnailCache.set(item.path, dedicatedCover);
+          return dedicatedCover;
+        }
+      } catch (_) {}
 
       if (item.category === 'music' && window.jsmediatags) {
         try {
@@ -519,6 +603,9 @@
         if (!this.currentTrack || this.currentTrack.path !== item.path) return;
 
         let thumbUrl = this.thumbnailCache.get(item.path);
+        if (!thumbUrl) {
+          thumbUrl = await this.getCoverThumbnail(item);
+        }
         if (!thumbUrl && mediaEntry.blob) {
           thumbUrl = await this.extractThumbnail(mediaEntry.blob, item);
         }
