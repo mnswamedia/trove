@@ -120,6 +120,11 @@
       if (this.isLoading) return;
       this.isLoading = true;
 
+      if (isManual) {
+        // Explicit manual refresh checks for latest/active run
+        this.currentRunId = null;
+      }
+
       if (this.elements.refreshIcon) {
         this.elements.refreshIcon.classList.add('animate-spin');
       }
@@ -196,6 +201,11 @@
     render(run, items = []) {
       const isRunning = run.status === 'in_progress' || run.status === 'queued';
       const isCompleted = run.status === 'completed';
+
+      if (isCompleted || run.status === 'failed') {
+        sessionStorage.removeItem('trove_current_run_id');
+        sessionStorage.removeItem('trove_current_job_id');
+      }
 
       // Duration & elapsed time
       const startTime = run.started_at || run.created_at || Date.now();

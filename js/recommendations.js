@@ -696,35 +696,81 @@
       }
 
       const state = window.Trove.state || {};
+      const bucketId = CONFIG.repo?.id || 'mnswa/trove_dataset';
+      const workerUrl = CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/ingest') : null;
+      const workerToken = localStorage.getItem(storage.workerTokenKey) || '';
 
       try {
-        const dispatchUrl = `https://api.github.com/repos/${owner}/${repoName}/actions/workflows/${workflowFile}/dispatches`;
-        const res = await fetch(dispatchUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${ghToken}`,
-            'Accept': 'application/vnd.github+json',
-            'X-GitHub-Api-Version': '2022-11-28',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            ref: CONFIG.github?.ref || 'main',
-            inputs: {
+        let currentJobId = null;
+
+        if (workerUrl) {
+          const headers = { 'Content-Type': 'application/json' };
+          if (workerToken) {
+            headers['Authorization'] = `Bearer ${workerToken}`;
+            headers['X-API-Key'] = workerToken;
+          }
+
+          const response = await fetch(`${workerUrl.replace(/\/+$/, '')}/dispatch`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
               targets: targets,
               format: 'm4a',
-              bucket_id: repo.id,
-              hf_token: state.token || ''
-            }
-          })
-        });
+              bucket_id: bucketId,
+              hf_token: state.token || '',
+              gh_token: ghToken,
+              owner: owner,
+              repo: repoName,
+              ref: CONFIG.github?.ref || 'main',
+              workflow: workflowFile
+            })
+          });
 
-        if (!res.ok) {
-          let errDetail = `GitHub API HTTP ${res.status}`;
-          try {
-            const errData = await res.json();
-            errDetail = errData.message || errDetail;
-          } catch (_) {}
-          throw new Error(errDetail);
+          if (!response.ok) {
+            let errDetail = `Worker dispatch failed with status ${response.status}`;
+            try {
+              const errData = await response.json();
+              errDetail = errData.error || errDetail;
+            } catch (_) {}
+            throw new Error(errDetail);
+          }
+
+          const resData = await response.json();
+          currentJobId = resData.run_id || resData.job_id;
+          if (currentJobId) {
+            sessionStorage.setItem('trove_current_run_id', currentJobId);
+            sessionStorage.setItem('trove_current_job_id', currentJobId);
+          }
+        } else {
+          // Direct fallback to GitHub Actions dispatch API
+          const dispatchUrl = `https://api.github.com/repos/${owner}/${repoName}/actions/workflows/${workflowFile}/dispatches`;
+          const res = await fetch(dispatchUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${ghToken}`,
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              ref: CONFIG.github?.ref || 'main',
+              inputs: {
+                targets: targets,
+                format: 'm4a',
+                bucket_id: bucketId,
+                hf_token: state.token || ''
+              }
+            })
+          });
+
+          if (!res.ok) {
+            let errDetail = `GitHub API HTTP ${res.status}`;
+            try {
+              const errData = await res.json();
+              errDetail = errData.message || errDetail;
+            } catch (_) {}
+            throw new Error(errDetail);
+          }
         }
 
         if (playWhenReadyVideoId) {

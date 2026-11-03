@@ -97,7 +97,7 @@ def main():
     start_time_slug = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     target_results = []
 
-    send_telemetry_event("run_started", run_id=JOB_ID, total_tracks=len(targets))
+    send_telemetry_event("run_started", run_id=JOB_ID, total_tracks=len(targets), format=media_format, bucket_id=bucket_id)
     send_progress_ping("started", title=f"Ingestion started for {len(targets)} item(s)")
 
     try:

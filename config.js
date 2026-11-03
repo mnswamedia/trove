@@ -3,7 +3,7 @@
  * All dynamic parameters, bucket/dataset paths, extensions, and storage keys are defined here.
  */
 window.APP_CONFIG = {
-  version: 'v57',
+  version: 'v58',
   repo: {
     id: 'mnswa/trove_dataset',
     owner: 'mnswa',
@@ -42,8 +42,23 @@ window.APP_CONFIG = {
   getWorkerEndpoint(subpath = '') {
     const s = this.storage || {};
     let baseUrl = (localStorage.getItem(s.workerBaseUrlKey) || '').trim().replace(/\/+$/, '');
+
+    // Auto-discover baseUrl from any configured individual worker URL if base URL is omitted
+    if (!baseUrl) {
+      for (const key of [s.workerRecsUrlKey, s.workerPlaylistsUrlKey, s.workerLyricsUrlKey, s.workerMetricsUrlKey]) {
+        const u = (localStorage.getItem(key) || '').trim();
+        if (u) {
+          try {
+            const parsed = new URL(u.startsWith('http') ? u : `https://${u}`);
+            baseUrl = parsed.origin;
+            break;
+          } catch (_) {}
+        }
+      }
+    }
+
     if (baseUrl) {
-      baseUrl = baseUrl.replace(/\/(?:lyrics|playlists|metrics|recommendations|recs)$/i, '');
+      baseUrl = baseUrl.replace(/\/(?:lyrics|playlists|metrics|recommendations|recs|ingest)$/i, '');
       const cleanSub = subpath ? (subpath.startsWith('/') ? subpath : '/' + subpath) : '';
       return `${baseUrl}${cleanSub}`;
     }
