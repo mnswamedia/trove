@@ -1,5 +1,5 @@
 // Trove PWA Service Worker
-const CACHE_NAME = 'trove-pwa-v63';
+const CACHE_NAME = 'trove-pwa-v64';
 
 // Core App Shell assets to pre-cache on install
 const PRECACHE_ASSETS = [
@@ -79,6 +79,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // 1.5. Trove Stream Proxy: Stream media progressively with HTTP 206 Range support
+  if (url.searchParams.has('trove_stream')) {
+    event.respondWith(handleStreamProxy(req));
+    return;
+  }
+
   // 2. CRITICAL: Bypass Service Worker completely for Audio/Video media streams and Range requests.
   // Intercepting 206 Partial Content streams breaks audio scrubbing in Safari/iOS and Chromium.
   const isMediaStream = req.headers.has('range') || 
@@ -140,3 +146,56 @@ self.addEventListener('fetch', (event) => {
       .catch(() => caches.match(req))
   );
 });
+
+// Progressive Media Stream Proxy for instant playback and instant Range scrubs
+async function handleStreamProxy(request) {
+  const reqUrl = new URL(request.url);
+  const targetUrl = reqUrl.searchParams.get('url');
+  const token = reqUrl.searchParams.get('token');
+
+  if (!targetUrl) {
+    return new Response('Missing target media URL', { status: 400 });
+  }
+
+  const headers = new Headers();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  if (request.headers.has('range')) {
+    headers.set('Range', request.headers.get('range'));
+  }
+
+  try {
+    const res = await fetch(targetUrl, {
+      headers,
+      redirect: 'follow'
+    });
+
+    const resHeaders = new Headers();
+    const forwardHeaders = [
+      'content-type',
+      'content-length',
+      'content-range',
+      'accept-ranges',
+      'last-modified',
+      'etag',
+      'cache-control'
+    ];
+    for (const h of forwardHeaders) {
+      const val = res.headers.get(h);
+      if (val) resHeaders.set(h, val);
+    }
+    if (!resHeaders.has('accept-ranges')) {
+      resHeaders.set('accept-ranges', 'bytes');
+    }
+
+    return new Response(res.body, {
+      status: res.status,
+      statusText: res.statusText,
+      headers: resHeaders
+    });
+  } catch (err) {
+    console.error('Service Worker stream proxy error:', err);
+    return new Response('Stream fetch failed', { status: 502 });
+  }
+}

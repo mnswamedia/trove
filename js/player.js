@@ -648,25 +648,10 @@
       }
 
       try {
-        const onDownloadProgress = (loaded, total) => {
-          if (myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) {
-            return;
-          }
-          this.setDownloadProgress(true, loaded, total, item.path);
-        };
-
-        const mediaEntry = await this.getMediaBlobAndUrl(item, onDownloadProgress, abortController.signal);
-        if (myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) return;
-
         let thumbUrl = this.thumbnailCache.get(item.path);
         if (!thumbUrl) {
           thumbUrl = await this.getCoverThumbnail(item);
         }
-        if (!thumbUrl && mediaEntry.blob) {
-          thumbUrl = await this.extractThumbnail(mediaEntry.blob, item);
-        }
-        if (myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) return;
-
         if (!thumbUrl) {
           thumbUrl = await getSidecarThumbnail(item);
           if (thumbUrl) {
@@ -678,43 +663,139 @@
         }
 
         const targetEl = this.getActiveElement();
-        targetEl.src = mediaEntry.url;
         targetEl.playbackRate = this.playbackRates[this.speedIndex];
-
-        if (startAtSeconds > 0) {
-          targetEl.currentTime = startAtSeconds;
-          this.savedStartTime = 0;
-        }
 
         if (window.Trove.equalizer) {
           window.Trove.equalizer.initAudioContext();
           window.Trove.equalizer.resume();
         }
 
-        try {
+        const finalizePlaybackMeta = () => {
+          this.updateMediaSession(thumbUrl || this.thumbnailCache.get(item.path) || null);
+          if (window.Trove.lyrics && typeof window.Trove.lyrics.onTrackChanged === 'function') {
+            window.Trove.lyrics.onTrackChanged(item);
+          }
+          if (window.Trove.store) {
+            window.Trove.store.addRecentTrack(item, startAtSeconds, targetEl.duration || 0);
+          }
+          this.savePlaybackState();
+          this.recordMetricsPlay(item, targetEl.duration || 0);
+        };
+
+        // 1. Check if media is already in memory cache or IndexedDB
+        let cachedMedia = this.blobCache.get(item.path);
+        if (!cachedMedia) {
+          const idbBlob = await getMediaFromIDB(item.path);
+          if (idbBlob) {
+            const mimeType = item.category === 'music' ? 'audio/mpeg' : 'video/mp4';
+            const typedBlob = idbBlob.type ? idbBlob : new Blob([idbBlob], { type: mimeType });
+            cachedMedia = { blob: typedBlob, url: URL.createObjectURL(typedBlob) };
+            this.setMediaCache(item.path, cachedMedia);
+          }
+        }
+
+        if (cachedMedia) {
+          // Track is fully cached: Instant 0ms playback
+          this.setDownloadProgress(false);
+          targetEl.src = cachedMedia.url;
+          if (startAtSeconds > 0) {
+            targetEl.currentTime = startAtSeconds;
+            this.savedStartTime = 0;
+          }
           await targetEl.play();
           if (myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) return;
           this.isPlaying = true;
           this.updatePlayStateUI();
-        } catch (playErr) {
-          if (playErr.name === 'AbortError' || (playErr.message && playErr.message.includes('interrupted by a call to pause'))) {
-            // Benign interruption: user skipped or paused while audio was initiating
-            return;
+          finalizePlaybackMeta();
+          return;
+        }
+
+        // 2. Track is uncached: Progressive stream via SW Range proxy with instant start at ~10%
+        const state = window.Trove.state || {};
+        const encodedPath = item.path.split('/').map(seg => encodeURIComponent(seg)).join('/');
+        const candidateUrl = `https://huggingface.co/buckets/${repo.id}/resolve/${encodedPath}`;
+        const hasSw = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+        const streamUrl = hasSw
+          ? `./?trove_stream=1&url=${encodeURIComponent(candidateUrl)}${state.token ? `&token=${encodeURIComponent(state.token)}` : ''}`
+          : null;
+
+        if (streamUrl) {
+          this.setDownloadProgress(true, 0, item.size || 0, item.path);
+          targetEl.src = streamUrl;
+
+          let hasStartedPlay = false;
+          const startPlayback = async () => {
+            if (hasStartedPlay || myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) return;
+            hasStartedPlay = true;
+            if (startAtSeconds > 0) {
+              targetEl.currentTime = startAtSeconds;
+              this.savedStartTime = 0;
+            }
+            try {
+              await targetEl.play();
+              if (myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) return;
+              this.isPlaying = true;
+              this.updatePlayStateUI();
+              finalizePlaybackMeta();
+            } catch (playErr) {
+              if (playErr.name === 'AbortError' || (playErr.message && playErr.message.includes('interrupted by a call to pause'))) return;
+              console.warn('Playback start interrupted:', playErr);
+            }
+          };
+
+          // Also trigger when audio engine canplay fires
+          targetEl.addEventListener('canplay', () => {
+            if (!hasStartedPlay) startPlayback();
+          }, { once: true });
+
+          // Concurrently download full track in background to persist to IndexedDB
+          const onDownloadProgress = (loaded, total) => {
+            if (myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) return;
+            this.setDownloadProgress(true, loaded, total, item.path);
+            // Start playing immediately once ~10% (or 200KB initial chunk) has arrived
+            if (!hasStartedPlay && ((total > 0 && loaded / total >= 0.10) || loaded >= 200 * 1024)) {
+              startPlayback();
+            }
+          };
+
+          this.getMediaBlobAndUrl(item, onDownloadProgress, abortController.signal).then((fullEntry) => {
+            if (myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) return;
+            this.setDownloadProgress(false);
+            if (!hasStartedPlay) startPlayback();
+            if (!thumbUrl && fullEntry?.blob) {
+              this.extractThumbnail(fullEntry.blob, item).then(extracted => {
+                if (extracted && this.currentTrack && this.currentTrack.path === item.path) {
+                  this.updateThumbnailUI(extracted, item);
+                }
+              }).catch(() => {});
+            }
+          }).catch(err => {
+            if (err.name === 'AbortError') return;
+            console.warn('Background persistence skip:', err);
+          });
+
+        } else {
+          // 3. Fallback (if SW not active): Traditional full download before playing
+          const onDownloadProgress = (loaded, total) => {
+            if (myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) return;
+            this.setDownloadProgress(true, loaded, total, item.path);
+          };
+
+          const mediaEntry = await this.getMediaBlobAndUrl(item, onDownloadProgress, abortController.signal);
+          if (myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) return;
+
+          this.setDownloadProgress(false);
+          targetEl.src = mediaEntry.url;
+          if (startAtSeconds > 0) {
+            targetEl.currentTime = startAtSeconds;
+            this.savedStartTime = 0;
           }
-          throw playErr;
+          await targetEl.play();
+          if (myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) return;
+          this.isPlaying = true;
+          this.updatePlayStateUI();
+          finalizePlaybackMeta();
         }
-
-        this.updateMediaSession(thumbUrl || this.thumbnailCache.get(item.path) || null);
-
-        if (window.Trove.lyrics && typeof window.Trove.lyrics.onTrackChanged === 'function') {
-          window.Trove.lyrics.onTrackChanged(item);
-        }
-
-        if (window.Trove.store) {
-          window.Trove.store.addRecentTrack(item, startAtSeconds, targetEl.duration || 0);
-        }
-        this.savePlaybackState();
-        this.recordMetricsPlay(item, targetEl.duration || 0);
       } catch (err) {
         if (err.name === 'AbortError' || (err.message && (err.message.includes('interrupted by a call to pause') || err.message.includes('aborted')))) {
           // Benign abort
