@@ -387,3 +387,8 @@ code, .font-mono {
   -webkit-backface-visibility: hidden;
 }
 
+/* Repeat A-B Scrubber Segment */
+#expanded-ab-highlight {
+  background-image: repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(16, 185, 129, 0.2) 5px, rgba(16, 185, 129, 0.2) 10px);
+}
+

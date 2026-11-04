@@ -153,6 +153,20 @@
         if (player) player.seekDelta(5);
       }
 
+      // Repeat A-B Shortcuts ('[': Set Point A, ']': Set Point B, '\': Clear A-B)
+      if (e.key === '[') {
+        e.preventDefault();
+        if (player) player.setRepeatAPoint();
+      }
+      if (e.key === ']') {
+        e.preventDefault();
+        if (player) player.setRepeatBPoint();
+      }
+      if (e.key === '\\') {
+        e.preventDefault();
+        if (player) player.clearRepeatAB();
+      }
+
       // Escape: Dismiss active panels in priority order
       if (e.key === 'Escape') {
         if (window.Trove.playlists?.isAddModalOpen) {

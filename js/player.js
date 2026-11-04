@@ -140,6 +140,11 @@
     isSeeking: false,
     shuffle: false,
     repeat: 'off', // 'off' | 'all' | 'one'
+    repeatAB: {
+      enabled: false,
+      pointA: null,
+      pointB: null
+    },
     playbackRates: [0.75, 1.0, 1.25, 1.5, 2.0],
     speedIndex: 1,
     volume: 1.0,
@@ -467,11 +472,13 @@
 
     async getMediaBlobAndUrl(item) {
       if (this.blobCache.has(item.path)) {
+        this.setDownloadProgress(true, item.size || 0, item.size || 0);
         return this.blobCache.get(item.path);
       }
 
       const cachedBlob = await getMediaFromIDB(item.path);
       if (cachedBlob) {
+        this.setDownloadProgress(true, item.size || cachedBlob.size || 0, item.size || cachedBlob.size || 0);
         const mimeType = item.category === 'music' ? 'audio/mpeg' : 'video/mp4';
         const typedBlob = cachedBlob.type ? cachedBlob : new Blob([cachedBlob], { type: mimeType });
         const blobUrl = URL.createObjectURL(typedBlob);
@@ -502,9 +509,33 @@
             }
           });
           if (res.ok) {
-            const blob = await res.blob();
-            const mimeType = item.category === 'music' ? 'audio/mpeg' : 'video/mp4';
-            const typedBlob = blob.type ? blob : new Blob([blob], { type: mimeType });
+            const contentLength = parseInt(res.headers.get('content-length') || '', 10) || item.size || 0;
+            let typedBlob;
+
+            if (res.body && typeof res.body.getReader === 'function') {
+              const reader = res.body.getReader();
+              let received = 0;
+              const chunks = [];
+              this.setDownloadProgress(true, 0, contentLength);
+
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(value);
+                received += value.length;
+                this.setDownloadProgress(true, received, contentLength);
+              }
+
+              const mimeType = item.category === 'music' ? 'audio/mpeg' : 'video/mp4';
+              typedBlob = new Blob(chunks, { type: mimeType });
+            } else {
+              this.setDownloadProgress(true, 0, contentLength);
+              const blob = await res.blob();
+              this.setDownloadProgress(true, blob.size || contentLength, contentLength || blob.size);
+              const mimeType = item.category === 'music' ? 'audio/mpeg' : 'video/mp4';
+              typedBlob = blob.type ? blob : new Blob([blob], { type: mimeType });
+            }
+
             const blobUrl = URL.createObjectURL(typedBlob);
             const entry = { blob: typedBlob, url: blobUrl };
             this.setMediaCache(item.path, entry);
@@ -576,7 +607,9 @@
         if (this.elements.btnPipToggle) this.elements.btnPipToggle.classList.add('hidden');
       }
 
+      this.clearRepeatAB(false);
       this.showBottomBar();
+      this.setDownloadProgress(true, 0, item.size || 0);
       this.setLoading(true);
 
       if (window.Trove.explorer && typeof window.Trove.explorer.render === 'function') {
@@ -673,8 +706,207 @@
       } else {
         if (this.elements.barLoadingBadge) this.elements.barLoadingBadge.classList.add('hidden');
         if (this.elements.videoLoadingOverlay) this.elements.videoLoadingOverlay.classList.add('hidden');
+        this.setDownloadProgress(false);
         this.updatePlayStateUI();
       }
+      if (window.lucide) window.lucide.createIcons();
+    },
+
+    setDownloadProgress(active, loaded = 0, total = 0) {
+      if (active) {
+        if (this.elements.expandedScrubberGroup) this.elements.expandedScrubberGroup.classList.add('hidden');
+        if (this.elements.expandedDownloadGroup) this.elements.expandedDownloadGroup.classList.remove('hidden');
+
+        if (this.elements.barScrubberGroup) this.elements.barScrubberGroup.classList.add('hidden');
+        if (this.elements.barDownloadGroup) this.elements.barDownloadGroup.classList.remove('hidden');
+
+        const pct = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : (loaded > 0 ? 50 : 0);
+        const remaining = total > loaded ? total - loaded : 0;
+
+        let doneText = '';
+        let remainsText = '';
+
+        if (total > 0) {
+          doneText = `${formatBytes(loaded)} / ${formatBytes(total)} (${pct}%)`;
+          remainsText = `${formatBytes(remaining)} remains`;
+        } else if (loaded > 0) {
+          doneText = `${formatBytes(loaded)} downloaded`;
+          remainsText = 'Downloading...';
+        } else {
+          doneText = 'Connecting...';
+          remainsText = 'Starting download...';
+        }
+
+        if (this.elements.expandedDownloadFill) {
+          this.elements.expandedDownloadFill.style.width = `${pct}%`;
+        }
+        if (this.elements.expandedDownloadDone) {
+          this.elements.expandedDownloadDone.innerText = doneText;
+        }
+        if (this.elements.expandedDownloadRemains) {
+          this.elements.expandedDownloadRemains.innerText = remainsText;
+        }
+
+        if (this.elements.barDownloadFill) {
+          this.elements.barDownloadFill.style.width = `${pct}%`;
+        }
+        if (this.elements.barDownloadDone) {
+          this.elements.barDownloadDone.innerText = doneText;
+        }
+        if (this.elements.barDownloadRemains) {
+          this.elements.barDownloadRemains.innerText = remainsText;
+        }
+      } else {
+        if (this.elements.expandedScrubberGroup) this.elements.expandedScrubberGroup.classList.remove('hidden');
+        if (this.elements.expandedDownloadGroup) this.elements.expandedDownloadGroup.classList.add('hidden');
+
+        if (this.elements.barScrubberGroup) this.elements.barScrubberGroup.classList.remove('hidden');
+        if (this.elements.barDownloadGroup) this.elements.barDownloadGroup.classList.add('hidden');
+      }
+    },
+
+    toggleRepeatAB() {
+      if (!this.currentTrack) return;
+      const el = this.getActiveElement();
+      if (!el) return;
+
+      if (this.repeatAB.pointA === null) {
+        this.setRepeatAPoint();
+      } else if (this.repeatAB.pointB === null) {
+        this.setRepeatBPoint();
+      } else {
+        this.clearRepeatAB();
+      }
+    },
+
+    setRepeatAPoint(time = null) {
+      if (!this.currentTrack) return;
+      const el = this.getActiveElement();
+      const cur = time !== null ? time : (el ? (el.currentTime || 0) : 0);
+
+      this.repeatAB.pointA = cur;
+      this.repeatAB.pointB = null;
+      this.repeatAB.enabled = false;
+      this.updateRepeatABUI();
+
+      const toast = window.Trove?.utils?.showToast;
+      if (toast) toast(`Point A set at ${formatTime(cur)}. Click A-B again to set Point B.`);
+    },
+
+    setRepeatBPoint(time = null) {
+      if (!this.currentTrack) return;
+      const el = this.getActiveElement();
+      let cur = time !== null ? time : (el ? (el.currentTime || 0) : 0);
+
+      if (this.repeatAB.pointA === null) {
+        this.setRepeatAPoint(cur);
+        return;
+      }
+
+      if (cur < this.repeatAB.pointA) {
+        const tmp = this.repeatAB.pointA;
+        this.repeatAB.pointA = cur;
+        cur = tmp;
+      } else if (Math.abs(cur - this.repeatAB.pointA) < 0.5) {
+        const dur = (el && el.duration) || 0;
+        cur = dur > this.repeatAB.pointA + 2 ? this.repeatAB.pointA + 2 : this.repeatAB.pointA + 1;
+      }
+
+      this.repeatAB.pointB = cur;
+      this.repeatAB.enabled = true;
+
+      if (el) {
+        if (el.currentTime > this.repeatAB.pointB || el.currentTime < this.repeatAB.pointA) {
+          el.currentTime = this.repeatAB.pointA;
+        }
+      }
+
+      this.updateRepeatABUI();
+
+      const toast = window.Trove?.utils?.showToast;
+      if (toast) toast(`Looping: ${formatTime(this.repeatAB.pointA)} ⇄ ${formatTime(this.repeatAB.pointB)}`);
+    },
+
+    clearRepeatAB(notify = true) {
+      this.repeatAB.pointA = null;
+      this.repeatAB.pointB = null;
+      this.repeatAB.enabled = false;
+      this.updateRepeatABUI();
+
+      if (notify) {
+        const toast = window.Trove?.utils?.showToast;
+        if (toast) toast('Repeat A-B cleared');
+      }
+    },
+
+    updateRepeatABUI() {
+      const { pointA, pointB } = this.repeatAB;
+      const el = this.getActiveElement();
+      const dur = (el && el.duration) || 0;
+
+      if (this.elements.repeatAbLabel) {
+        if (pointA === null) {
+          this.elements.repeatAbLabel.innerText = 'A-B';
+        } else if (pointB === null) {
+          this.elements.repeatAbLabel.innerText = `A: ${formatTime(pointA)} → B?`;
+        } else {
+          this.elements.repeatAbLabel.innerText = `A: ${formatTime(pointA)} ⇄ B: ${formatTime(pointB)}`;
+        }
+      }
+
+      if (this.elements.btnRepeatAb) {
+        if (pointA === null) {
+          this.elements.btnRepeatAb.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold transition-all border border-almond-cream/80 dark:border-[#2b3240] bg-white/70 dark:bg-[#1a1e27] text-stone-brown/80 dark:text-[#9aa4b2] hover:text-black dark:hover:text-white hover:border-jet-black/30 dark:hover:border-[#c6ac8f]/40 shadow-sm cursor-pointer';
+          this.elements.btnRepeatAb.title = 'Repeat A-B: Click to loop a section (Hotkeys: [ to set A, ] to set B, \\ to clear)';
+        } else if (pointB === null) {
+          this.elements.btnRepeatAb.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold transition-all border border-amber-500/60 bg-amber-500/15 text-amber-800 dark:text-amber-300 shadow-sm cursor-pointer animate-pulse';
+          this.elements.btnRepeatAb.title = 'Point A set! Play or seek to end of loop and click to set Point B.';
+        } else {
+          this.elements.btnRepeatAb.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold transition-all border border-emerald-500/60 bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 shadow-sm cursor-pointer';
+          this.elements.btnRepeatAb.title = `Looping ${formatTime(pointA)} to ${formatTime(pointB)}. Click to clear.`;
+        }
+      }
+
+      if (this.elements.btnRepeatAbClear) {
+        if (pointA !== null) {
+          this.elements.btnRepeatAbClear.classList.remove('hidden');
+        } else {
+          this.elements.btnRepeatAbClear.classList.add('hidden');
+        }
+      }
+
+      if (this.elements.expandedAbMarkerA) {
+        if (dur > 0 && pointA !== null) {
+          const pctA = Math.max(0, Math.min(100, (pointA / dur) * 100));
+          this.elements.expandedAbMarkerA.style.left = `${pctA}%`;
+          this.elements.expandedAbMarkerA.classList.remove('hidden');
+        } else {
+          this.elements.expandedAbMarkerA.classList.add('hidden');
+        }
+      }
+
+      if (this.elements.expandedAbMarkerB) {
+        if (dur > 0 && pointB !== null) {
+          const pctB = Math.max(0, Math.min(100, (pointB / dur) * 100));
+          this.elements.expandedAbMarkerB.style.left = `${pctB}%`;
+          this.elements.expandedAbMarkerB.classList.remove('hidden');
+        } else {
+          this.elements.expandedAbMarkerB.classList.add('hidden');
+        }
+      }
+
+      if (this.elements.expandedAbHighlight) {
+        if (dur > 0 && pointA !== null && pointB !== null) {
+          const pctA = Math.max(0, Math.min(100, (pointA / dur) * 100));
+          const pctB = Math.max(0, Math.min(100, (pointB / dur) * 100));
+          this.elements.expandedAbHighlight.style.left = `${pctA}%`;
+          this.elements.expandedAbHighlight.style.width = `${Math.max(0, pctB - pctA)}%`;
+          this.elements.expandedAbHighlight.classList.remove('hidden');
+        } else {
+          this.elements.expandedAbHighlight.classList.add('hidden');
+        }
+      }
+
       if (window.lucide) window.lucide.createIcons();
     },
 
@@ -1116,6 +1348,11 @@
         barTimeCurrent: document.getElementById('bar-time-current'),
         barTimeDuration: document.getElementById('bar-time-duration'),
         barProgressSlider: document.getElementById('bar-progress-slider'),
+        barScrubberGroup: document.getElementById('bar-scrubber-group'),
+        barDownloadGroup: document.getElementById('bar-download-group'),
+        barDownloadFill: document.getElementById('bar-download-fill'),
+        barDownloadDone: document.getElementById('bar-download-done'),
+        barDownloadRemains: document.getElementById('bar-download-remains'),
         expandedPlayer: document.getElementById('expanded-player'),
         btnMinimizePlayer: document.getElementById('btn-minimize-player'),
         expandedCoverArt: document.getElementById('expanded-cover-art'),
@@ -1128,6 +1365,19 @@
         expandedTimeCurrent: document.getElementById('expanded-time-current'),
         expandedTimeDuration: document.getElementById('expanded-time-duration'),
         expandedProgressSlider: document.getElementById('expanded-progress-slider'),
+        expandedProgressContainer: document.getElementById('expanded-progress-container'),
+        expandedScrubberGroup: document.getElementById('expanded-scrubber-group'),
+        expandedDownloadGroup: document.getElementById('expanded-download-group'),
+        expandedDownloadFill: document.getElementById('expanded-download-fill'),
+        expandedDownloadDone: document.getElementById('expanded-download-done'),
+        expandedDownloadRemains: document.getElementById('expanded-download-remains'),
+        repeatAbContainer: document.getElementById('repeat-ab-container'),
+        btnRepeatAb: document.getElementById('btn-repeat-ab'),
+        btnRepeatAbClear: document.getElementById('btn-repeat-ab-clear'),
+        repeatAbLabel: document.getElementById('repeat-ab-label'),
+        expandedAbHighlight: document.getElementById('expanded-ab-highlight'),
+        expandedAbMarkerA: document.getElementById('expanded-ab-marker-a'),
+        expandedAbMarkerB: document.getElementById('expanded-ab-marker-b'),
         btnExpandedPlay: document.getElementById('btn-expanded-play'),
         btnExpandedPrev: document.getElementById('btn-expanded-prev'),
         btnExpandedNext: document.getElementById('btn-expanded-next'),
@@ -1165,6 +1415,15 @@
 
         const cur = el.currentTime || 0;
         const dur = el.duration || 0;
+
+        // Repeat A-B Loop Logic
+        if (this.repeatAB && this.repeatAB.enabled && this.repeatAB.pointA !== null && this.repeatAB.pointB !== null) {
+          if (cur >= this.repeatAB.pointB) {
+            el.currentTime = this.repeatAB.pointA;
+            return;
+          }
+        }
+
         const pct = dur > 0 ? (cur / dur) * 100 : 0;
 
         if (!this.isSeeking) {
@@ -1219,8 +1478,15 @@
         }
       });
 
+      el.addEventListener('loadedmetadata', () => {
+        if (el === this.getActiveElement()) {
+          this.updateRepeatABUI();
+        }
+      });
+
       el.addEventListener('ended', () => {
         if (el === this.getActiveElement()) {
+          this.clearRepeatAB(false);
           const endedTrack = this.currentTrack;
           const duration = el.duration || 0;
           this.recordMetricsComplete(endedTrack, duration);
@@ -1372,6 +1638,18 @@
       }
       if (this.elements.btnRepeat) {
         this.elements.btnRepeat.addEventListener('click', () => this.toggleRepeat());
+      }
+      if (this.elements.btnRepeatAb) {
+        this.elements.btnRepeatAb.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.toggleRepeatAB();
+        });
+      }
+      if (this.elements.btnRepeatAbClear) {
+        this.elements.btnRepeatAbClear.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.clearRepeatAB();
+        });
       }
       if (this.elements.btnSpeed) {
         this.elements.btnSpeed.addEventListener('click', () => this.cycleSpeed());

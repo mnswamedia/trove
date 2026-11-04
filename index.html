@@ -427,8 +427,8 @@
             </span>
           </div>
           
-          <!-- Scrubber and timestamps -->
-          <div class="flex items-center gap-2 mt-0.5">
+          <!-- Scrubber and timestamps (Default playback) -->
+          <div id="bar-scrubber-group" class="flex items-center gap-2 mt-0.5">
             <span id="bar-time-current" class="text-[11px] font-mono text-stone-brown/70 dark:text-[#8b95a5] shrink-0">0:00</span>
             <div class="relative flex-1 flex items-center" onclick="event.stopPropagation();">
               <div id="bar-time-bubble" class="absolute -top-6 left-0 -translate-x-1/2 pointer-events-none opacity-0 scale-75 transition-all duration-150 z-20 px-1.5 py-0.2 rounded-full bg-jet-black dark:bg-[#282f3e] text-white dark:text-[#f3f4f6] font-mono text-[10px] font-bold shadow-md">
@@ -444,6 +444,15 @@
               >
             </div>
             <span id="bar-time-duration" class="text-[11px] font-mono text-stone-brown/70 dark:text-[#8b95a5] shrink-0">0:00</span>
+          </div>
+
+          <!-- Download Progress Bar in Bottom Bar (Active during downloading/loading) -->
+          <div id="bar-download-group" class="hidden items-center gap-2 mt-0.5 w-full">
+            <div class="relative flex-1 h-4 rounded-md overflow-hidden bg-almond-cream/60 dark:bg-[#1a1e27] border border-almond-cream/80 dark:border-[#2b3240] flex items-center">
+              <div id="bar-download-fill" class="absolute left-0 top-0 bottom-0 bg-jet-black/25 dark:bg-[#c6ac8f]/30 border-r border-jet-black dark:border-[#c6ac8f] transition-all duration-150 ease-out" style="width: 0%;"></div>
+              <span id="bar-download-done" class="relative z-10 px-2 text-[10px] font-mono text-jet-black dark:text-[#f3f4f6] font-medium truncate">0 B / 0 B</span>
+            </div>
+            <span id="bar-download-remains" class="text-[10px] font-mono text-stone-brown dark:text-[#c6ac8f] shrink-0 font-medium">-- remains</span>
           </div>
         </div>
       </div>
@@ -592,22 +601,76 @@
 
     <!-- Bottom Controls Area -->
     <div class="max-w-2xl w-full mx-auto px-4 pb-5 pt-1 sm:pb-7 md:pb-8 flex flex-col gap-3 sm:gap-4">
-      <!-- Scrubber -->
-      <div class="relative flex flex-col gap-1.5">
-        <div id="expanded-time-bubble" class="absolute -top-7 left-0 -translate-x-1/2 pointer-events-none opacity-0 scale-75 transition-all duration-150 z-20 px-2 py-0.5 rounded-full bg-jet-black dark:bg-[#282f3e] text-white dark:text-[#f3f4f6] font-mono text-[11px] font-bold shadow-md flex items-center justify-center">
-          0:00
+      <!-- Scrubber & Download Progress Container -->
+      <div class="relative flex flex-col gap-1.5" id="expanded-progress-container">
+        <!-- Normal Scrubber Group -->
+        <div id="expanded-scrubber-group" class="relative flex flex-col gap-1.5">
+          <div id="expanded-time-bubble" class="absolute -top-7 left-0 -translate-x-1/2 pointer-events-none opacity-0 scale-75 transition-all duration-150 z-20 px-2 py-0.5 rounded-full bg-jet-black dark:bg-[#282f3e] text-white dark:text-[#f3f4f6] font-mono text-[11px] font-bold shadow-md flex items-center justify-center">
+            0:00
+          </div>
+
+          <div class="relative w-full flex items-center">
+            <!-- Repeat A-B Highlight Band -->
+            <div id="expanded-ab-highlight" class="absolute h-2 rounded-lg bg-emerald-500/40 dark:bg-[#c6ac8f]/50 border-x border-emerald-600 dark:border-[#c6ac8f] pointer-events-none z-10 hidden transition-all duration-75"></div>
+            <!-- Repeat Point A Marker -->
+            <div id="expanded-ab-marker-a" class="absolute w-2 h-4 -top-1 bg-amber-600 dark:bg-amber-400 rounded-sm shadow-md pointer-events-none z-20 hidden -translate-x-1/2 flex items-center justify-center text-[8px] font-bold text-white select-none">A</div>
+            <!-- Repeat Point B Marker -->
+            <div id="expanded-ab-marker-b" class="absolute w-2 h-4 -top-1 bg-emerald-600 dark:bg-emerald-400 rounded-sm shadow-md pointer-events-none z-20 hidden -translate-x-1/2 flex items-center justify-center text-[8px] font-bold text-white select-none">B</div>
+
+            <input 
+              type="range" 
+              id="expanded-progress-slider" 
+              min="0" 
+              max="100" 
+              value="0" 
+              class="w-full h-2 bg-almond-cream dark:bg-[#2b3240] rounded-lg appearance-none cursor-pointer accent-jet-black dark:accent-[#c6ac8f] focus:outline-none"
+            >
+          </div>
+
+          <div class="flex items-center justify-between text-xs font-mono text-stone-brown/70 dark:text-[#8b95a5]">
+            <span id="expanded-time-current">0:00</span>
+
+            <!-- Repeat A-B Flow Pill Button -->
+            <div id="repeat-ab-container" class="flex items-center gap-1 select-none">
+              <button 
+                id="btn-repeat-ab" 
+                type="button" 
+                class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold transition-all border border-almond-cream/80 dark:border-[#2b3240] bg-white/70 dark:bg-[#1a1e27] text-stone-brown/80 dark:text-[#9aa4b2] hover:text-black dark:hover:text-white hover:border-jet-black/30 dark:hover:border-[#c6ac8f]/40 shadow-sm cursor-pointer"
+                title="Repeat A-B: Click to loop a section (Hotkeys: [ to set A, ] to set B, \ to clear)"
+              >
+                <i data-lucide="repeat" class="w-3 h-3"></i>
+                <span id="repeat-ab-label">A-B</span>
+              </button>
+              <button 
+                id="btn-repeat-ab-clear" 
+                type="button" 
+                class="hidden p-0.5 rounded-full hover:bg-almond-cream dark:hover:bg-[#252a36] text-stone-brown/60 dark:text-[#8b95a5] hover:text-red-500 transition cursor-pointer"
+                title="Clear Repeat A-B"
+              >
+                <i data-lucide="x" class="w-3 h-3"></i>
+              </button>
+            </div>
+
+            <span id="expanded-time-duration">0:00</span>
+          </div>
         </div>
-        <input 
-          type="range" 
-          id="expanded-progress-slider" 
-          min="0" 
-          max="100" 
-          value="0" 
-          class="w-full h-2 bg-almond-cream dark:bg-[#2b3240] rounded-lg appearance-none cursor-pointer accent-jet-black dark:accent-[#c6ac8f] focus:outline-none"
-        >
-        <div class="flex justify-between text-xs font-mono text-stone-brown/70 dark:text-[#8b95a5]">
-          <span id="expanded-time-current">0:00</span>
-          <span id="expanded-time-duration">0:00</span>
+
+        <!-- Rectangular Download Progress Bar (Active when downloading/loading) -->
+        <div id="expanded-download-group" class="hidden flex-col gap-1.5 w-full">
+          <div class="relative w-full h-8 sm:h-9 rounded-lg overflow-hidden bg-almond-cream/60 dark:bg-[#1a1e27] border border-almond-cream/90 dark:border-[#2b3240] flex items-center shadow-inner">
+            <!-- Rectangular Animated Fill -->
+            <div id="expanded-download-fill" class="absolute left-0 top-0 bottom-0 bg-jet-black/25 dark:bg-[#c6ac8f]/30 border-r-2 border-jet-black dark:border-[#c6ac8f] transition-all duration-150 ease-out rounded-l-md" style="width: 0%;"></div>
+            <!-- Labels (How much done / How much remains) -->
+            <div class="relative z-10 w-full px-3 flex items-center justify-between text-xs font-mono font-semibold select-none pointer-events-none">
+              <div class="flex items-center gap-1.5 text-jet-black dark:text-[#f3f4f6] truncate">
+                <i data-lucide="download" class="w-3.5 h-3.5 shrink-0 text-stone-brown dark:text-[#c6ac8f] animate-pulse"></i>
+                <span id="expanded-download-done">0 B / 0 B (0%)</span>
+              </div>
+              <div class="text-stone-brown dark:text-[#c6ac8f] shrink-0 font-medium ml-2">
+                <span id="expanded-download-remains">-- remains</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
