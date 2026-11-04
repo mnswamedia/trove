@@ -714,7 +714,7 @@
         const state = window.Trove.state || {};
         const encodedPath = item.path.split('/').map(seg => encodeURIComponent(seg)).join('/');
         const candidateUrl = `https://huggingface.co/buckets/${repo.id}/resolve/${encodedPath}`;
-        const hasSw = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+        const hasSw = !!('serviceWorker' in navigator);
         const streamUrl = hasSw
           ? `./?trove_stream=1&url=${encodeURIComponent(candidateUrl)}${state.token ? `&token=${encodeURIComponent(state.token)}` : ''}`
           : null;
@@ -724,28 +724,40 @@
           targetEl.src = streamUrl;
 
           let hasStartedPlay = false;
+          let isPlaybackStarting = false;
+
           const startPlayback = async () => {
-            if (hasStartedPlay || myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) return;
-            hasStartedPlay = true;
-            if (startAtSeconds > 0) {
-              targetEl.currentTime = startAtSeconds;
-              this.savedStartTime = 0;
-            }
+            if (hasStartedPlay || isPlaybackStarting || myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) return;
+            isPlaybackStarting = true;
             try {
+              if (startAtSeconds > 0) {
+                targetEl.currentTime = startAtSeconds;
+                this.savedStartTime = 0;
+              }
               await targetEl.play();
               if (myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) return;
+              hasStartedPlay = true;
+              isPlaybackStarting = false;
               this.isPlaying = true;
               this.updatePlayStateUI();
               finalizePlaybackMeta();
             } catch (playErr) {
+              isPlaybackStarting = false;
               if (playErr.name === 'AbortError' || (playErr.message && playErr.message.includes('interrupted by a call to pause'))) return;
-              console.warn('Playback start interrupted:', playErr);
+              console.warn('Playback initiation pending more stream buffer:', playErr);
             }
           };
 
-          // Also trigger when audio engine canplay fires
-          targetEl.addEventListener('canplay', () => {
+          // Trigger as soon as the media engine has buffered initial decodable frames
+          const onCanPlay = () => {
             if (!hasStartedPlay) startPlayback();
+          };
+          targetEl.addEventListener('canplay', onCanPlay, { once: true });
+          targetEl.addEventListener('loadeddata', onCanPlay, { once: true });
+
+          // If stream URL fails or is blocked, log warning; fullEntry will take over
+          targetEl.addEventListener('error', (err) => {
+            console.warn('Stream proxy media error, will use full blob:', err);
           }, { once: true });
 
           // Concurrently download full track in background to persist to IndexedDB
@@ -761,7 +773,10 @@
           this.getMediaBlobAndUrl(item, onDownloadProgress, abortController.signal).then((fullEntry) => {
             if (myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) return;
             this.setDownloadProgress(false);
-            if (!hasStartedPlay) startPlayback();
+            if (!hasStartedPlay || targetEl.error) {
+              targetEl.src = fullEntry.url;
+              startPlayback();
+            }
             if (!thumbUrl && fullEntry?.blob) {
               this.extractThumbnail(fullEntry.blob, item).then(extracted => {
                 if (extracted && this.currentTrack && this.currentTrack.path === item.path) {

@@ -1,5 +1,5 @@
 // Trove PWA Service Worker
-const CACHE_NAME = 'trove-pwa-v64';
+const CACHE_NAME = 'trove-pwa-v65';
 
 // Core App Shell assets to pre-cache on install
 const PRECACHE_ASSETS = [
@@ -157,17 +157,36 @@ async function handleStreamProxy(request) {
     return new Response('Missing target media URL', { status: 400 });
   }
 
-  const headers = new Headers();
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-  if (request.headers.has('range')) {
-    headers.set('Range', request.headers.get('range'));
-  }
+  const clientRange = request.headers.get('range') || 'bytes=0-';
 
   try {
-    const res = await fetch(targetUrl, {
-      headers,
+    let finalUrl = targetUrl;
+    let authHeaders = {};
+    if (token) {
+      authHeaders['Authorization'] = `Bearer ${token}`;
+    }
+
+    // 1. Resolve redirect to get direct CDN/S3 URL without losing Range header
+    try {
+      const redirectCheck = await fetch(finalUrl, {
+        method: 'GET',
+        headers: { ...authHeaders, 'Range': 'bytes=0-0' },
+        redirect: 'manual'
+      });
+      if (redirectCheck.status >= 300 && redirectCheck.status < 400 && redirectCheck.headers.get('location')) {
+        finalUrl = redirectCheck.headers.get('location');
+        authHeaders = {}; // S3/CDN presigned URL has auth in query params
+      }
+    } catch (_) {}
+
+    // 2. Fetch directly with the exact Range requested by the browser
+    const rangeHeaders = {
+      ...authHeaders,
+      'Range': clientRange
+    };
+
+    const res = await fetch(finalUrl, {
+      headers: rangeHeaders,
       redirect: 'follow'
     });
 
@@ -189,9 +208,19 @@ async function handleStreamProxy(request) {
       resHeaders.set('accept-ranges', 'bytes');
     }
 
+    // Ensure 206 Partial Content status so Chromium/Safari audio decoder begins immediate playback
+    let status = res.status;
+    if (status === 200 && clientRange) {
+      status = 206;
+      const totalLen = parseInt(res.headers.get('content-length') || '0', 10);
+      if (totalLen > 0 && !resHeaders.has('content-range')) {
+        resHeaders.set('content-range', `bytes 0-${totalLen - 1}/${totalLen}`);
+      }
+    }
+
     return new Response(res.body, {
-      status: res.status,
-      statusText: res.statusText,
+      status: status,
+      statusText: status === 206 ? 'Partial Content' : res.statusText,
       headers: resHeaders
     });
   } catch (err) {
