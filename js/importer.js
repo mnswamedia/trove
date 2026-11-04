@@ -150,8 +150,19 @@
       if (this.elements.statusSubtext) this.elements.statusSubtext.innerText = `Target: ${owner}/${repoName} (${workflowFile})`;
       if (this.elements.startBtn) {
         this.elements.startBtn.disabled = true;
-        this.elements.startBtn.classList.add('opacity-50', 'pointer-events-none');
+        this.elements.startBtn.classList.add('opacity-75', 'pointer-events-none');
+        this.elements.startBtn.innerHTML = '<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Starting...</span>';
+        if (window.lucide) window.lucide.createIcons();
       }
+
+      const resetStartBtn = () => {
+        if (this.elements.startBtn) {
+          this.elements.startBtn.disabled = false;
+          this.elements.startBtn.classList.remove('opacity-75', 'pointer-events-none');
+          this.elements.startBtn.innerHTML = '<i data-lucide="download" class="w-3.5 h-3.5"></i><span>Start Download</span>';
+          if (window.lucide) window.lucide.createIcons();
+        }
+      };
 
       const state = window.Trove.state || {};
       const workerUrl = CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/ingest') : null;
@@ -238,15 +249,16 @@
 
         if (this.elements.statusText) this.elements.statusText.innerText = 'Dispatched successfully!';
         if (this.elements.statusSubtext) this.elements.statusSubtext.innerText = 'Sent to runner.';
+        if (this.elements.startBtn) {
+          this.elements.startBtn.innerHTML = '<i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i><span>Dispatched!</span>';
+          if (window.lucide) window.lucide.createIcons();
+        }
 
         setTimeout(() => {
           this.close();
           if (this.elements.urlsInput) this.elements.urlsInput.value = '';
           this.clearSelectedFile();
-          if (this.elements.startBtn) {
-            this.elements.startBtn.disabled = false;
-            this.elements.startBtn.classList.remove('opacity-50', 'pointer-events-none');
-          }
+          resetStartBtn();
 
           const toastFn = showToast || window.Trove.utils?.showToast;
           if (toastFn) toastFn('Ingestion workflow dispatched successfully!');
@@ -254,10 +266,7 @@
 
       } catch (err) {
         this.showError(err.message || 'Error triggering GitHub Actions runner.');
-        if (this.elements.startBtn) {
-          this.elements.startBtn.disabled = false;
-          this.elements.startBtn.classList.remove('opacity-50', 'pointer-events-none');
-        }
+        resetStartBtn();
       }
     },
 

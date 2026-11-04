@@ -296,7 +296,9 @@
     }
     if (forceUpdateBtn) {
       forceUpdateBtn.disabled = true;
-      forceUpdateBtn.style.opacity = '0.5';
+      forceUpdateBtn.classList.add('opacity-75', 'pointer-events-none');
+      const icon = forceUpdateBtn.querySelector('i, svg');
+      if (icon) icon.classList.add('animate-spin');
     }
 
     if (window.Trove.utils?.showToast) {

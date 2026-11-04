@@ -132,6 +132,8 @@
 
   const Player = {
     currentTrack: null,
+    activeLoadId: 0,
+    currentLoadAbortController: null,
     queue: [],
     currentIndex: -1,
     isPlaying: false,
@@ -470,15 +472,13 @@
       }
     },
 
-    async getMediaBlobAndUrl(item) {
+    async getMediaBlobAndUrl(item, onProgress = null, signal = null) {
       if (this.blobCache.has(item.path)) {
-        this.setDownloadProgress(true, item.size || 0, item.size || 0);
         return this.blobCache.get(item.path);
       }
 
       const cachedBlob = await getMediaFromIDB(item.path);
       if (cachedBlob) {
-        this.setDownloadProgress(true, item.size || cachedBlob.size || 0, item.size || cachedBlob.size || 0);
         const mimeType = item.category === 'music' ? 'audio/mpeg' : 'video/mp4';
         const typedBlob = cachedBlob.type ? cachedBlob : new Blob([cachedBlob], { type: mimeType });
         const blobUrl = URL.createObjectURL(typedBlob);
@@ -502,12 +502,18 @@
       const state = window.Trove.state || {};
       let lastErr = null;
       for (const url of candidateUrls) {
+        if (signal && signal.aborted) {
+          throw new DOMException('Aborted', 'AbortError');
+        }
         try {
-          const res = await fetch(url, {
+          const fetchOptions = {
             headers: {
               'Authorization': `Bearer ${state.token}`
             }
-          });
+          };
+          if (signal) fetchOptions.signal = signal;
+
+          const res = await fetch(url, fetchOptions);
           if (res.ok) {
             const contentLength = parseInt(res.headers.get('content-length') || '', 10) || item.size || 0;
             let typedBlob;
@@ -516,22 +522,34 @@
               const reader = res.body.getReader();
               let received = 0;
               const chunks = [];
-              this.setDownloadProgress(true, 0, contentLength);
+              if (typeof onProgress === 'function') {
+                onProgress(0, contentLength);
+              }
 
               while (true) {
+                if (signal && signal.aborted) {
+                  try { await reader.cancel(); } catch (_) {}
+                  throw new DOMException('Aborted', 'AbortError');
+                }
                 const { done, value } = await reader.read();
                 if (done) break;
                 chunks.push(value);
                 received += value.length;
-                this.setDownloadProgress(true, received, contentLength);
+                if (typeof onProgress === 'function') {
+                  onProgress(received, contentLength);
+                }
               }
 
               const mimeType = item.category === 'music' ? 'audio/mpeg' : 'video/mp4';
               typedBlob = new Blob(chunks, { type: mimeType });
             } else {
-              this.setDownloadProgress(true, 0, contentLength);
+              if (typeof onProgress === 'function') {
+                onProgress(0, contentLength);
+              }
               const blob = await res.blob();
-              this.setDownloadProgress(true, blob.size || contentLength, contentLength || blob.size);
+              if (typeof onProgress === 'function') {
+                onProgress(blob.size || contentLength, contentLength || blob.size);
+              }
               const mimeType = item.category === 'music' ? 'audio/mpeg' : 'video/mp4';
               typedBlob = blob.type ? blob : new Blob([blob], { type: mimeType });
             }
@@ -543,6 +561,7 @@
             return entry;
           }
         } catch (e) {
+          if (e.name === 'AbortError') throw e;
           lastErr = e;
         }
       }
@@ -551,6 +570,17 @@
 
     async playTrack(item, startAtSeconds = 0) {
       if (!item || item.isDir) return;
+
+      // Abort any prior in-flight track loading
+      if (this.currentLoadAbortController) {
+        try {
+          this.currentLoadAbortController.abort();
+        } catch (_) {}
+        this.currentLoadAbortController = null;
+      }
+      const abortController = new AbortController();
+      this.currentLoadAbortController = abortController;
+      const myLoadId = ++this.activeLoadId;
 
       const activeEl = this.getActiveElement();
       if (activeEl) {
@@ -609,7 +639,8 @@
 
       this.clearRepeatAB(false);
       this.showBottomBar();
-      this.setDownloadProgress(true, 0, item.size || 0);
+      // Reset any previous download bar so standard scrubber shows while checking cache
+      this.setDownloadProgress(false);
       this.setLoading(true);
 
       if (window.Trove.explorer && typeof window.Trove.explorer.render === 'function') {
@@ -617,8 +648,15 @@
       }
 
       try {
-        const mediaEntry = await this.getMediaBlobAndUrl(item);
-        if (!this.currentTrack || this.currentTrack.path !== item.path) return;
+        const onDownloadProgress = (loaded, total) => {
+          if (myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) {
+            return;
+          }
+          this.setDownloadProgress(true, loaded, total, item.path);
+        };
+
+        const mediaEntry = await this.getMediaBlobAndUrl(item, onDownloadProgress, abortController.signal);
+        if (myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) return;
 
         let thumbUrl = this.thumbnailCache.get(item.path);
         if (!thumbUrl) {
@@ -627,7 +665,7 @@
         if (!thumbUrl && mediaEntry.blob) {
           thumbUrl = await this.extractThumbnail(mediaEntry.blob, item);
         }
-        if (!this.currentTrack || this.currentTrack.path !== item.path) return;
+        if (myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) return;
 
         if (!thumbUrl) {
           thumbUrl = await getSidecarThumbnail(item);
@@ -655,6 +693,7 @@
 
         try {
           await targetEl.play();
+          if (myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) return;
           this.isPlaying = true;
           this.updatePlayStateUI();
         } catch (playErr) {
@@ -677,8 +716,12 @@
         this.savePlaybackState();
         this.recordMetricsPlay(item, targetEl.duration || 0);
       } catch (err) {
-        if (err.name === 'AbortError' || (err.message && err.message.includes('interrupted by a call to pause'))) {
+        if (err.name === 'AbortError' || (err.message && (err.message.includes('interrupted by a call to pause') || err.message.includes('aborted')))) {
           // Benign abort
+          return;
+        }
+        if (myLoadId !== this.activeLoadId || !this.currentTrack || this.currentTrack.path !== item.path) {
+          // A newer track took over; ignore discarded track failure
           return;
         }
         console.error('Playback failed:', err);
@@ -688,7 +731,10 @@
         this.isPlaying = false;
         this.updatePlayStateUI();
       } finally {
-        this.setLoading(false);
+        if (myLoadId === this.activeLoadId) {
+          this.setLoading(false);
+          this.setDownloadProgress(false);
+        }
       }
     },
 
@@ -712,8 +758,14 @@
       if (window.lucide) window.lucide.createIcons();
     },
 
-    setDownloadProgress(active, loaded = 0, total = 0) {
+    setDownloadProgress(active, loaded = 0, total = 0, trackOrPath = null) {
+      const trackPath = typeof trackOrPath === 'string' ? trackOrPath : trackOrPath?.path;
       if (active) {
+        // Guard: if trackPath is specified and does not match the active currentTrack, NEVER hijack the UI!
+        if (trackPath && this.currentTrack && this.currentTrack.path !== trackPath) {
+          return;
+        }
+
         if (this.elements.expandedScrubberGroup) this.elements.expandedScrubberGroup.classList.add('hidden');
         if (this.elements.expandedDownloadGroup) this.elements.expandedDownloadGroup.classList.remove('hidden');
 
@@ -745,6 +797,9 @@
           this.elements.barDownloadDone.innerText = doneText;
         }
       } else {
+        if (trackPath && this.currentTrack && this.currentTrack.path !== trackPath) {
+          return;
+        }
         if (this.elements.expandedScrubberGroup) this.elements.expandedScrubberGroup.classList.remove('hidden');
         if (this.elements.expandedDownloadGroup) this.elements.expandedDownloadGroup.classList.add('hidden');
 

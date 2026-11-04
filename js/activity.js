@@ -125,6 +125,12 @@
         this.currentRunId = null;
       }
 
+      if (this.elements.refreshBtn) {
+        this.elements.refreshBtn.disabled = true;
+        this.elements.refreshBtn.classList.add('opacity-75', 'pointer-events-none');
+        const span = this.elements.refreshBtn.querySelector('span');
+        if (span) span.innerText = 'Refreshing...';
+      }
       if (this.elements.refreshIcon) {
         this.elements.refreshIcon.classList.add('animate-spin');
       }
@@ -168,6 +174,12 @@
 
     _finishLoading() {
       this.isLoading = false;
+      if (this.elements.refreshBtn) {
+        this.elements.refreshBtn.disabled = false;
+        this.elements.refreshBtn.classList.remove('opacity-75', 'pointer-events-none');
+        const span = this.elements.refreshBtn.querySelector('span');
+        if (span) span.innerText = 'Refresh';
+      }
       if (this.elements.refreshIcon) {
         this.elements.refreshIcon.classList.remove('animate-spin');
       }

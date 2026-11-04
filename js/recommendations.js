@@ -15,8 +15,12 @@
     isOpen: false,
     currentTrackPath: null,
     currentVideoId: null,
-    cache: new Map(), // track.path -> { videoId, videos: [], sourceTitle }
+    cache: new Map(), // track.path -> { videoId, videos: [], playlists: [], sourceTitle }
     selectedVideos: new Map(), // videoId -> video object
+    allPlaylists: [],
+    playlistTracksCache: new Map(), // playlistId -> tracks array
+    expandedPlaylists: new Set(), // playlistId
+    playlistTracksLoading: new Set(), // playlistId
     isLoading: false,
     continuationToken: null,
     allVideos: [],
@@ -120,7 +124,11 @@
 
       if (this.currentTrackPath === track.path && this.cache.has(track.path)) {
         const cached = this.cache.get(track.path);
-        this.renderVideos(cached.videos, cached.sourceTitle);
+        this.currentVideoId = cached.videoId;
+        this.continuationToken = cached.continuationToken || null;
+        this.allVideos = [...(cached.videos || [])];
+        this.allPlaylists = [...(cached.playlists || [])];
+        this.renderContent(cached.videos, cached.playlists, cached.sourceTitle);
       } else {
         this.fetchRecommendations(false);
       }
@@ -242,7 +250,8 @@
         this.currentVideoId = cached.videoId;
         this.continuationToken = cached.continuationToken || null;
         this.allVideos = [...(cached.videos || [])];
-        this.renderVideos(cached.videos, cleanTitle);
+        this.allPlaylists = [...(cached.playlists || [])];
+        this.renderContent(cached.videos, cached.playlists, cleanTitle);
         return;
       }
 
@@ -289,12 +298,20 @@
 
         const data = await res.json();
         const videos = Array.isArray(data.videos) ? data.videos : [];
+        const playlists = Array.isArray(data.playlists) ? data.playlists : [];
         this.continuationToken = data.continuation_token || null;
         this.allVideos = [...videos];
+        this.allPlaylists = [...playlists];
 
-        this.cache.set(track.path, { videoId, videos, continuationToken: this.continuationToken, sourceTitle: cleanTitle });
+        this.cache.set(track.path, {
+          videoId,
+          videos,
+          playlists,
+          continuationToken: this.continuationToken,
+          sourceTitle: cleanTitle
+        });
         this.setLoading(false);
-        this.renderVideos(videos, cleanTitle);
+        this.renderContent(videos, playlists, cleanTitle);
 
       } catch (err) {
         console.error('Recommendations fetch error:', err);
@@ -303,6 +320,54 @@
           'Failed to load recommendations',
           err.message || 'Check your Cloudflare Worker URL, network connection, or API token.'
         );
+      }
+    },
+
+    async fetchPlaylistTracks(playlistId) {
+      if (!playlistId) return [];
+      if (this.playlistTracksCache.has(playlistId)) {
+        return this.playlistTracksCache.get(playlistId);
+      }
+
+      const storage = CONFIG.storage || {};
+      const workerUrl = (CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/recommendations') : null) || localStorage.getItem(storage.workerRecsUrlKey) || '';
+      const workerToken = localStorage.getItem(storage.workerTokenKey) || '';
+
+      if (!workerUrl) {
+        if (showToast) showToast('Cloudflare Worker URL required');
+        return [];
+      }
+
+      this.playlistTracksLoading.add(playlistId);
+      try {
+        const cleanBase = workerUrl.replace(/\/+$/, '');
+        const sep = cleanBase.includes('?') ? '&' : (cleanBase.endsWith('/recommendations') ? '?' : '/?');
+        let targetUrl = `${cleanBase}${sep}playlistId=${encodeURIComponent(playlistId)}`;
+        if (workerToken) {
+          targetUrl += `&token=${encodeURIComponent(workerToken)}`;
+        }
+
+        const headers = { 'Accept': 'application/json' };
+        if (workerToken) {
+          headers['Authorization'] = `Bearer ${workerToken}`;
+          headers['X-API-Key'] = workerToken;
+        }
+
+        const res = await fetch(targetUrl, { headers });
+        if (!res.ok) {
+          throw new Error(`Worker returned status ${res.status}`);
+        }
+
+        const data = await res.json();
+        const tracks = Array.isArray(data.tracks) ? data.tracks : [];
+        this.playlistTracksCache.set(playlistId, tracks);
+        return tracks;
+      } catch (err) {
+        console.error(`Failed to fetch playlist tracks for ${playlistId}:`, err);
+        if (showToast) showToast('Could not load playlist tracks.');
+        return [];
+      } finally {
+        this.playlistTracksLoading.delete(playlistId);
       }
     },
 
@@ -318,7 +383,11 @@
         this.elements.emptyState.classList.add('hidden');
       }
       if (this.elements.btnRefresh) {
-        this.elements.btnRefresh.classList.toggle('animate-spin', loading);
+        this.elements.btnRefresh.disabled = loading;
+        const icon = this.elements.btnRefresh.querySelector('i, svg');
+        if (icon) {
+          icon.classList.toggle('animate-spin', loading);
+        }
       }
     },
 
@@ -338,10 +407,15 @@
     },
 
     renderVideos(videos, sourceTitle) {
+      this.renderContent(videos, this.allPlaylists || [], sourceTitle);
+    },
+
+    renderContent(videos, playlists, sourceTitle) {
       if (!this.elements.listContainer) return;
       this.elements.listContainer.innerHTML = '';
 
-      if (!videos || videos.length === 0) {
+      const totalItems = (videos ? videos.length : 0) + (playlists ? playlists.length : 0);
+      if (totalItems === 0) {
         this.renderEmpty('No Recommendations', 'YouTube returned 0 recommendations for this track.');
         return;
       }
@@ -351,22 +425,426 @@
       this.elements.listContainer.classList.remove('hidden');
 
       if (this.elements.countBadge) {
-        this.elements.countBadge.innerText = `${videos.length} found`;
+        if (playlists && playlists.length > 0) {
+          this.elements.countBadge.innerText = `${videos.length} tracks • ${playlists.length} playlists`;
+        } else {
+          this.elements.countBadge.innerText = `${videos.length} found`;
+        }
       }
       if (this.elements.footerStatus) {
-        this.elements.footerStatus.innerText = `${videos.length} tracks ready`;
+        this.elements.footerStatus.innerText = `${totalItems} recommendations ready`;
       }
 
-      videos.forEach((video) => {
-        const card = this.createVideoCard(video);
-        this.elements.listContainer.appendChild(card);
-      });
+      // Render playlists first with expandable sub-points
+      if (playlists && playlists.length > 0) {
+        playlists.forEach((playlist) => {
+          const card = this.createPlaylistCard(playlist);
+          this.elements.listContainer.appendChild(card);
+        });
+      }
+
+      // Render video tracks
+      if (videos && videos.length > 0) {
+        videos.forEach((video) => {
+          const card = this.createVideoCard(video);
+          this.elements.listContainer.appendChild(card);
+        });
+      }
 
       if (this.continuationToken) {
         this.appendLoadMoreButton();
       }
 
       if (window.lucide) window.lucide.createIcons();
+    },
+
+    createPlaylistCard(playlist) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'playlist-card-wrapper py-1 select-none';
+      wrapper.setAttribute('data-playlist-id', playlist.id);
+
+      const thumbUrl = playlist.thumbnail || (playlist.thumbnails && playlist.thumbnails[0]) || '';
+      const titleEscaped = (playlist.title || 'Untitled Playlist').replace(/"/g, '&quot;');
+      const channelEscaped = (playlist.channel || 'YouTube').replace(/"/g, '&quot;');
+      const videoCountText = playlist.video_count || '';
+      const isExpanded = this.expandedPlaylists.has(playlist.id);
+
+      wrapper.innerHTML = `
+        <div class="playlist-header p-2 sm:p-2.5 rounded-xl hover:bg-almond-cream/30 dark:hover:bg-[#1e232e] transition flex items-center gap-2.5 sm:gap-3 group cursor-pointer relative">
+          <!-- Playlist Checkbox -->
+          <input type="checkbox" class="playlist-checkbox rounded border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#c6ac8f] shrink-0 cursor-pointer w-4 h-4" data-playlist-id="${playlist.id}">
+
+          <!-- Stacked Playlist Thumbnail -->
+          <div class="relative w-16 h-12 sm:w-20 sm:h-14 rounded-lg overflow-hidden bg-almond-cream/40 dark:bg-[#12151c] shrink-0 shadow-sm border border-almond-cream/60 dark:border-[#262c38]">
+            ${thumbUrl ? `<img src="${thumbUrl}" alt="" class="w-full h-full object-cover" loading="lazy">` : `<div class="w-full h-full flex items-center justify-center bg-stone-brown/10 text-stone-brown/60"><i data-lucide="list-music" class="w-6 h-6"></i></div>`}
+            <div class="absolute inset-y-0 right-0 w-6 bg-black/75 backdrop-blur-[1px] flex flex-col items-center justify-center text-white/90">
+              <i data-lucide="list-music" class="w-3.5 h-3.5"></i>
+            </div>
+            ${videoCountText ? `<span class="absolute bottom-0.5 left-0.5 px-1 py-0.2 rounded text-[9px] font-mono font-bold bg-black/85 text-white leading-tight shadow-sm">${videoCountText}</span>` : ''}
+          </div>
+
+          <!-- Title, Channel & Playlist Badge -->
+          <div class="flex-1 min-w-0 pr-1">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="px-1.5 py-0.5 text-[9px] font-bold rounded bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30 uppercase tracking-wider shrink-0">Playlist</span>
+              <div class="text-xs sm:text-sm font-semibold text-black dark:text-[#f3f4f6] truncate group-hover:text-accent-brown dark:group-hover:text-[#c6ac8f] transition" title="${titleEscaped}">
+                ${playlist.title || 'Untitled Playlist'}
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5 mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] font-mono text-stone-brown/70 dark:text-[#9aa4b2]">
+              <span class="truncate max-w-[140px] sm:max-w-[220px]">${channelEscaped}</span>
+              ${videoCountText ? `<span class="shrink-0">• ${videoCountText}</span>` : ''}
+            </div>
+          </div>
+
+          <!-- Actions: Expand Chevron + Options Menu -->
+          <div class="flex items-center gap-1 shrink-0">
+            <!-- Expand / Collapse Button -->
+            <button type="button" class="btn-toggle-playlist p-1.5 sm:p-2 rounded-lg hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] text-stone-brown dark:text-[#c6ac8f] transition cursor-pointer" title="${isExpanded ? 'Collapse tracks' : 'Expand tracks'}">
+              <i data-lucide="chevron-down" class="w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}"></i>
+            </button>
+
+            <!-- Item Menu Dropdown Wrapper -->
+            <div class="relative item-menu-wrapper">
+              <button type="button" class="btn-item-menu p-1.5 sm:p-2 rounded-lg hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] text-stone-brown/60 dark:text-[#8b95a5] hover:text-black dark:hover:text-white transition cursor-pointer" title="Options">
+                <i data-lucide="more-vertical" class="w-4 h-4"></i>
+              </button>
+              <div class="item-menu-dropdown absolute right-0 w-48 bg-white dark:bg-[#1a1e27] border border-almond-cream dark:border-[#2f3747] rounded-xl shadow-2xl py-1.5 z-40 hidden">
+                <button type="button" class="btn-playlist-download-all w-full px-3 py-1.5 text-left text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] flex items-center gap-2">
+                  <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                  <span>Download All Tracks</span>
+                </button>
+                <button type="button" class="btn-action-copy w-full px-3 py-1.5 text-left text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] flex items-center gap-2">
+                  <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                  <span>Copy Playlist URL</span>
+                </button>
+                <a href="${playlist.url}" target="_blank" rel="noopener noreferrer" class="w-full px-3 py-1.5 text-left text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] flex items-center gap-2">
+                  <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                  <span>Open on YouTube</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subtracks Tree Container (Indented with vertical connecting guide) -->
+        <div class="playlist-subtracks-container ${isExpanded ? '' : 'hidden'} mt-1 ml-5 sm:ml-7 pl-3 sm:pl-4 border-l-2 border-almond-cream/80 dark:border-[#2b3342] space-y-1">
+          <!-- Dynamic child tracks will be rendered here -->
+        </div>
+      `;
+
+      const headerRow = wrapper.querySelector('.playlist-header');
+      const toggleBtn = wrapper.querySelector('.btn-toggle-playlist');
+      const chevron = toggleBtn.querySelector('i, svg');
+      const subtracksContainer = wrapper.querySelector('.playlist-subtracks-container');
+      const playlistCb = wrapper.querySelector('.playlist-checkbox');
+
+      const toggleExpand = async () => {
+        const currentlyHidden = subtracksContainer.classList.contains('hidden');
+        if (currentlyHidden) {
+          subtracksContainer.classList.remove('hidden');
+          this.expandedPlaylists.add(playlist.id);
+          if (chevron) chevron.classList.add('rotate-180');
+          toggleBtn.title = 'Collapse tracks';
+          await this.loadPlaylistTracksIntoContainer(playlist, subtracksContainer, playlistCb);
+        } else {
+          subtracksContainer.classList.add('hidden');
+          this.expandedPlaylists.delete(playlist.id);
+          if (chevron) chevron.classList.remove('rotate-180');
+          toggleBtn.title = 'Expand tracks';
+        }
+      };
+
+      headerRow.addEventListener('click', (e) => {
+        if (e.target.closest('.playlist-checkbox') || e.target.closest('.item-menu-wrapper') || e.target.closest('.btn-toggle-playlist')) {
+          return;
+        }
+        toggleExpand();
+      });
+
+      toggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleExpand();
+      });
+
+      // Checkbox listener on parent playlist
+      playlistCb.addEventListener('change', async (e) => {
+        const isChecked = e.target.checked;
+        playlistCb.indeterminate = false;
+
+        // If subtracks not yet loaded, expand and load them
+        if (subtracksContainer.dataset.loaded !== 'true') {
+          subtracksContainer.classList.remove('hidden');
+          this.expandedPlaylists.add(playlist.id);
+          if (chevron) chevron.classList.add('rotate-180');
+          toggleBtn.title = 'Collapse tracks';
+          await this.loadPlaylistTracksIntoContainer(playlist, subtracksContainer, playlistCb);
+        }
+
+        const childCbs = subtracksContainer.querySelectorAll('.playlist-track-checkbox');
+        const tracks = this.playlistTracksCache.get(playlist.id) || [];
+        childCbs.forEach((cb) => {
+          cb.checked = isChecked;
+        });
+
+        if (isChecked) {
+          tracks.forEach(t => this.selectedVideos.set(t.id, t));
+        } else {
+          tracks.forEach(t => this.selectedVideos.delete(t.id));
+        }
+        this.updateSelectionUI();
+      });
+
+      // Options menu in parent playlist
+      const btnMenu = wrapper.querySelector('.btn-item-menu');
+      const dropdown = wrapper.querySelector('.item-menu-dropdown');
+      btnMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isHidden = dropdown.classList.contains('hidden');
+        document.querySelectorAll('.item-menu-dropdown').forEach(d => d.classList.add('hidden'));
+        document.querySelectorAll('#related-list-container > div').forEach(c => c.classList.remove('z-30'));
+
+        if (isHidden) {
+          const btnRect = btnMenu.getBoundingClientRect();
+          const containerRect = this.elements.listContainer.getBoundingClientRect();
+          const spaceBelow = containerRect.bottom - btnRect.bottom;
+
+          dropdown.classList.remove('top-full', 'mt-1', 'bottom-full', 'mb-1');
+          if (spaceBelow < 160) {
+            dropdown.classList.add('bottom-full', 'mb-1');
+          } else {
+            dropdown.classList.add('top-full', 'mt-1');
+          }
+
+          wrapper.classList.add('z-30');
+          dropdown.classList.remove('hidden');
+        }
+      });
+
+      const btnDlAll = wrapper.querySelector('.btn-playlist-download-all');
+      btnDlAll.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        dropdown.classList.add('hidden');
+        wrapper.classList.remove('z-30');
+        let tracks = this.playlistTracksCache.get(playlist.id);
+        if (!tracks || tracks.length === 0) {
+          tracks = await this.fetchPlaylistTracks(playlist.id);
+        }
+        if (tracks && tracks.length > 0) {
+          this.downloadTracks(tracks, { triggerBtn: btnDlAll });
+        } else {
+          if (showToast) showToast('No tracks found to download');
+        }
+      });
+
+      const btnCopy = wrapper.querySelector('.btn-action-copy');
+      btnCopy.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown.classList.add('hidden');
+        wrapper.classList.remove('z-30');
+        navigator.clipboard?.writeText(playlist.url);
+        if (showToast) showToast('Copied playlist URL to clipboard');
+      });
+
+      // If already expanded in a previous session, restore its tracks
+      if (isExpanded) {
+        this.loadPlaylistTracksIntoContainer(playlist, subtracksContainer, playlistCb);
+      }
+
+      return wrapper;
+    },
+
+    async loadPlaylistTracksIntoContainer(playlist, container, playlistCb) {
+      if (container.dataset.loaded === 'true') {
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="py-2.5 px-3 flex items-center gap-2 text-xs font-mono text-stone-brown/70 dark:text-[#8b95a5]">
+          <i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin text-stone-brown dark:text-[#c6ac8f]"></i>
+          <span>Loading tracks...</span>
+        </div>
+      `;
+      if (window.lucide) window.lucide.createIcons();
+
+      const tracks = await this.fetchPlaylistTracks(playlist.id);
+      container.innerHTML = '';
+      container.dataset.loaded = 'true';
+
+      if (!tracks || tracks.length === 0) {
+        container.innerHTML = `
+          <div class="py-2 px-3 text-xs font-mono text-stone-brown/60 dark:text-[#758092]">
+            No playable tracks found in this playlist.
+          </div>
+        `;
+        return;
+      }
+
+      const shouldCheckAll = playlistCb && playlistCb.checked;
+
+      tracks.forEach((track, index) => {
+        const trackCard = this.createPlaylistTrackCard(track, playlist, index + 1);
+        container.appendChild(trackCard);
+
+        const cb = trackCard.querySelector('.playlist-track-checkbox');
+        if (shouldCheckAll && cb) {
+          cb.checked = true;
+          this.selectedVideos.set(track.id, track);
+        } else if (this.selectedVideos.has(track.id) && cb) {
+          cb.checked = true;
+        }
+      });
+
+      this.updatePlaylistCheckboxState(playlist.id, playlistCb, container);
+      this.updateSelectionUI();
+
+      if (window.lucide) window.lucide.createIcons();
+    },
+
+    createPlaylistTrackCard(track, playlist, trackNumber) {
+      const card = document.createElement('div');
+      card.className = 'p-1.5 sm:p-2 rounded-lg hover:bg-almond-cream/40 dark:hover:bg-[#1a1e27] transition flex items-center gap-2 sm:gap-2.5 group select-none relative';
+
+      const thumbUrl = track.thumbnail || (track.thumbnails && track.thumbnails[0]) || `https://i.ytimg.com/vi/${track.id}/hqdefault.jpg`;
+      const titleEscaped = (track.title || 'Untitled Track').replace(/"/g, '&quot;');
+      const channelEscaped = (track.channel || playlist.channel || 'YouTube').replace(/"/g, '&quot;');
+      const durationText = track.duration || '';
+
+      card.innerHTML = `
+        <!-- Sub-track Checkbox -->
+        <input type="checkbox" class="related-item-checkbox playlist-track-checkbox rounded border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#c6ac8f] shrink-0 cursor-pointer w-3.5 h-3.5" data-playlist-id="${playlist.id}" data-video-id="${track.id}">
+
+        <!-- Index Number -->
+        <span class="w-4 text-center font-mono text-[10px] text-stone-brown/50 dark:text-[#758092] shrink-0">${trackNumber}</span>
+
+        <!-- Compact Thumbnail with duration -->
+        <div class="relative w-12 h-9 sm:w-14 sm:h-10 rounded-md overflow-hidden bg-almond-cream/40 dark:bg-[#12151c] shrink-0 shadow-xs border border-almond-cream/60 dark:border-[#262c38]">
+          <img src="${thumbUrl}" alt="" class="w-full h-full object-cover" loading="lazy">
+          ${durationText ? `<span class="absolute bottom-0.5 right-0.5 px-0.5 py-0.2 rounded text-[8px] font-mono font-bold bg-black/85 text-white leading-none">${durationText}</span>` : ''}
+        </div>
+
+        <!-- Title & Channel -->
+        <div class="flex-1 min-w-0 pr-1">
+          <div class="text-xs font-medium text-black dark:text-[#f3f4f6] truncate group-hover:text-accent-brown dark:group-hover:text-[#c6ac8f] transition" title="${titleEscaped}">
+            ${track.title || 'Untitled'}
+          </div>
+          <div class="flex items-center gap-1 text-[10px] font-mono text-stone-brown/70 dark:text-[#9aa4b2]">
+            <span class="truncate max-w-[120px] sm:max-w-[180px]">${channelEscaped}</span>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex items-center gap-0.5 shrink-0">
+          <!-- Play Next -->
+          <button type="button" class="btn-play-related p-1.5 rounded-md hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] text-stone-brown dark:text-[#c6ac8f] hover:text-black dark:hover:text-white transition cursor-pointer" title="Download & Play Next" data-video-id="${track.id}">
+            <i data-lucide="play-circle" class="w-4 h-4"></i>
+          </button>
+
+          <!-- Item Menu Dropdown Wrapper -->
+          <div class="relative item-menu-wrapper">
+            <button type="button" class="btn-item-menu p-1.5 rounded-md hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] text-stone-brown/60 dark:text-[#8b95a5] hover:text-black dark:hover:text-white transition cursor-pointer" title="Options">
+              <i data-lucide="more-vertical" class="w-3.5 h-3.5"></i>
+            </button>
+            <div class="item-menu-dropdown absolute right-0 w-44 bg-white dark:bg-[#1a1e27] border border-almond-cream dark:border-[#2f3747] rounded-xl shadow-2xl py-1 z-40 hidden">
+              <button type="button" class="btn-action-download w-full px-3 py-1.5 text-left text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] flex items-center gap-2">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                <span>Download to Vault</span>
+              </button>
+              <button type="button" class="btn-action-copy w-full px-3 py-1.5 text-left text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] flex items-center gap-2">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                <span>Copy URL</span>
+              </button>
+              <a href="${track.url}" target="_blank" rel="noopener noreferrer" class="w-full px-3 py-1.5 text-left text-xs text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#282e3b] flex items-center gap-2">
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                <span>Open on YouTube</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const cb = card.querySelector('.playlist-track-checkbox');
+      cb.addEventListener('change', (e) => {
+        if (e.target.checked) {
+          this.selectedVideos.set(track.id, track);
+        } else {
+          this.selectedVideos.delete(track.id);
+        }
+        const wrapper = card.closest('.playlist-card-wrapper');
+        const playlistCb = wrapper ? wrapper.querySelector('.playlist-checkbox') : null;
+        const subtracksContainer = wrapper ? wrapper.querySelector('.playlist-subtracks-container') : null;
+        this.updatePlaylistCheckboxState(playlist.id, playlistCb, subtracksContainer);
+        this.updateSelectionUI();
+      });
+
+      const btnPlay = card.querySelector('.btn-play-related');
+      if (btnPlay) {
+        btnPlay.addEventListener('click', () => {
+          this.downloadAndPlay(track, btnPlay);
+        });
+      }
+
+      const btnMenu = card.querySelector('.btn-item-menu');
+      const dropdown = card.querySelector('.item-menu-dropdown');
+      btnMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isHidden = dropdown.classList.contains('hidden');
+        document.querySelectorAll('.item-menu-dropdown').forEach(d => d.classList.add('hidden'));
+        document.querySelectorAll('#related-list-container > div').forEach(c => c.classList.remove('z-30'));
+
+        if (isHidden) {
+          const btnRect = btnMenu.getBoundingClientRect();
+          const containerRect = this.elements.listContainer.getBoundingClientRect();
+          const spaceBelow = containerRect.bottom - btnRect.bottom;
+
+          dropdown.classList.remove('top-full', 'mt-1', 'bottom-full', 'mb-1');
+          if (spaceBelow < 150) {
+            dropdown.classList.add('bottom-full', 'mb-1');
+          } else {
+            dropdown.classList.add('top-full', 'mt-1');
+          }
+
+          card.classList.add('z-30');
+          dropdown.classList.remove('hidden');
+        }
+      });
+
+      const btnDl = card.querySelector('.btn-action-download');
+      btnDl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown.classList.add('hidden');
+        card.classList.remove('z-30');
+        this.downloadTracks([track], { triggerBtn: btnDl });
+      });
+
+      const btnCopy = card.querySelector('.btn-action-copy');
+      btnCopy.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown.classList.add('hidden');
+        card.classList.remove('z-30');
+        navigator.clipboard?.writeText(track.url);
+        if (showToast) showToast('Copied YouTube URL to clipboard');
+      });
+
+      return card;
+    },
+
+    updatePlaylistCheckboxState(playlistId, playlistCb, subtracksContainer) {
+      if (!playlistCb) return;
+      const childCbs = subtracksContainer ? Array.from(subtracksContainer.querySelectorAll('.playlist-track-checkbox')) : [];
+      if (childCbs.length === 0) return;
+
+      const checkedCount = childCbs.filter(cb => cb.checked).length;
+      if (checkedCount === childCbs.length) {
+        playlistCb.checked = true;
+        playlistCb.indeterminate = false;
+      } else if (checkedCount > 0) {
+        playlistCb.checked = false;
+        playlistCb.indeterminate = true;
+      } else {
+        playlistCb.checked = false;
+        playlistCb.indeterminate = false;
+      }
     },
 
     createVideoCard(video) {
@@ -457,7 +935,7 @@
       const btnPlay = card.querySelector('.btn-play-related');
       if (btnPlay) {
         btnPlay.addEventListener('click', () => {
-          this.downloadAndPlay(video);
+          this.downloadAndPlay(video, btnPlay);
         });
       }
 
@@ -492,7 +970,7 @@
           e.stopPropagation();
           dropdown.classList.add('hidden');
           card.classList.remove('z-30');
-          this.downloadAndPlay(video);
+          this.downloadAndPlay(video, btnPlayNext);
         });
       }
 
@@ -501,7 +979,7 @@
         e.stopPropagation();
         dropdown.classList.add('hidden');
         card.classList.remove('z-30');
-        this.downloadTracks([video]);
+        this.downloadTracks([video], { triggerBtn: btnDl });
       });
 
       const btnCopy = card.querySelector('.btn-action-copy');
@@ -626,16 +1104,36 @@
 
     handleSelectAll(checked) {
       const currentList = this.allVideos.length > 0 ? this.allVideos : (this.cache.get(this.currentTrackPath)?.videos || []);
-      const checkboxes = this.elements.listContainer?.querySelectorAll('.related-item-checkbox') || [];
-      checkboxes.forEach((cb) => {
-        cb.checked = checked;
-      });
-
       if (checked) {
         currentList.forEach(v => this.selectedVideos.set(v.id, v));
       } else {
         this.selectedVideos.clear();
       }
+
+      // Also select / unselect all loaded playlist tracks
+      this.playlistTracksCache.forEach((tracks) => {
+        if (Array.isArray(tracks)) {
+          tracks.forEach(t => {
+            if (checked) {
+              this.selectedVideos.set(t.id, t);
+            } else {
+              this.selectedVideos.delete(t.id);
+            }
+          });
+        }
+      });
+
+      const checkboxes = this.elements.listContainer?.querySelectorAll('.related-item-checkbox') || [];
+      checkboxes.forEach((cb) => {
+        cb.checked = checked;
+      });
+
+      const playlistCbs = this.elements.listContainer?.querySelectorAll('.playlist-checkbox') || [];
+      playlistCbs.forEach((pcb) => {
+        pcb.checked = checked;
+        pcb.indeterminate = false;
+      });
+
       this.updateSelectionUI();
     },
 
@@ -656,8 +1154,11 @@
         this.elements.btnDownloadSelectedLabel.innerText = count > 0 ? `Download Selected (${count})` : 'Download Selected';
       }
       if (this.elements.selectAll) {
-        const total = this.cache.get(this.currentTrackPath)?.videos?.length || 0;
-        this.elements.selectAll.checked = total > 0 && count === total;
+        let totalCount = this.allVideos.length;
+        this.playlistTracksCache.forEach((tracks) => {
+          if (Array.isArray(tracks)) totalCount += tracks.length;
+        });
+        this.elements.selectAll.checked = totalCount > 0 && count === totalCount;
       }
     },
 
@@ -667,7 +1168,7 @@
       this.downloadTracks(videos);
     },
 
-    async downloadTracks(videos, { playWhenReadyVideoId = null, playWhenReadyTitle = '' } = {}) {
+    async downloadTracks(videos, { playWhenReadyVideoId = null, playWhenReadyTitle = '', triggerBtn = null } = {}) {
       if (!videos || videos.length === 0) return;
 
       const ghToken = localStorage.getItem(storage.ghTokenKey) || '';
@@ -689,11 +1190,49 @@
       const [owner, repoName] = repoParts;
       const workflowFile = CONFIG.github?.workflowFile || 'ingest.yml';
 
-      const targets = videos.map(v => v.url).join('\n');
+      const targets = videos.map(v => v.url || (v.id ? `https://www.youtube.com/watch?v=${v.id}` : '')).filter(Boolean).join('\n');
 
       if (this.elements.footerStatus) {
         this.elements.footerStatus.innerText = `Dispatching ${videos.length} track(s)...`;
       }
+
+      // Visual loading state on button(s)
+      let origTriggerHtml = null;
+      if (triggerBtn) {
+        origTriggerHtml = triggerBtn.innerHTML;
+        triggerBtn.disabled = true;
+        triggerBtn.classList.add('pointer-events-none', 'opacity-75');
+        triggerBtn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin text-current"></i>';
+        if (window.lucide) window.lucide.createIcons();
+      }
+
+      const btnDlSelected = this.elements.btnDownloadSelected;
+      const btnDlLabel = this.elements.btnDownloadSelectedLabel;
+      let origDlLabelText = btnDlLabel ? btnDlLabel.innerText : '';
+      if (btnDlSelected) {
+        btnDlSelected.disabled = true;
+        btnDlSelected.classList.add('opacity-75', 'pointer-events-none');
+        if (btnDlLabel) {
+          btnDlLabel.innerHTML = '<span class="inline-flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Dispatching...</span>';
+        }
+        if (window.lucide) window.lucide.createIcons();
+      }
+
+      const resetBtns = () => {
+        if (triggerBtn && origTriggerHtml !== null) {
+          triggerBtn.disabled = false;
+          triggerBtn.classList.remove('pointer-events-none', 'opacity-75');
+          triggerBtn.innerHTML = origTriggerHtml;
+          if (window.lucide) window.lucide.createIcons();
+        }
+        if (btnDlSelected) {
+          btnDlSelected.disabled = false;
+          btnDlSelected.classList.remove('opacity-75', 'pointer-events-none');
+          if (btnDlLabel && origDlLabelText) {
+            btnDlLabel.innerText = origDlLabelText;
+          }
+        }
+      };
 
       const state = window.Trove.state || {};
       const bucketId = CONFIG.repo?.id || 'mnswa/trove_dataset';
@@ -791,14 +1330,17 @@
         if (this.elements.footerStatus) {
           this.elements.footerStatus.innerText = 'Download failed';
         }
+      } finally {
+        resetBtns();
       }
     },
 
-    downloadAndPlay(video) {
+    downloadAndPlay(video, triggerBtn = null) {
       if (!video) return;
       this.downloadTracks([video], {
         playWhenReadyVideoId: video.id,
-        playWhenReadyTitle: video.title
+        playWhenReadyTitle: video.title,
+        triggerBtn
       });
     }
   };

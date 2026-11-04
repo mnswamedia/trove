@@ -847,6 +847,16 @@
         return;
       }
 
+      const btn = this.elements.btnBackupHf;
+      let origHtml = null;
+      if (btn) {
+        origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.classList.add('opacity-75', 'pointer-events-none');
+        btn.innerHTML = '<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Backing up...</span>';
+        if (window.lucide) window.lucide.createIcons();
+      }
+
       if (showToast) showToast('Backing up playlists to Hugging Face...');
 
       try {
@@ -890,6 +900,13 @@
       } catch (err) {
         console.error('Backup error:', err);
         if (showToast) showToast(`Backup failed: ${err.message}`);
+      } finally {
+        if (btn && origHtml !== null) {
+          btn.disabled = false;
+          btn.classList.remove('opacity-75', 'pointer-events-none');
+          btn.innerHTML = origHtml;
+          if (window.lucide) window.lucide.createIcons();
+        }
       }
     }
   };

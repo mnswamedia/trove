@@ -6,6 +6,7 @@
 import { jsonResponse } from "../common.js";
 
 const API_URL = "https://www.youtube.com/youtubei/v1/next?prettyPrint=false";
+const BROWSE_API_URL = "https://www.youtube.com/youtubei/v1/browse?prettyPrint=false";
 const CLIENT_VERSION = "2.20261001.00.00";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -25,6 +26,7 @@ const VIDEO_RENDERERS = new Set([
   "compactVideoRenderer",
   "gridVideoRenderer",
   "playlistVideoRenderer",
+  "playlistPanelVideoRenderer",
   "reelItemRenderer",
   "tileRenderer",
 ]);
@@ -350,6 +352,72 @@ function normalizePlaylist(node, rendererName) {
   };
 }
 
+function extractLockupPlaylist(lockup) {
+  if (!lockup || typeof lockup !== "object") return null;
+
+  let playlistId = lockup.contentId;
+  if (!playlistId || typeof playlistId !== "string" || VIDEO_ID_RE.test(playlistId)) {
+    playlistId =
+      getPath(lockup, "rendererContext", "commandContext", "onTap", "innertubeCommand", "watchEndpoint", "playlistId") ||
+      getPath(lockup, "rendererContext", "commandContext", "onTap", "innertubeCommand", "browseEndpoint", "browseId");
+  }
+
+  if (typeof playlistId === "string" && playlistId.startsWith("VL")) {
+    playlistId = playlistId.slice(2);
+  }
+
+  const isPlaylistType =
+    lockup.contentType === "LOCKUP_CONTENT_TYPE_PLAYLIST" ||
+    (playlistId && (playlistId.startsWith("PL") || playlistId.startsWith("RD") || playlistId.startsWith("OLAK")));
+
+  if (!isPlaylistType || !playlistId || typeof playlistId !== "string") {
+    return null;
+  }
+
+  const title =
+    getPath(lockup, "metadata", "lockupMetadataViewModel", "title", "content") ||
+    firstText(lockup.metadata?.lockupMetadataViewModel?.title) ||
+    "Untitled Playlist";
+
+  const metaRows = getPath(lockup, "metadata", "lockupMetadataViewModel", "metadata", "contentMetadataViewModel", "metadataRows") || [];
+  let channel = null;
+  let videoCount = null;
+
+  for (const row of metaRows) {
+    const parts = row.metadataParts || [];
+    for (const p of parts) {
+      const txt = p?.text?.content || "";
+      if (!txt) continue;
+      if (!channel) {
+        channel = txt;
+      } else if (txt.toLowerCase().includes("video") || txt.toLowerCase().includes("track") || /^\d+/.test(txt)) {
+        videoCount = txt;
+      }
+    }
+  }
+
+  const tvm =
+    getPath(lockup, "contentImage", "thumbnailViewModel") ||
+    getPath(lockup, "contentImage", "collectionThumbnailViewModel", "primaryThumbnail", "thumbnailViewModel") ||
+    {};
+  const sources = tvm.image?.sources || [];
+  const thumbs = sources.map((s) => s.url).filter(Boolean);
+  const bestThumbnail = thumbs[thumbs.length - 1] || null;
+
+  return {
+    type: "playlist",
+    id: playlistId,
+    title,
+    channel: channel || "YouTube",
+    video_count: videoCount || null,
+    url: `https://www.youtube.com/playlist?list=${playlistId}`,
+    thumbnails: thumbs,
+    thumbnail: bestThumbnail,
+    best_thumbnail: bestThumbnail,
+    renderer: "lockupViewModel",
+  };
+}
+
 /* --------------------------------------------------------------------------
  * Main Recommendations Parser
  * -------------------------------------------------------------------------- */
@@ -382,6 +450,12 @@ function parseRecommendations(data, seedVideoId) {
 
     // 1. Modern lockupViewModel
     if (item.lockupViewModel) {
+      const p = extractLockupPlaylist(item.lockupViewModel);
+      if (p && !seenIds.has(p.id)) {
+        seenIds.add(p.id);
+        playlists.push(p);
+        continue;
+      }
       const v = extractLockupVideo(item.lockupViewModel, seedVideoId);
       if (v && !seenIds.has(v.id)) {
         seenIds.add(v.id);
@@ -417,6 +491,12 @@ function parseRecommendations(data, seedVideoId) {
     for (const [node] of walk(data)) {
       if (!node || typeof node !== "object") continue;
       if (node.lockupViewModel) {
+        const p = extractLockupPlaylist(node.lockupViewModel);
+        if (p && !seenIds.has(p.id)) {
+          seenIds.add(p.id);
+          playlists.push(p);
+          continue;
+        }
         const v = extractLockupVideo(node.lockupViewModel, seedVideoId);
         if (v && !seenIds.has(v.id)) {
           seenIds.add(v.id);
@@ -511,6 +591,143 @@ async function fetchNext(payload, retries = 2) {
   }
 }
 
+async function fetchBrowse(payload, retries = 2) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+
+  try {
+    const res = await fetch(BROWSE_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://www.youtube.com",
+        Referer: "https://www.youtube.com/",
+        "User-Agent": USER_AGENT,
+        "X-Goog-Visitor-Id": VISITOR_ID,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) {
+      throw new Error(`YouTube browse returned status ${res.status}`);
+    }
+    return await res.json();
+  } catch (err) {
+    clearTimeout(timer);
+    if (retries > 0) {
+      await new Promise((r) => setTimeout(r, 800));
+      return fetchBrowse(payload, retries - 1);
+    }
+    throw err;
+  }
+}
+
+function extractPlaylistId(raw) {
+  if (!raw) return null;
+  const trimmed = String(raw).trim();
+  const m = trimmed.match(/[?&]list=([A-Za-z0-9_-]+)/);
+  if (m && m[1]) return m[1];
+  if (/^[A-Za-z0-9_-]{10,}$/.test(trimmed)) return trimmed;
+  return null;
+}
+
+async function fetchPlaylistTracks(playlistId) {
+  const cleanId = String(playlistId || "").trim();
+  const browseId = cleanId.startsWith("VL") ? cleanId : `VL${cleanId}`;
+
+  const basePayload = {
+    context: {
+      client: {
+        clientName: "WEB",
+        clientVersion: CLIENT_VERSION,
+        hl: "en",
+        gl: "US",
+        visitorData: VISITOR_ID,
+      },
+    },
+  };
+
+  let data = null;
+  try {
+    data = await fetchBrowse({ ...basePayload, browseId });
+  } catch (browseErr) {
+    console.warn("Browse failed, will try next endpoint:", browseErr);
+  }
+
+  const seenIds = new Set();
+  const tracks = [];
+  let playlistTitle = null;
+  let channel = null;
+  let videoCount = null;
+
+  if (data) {
+    const header = data?.header?.playlistHeaderRenderer || data?.header || {};
+    playlistTitle = firstText(header, "title") || null;
+    channel = firstText(header, "ownerText") || null;
+    videoCount = firstText(header, "numVideosText") || null;
+
+    for (const [node] of walk(data)) {
+      if (!node || typeof node !== "object") continue;
+
+      if (node.playlistVideoRenderer) {
+        const v = extractLegacyVideo(node.playlistVideoRenderer, "playlistVideoRenderer");
+        if (v && !seenIds.has(v.id)) {
+          seenIds.add(v.id);
+          tracks.push(v);
+        }
+      } else if (node.playlistPanelVideoRenderer) {
+        const v = extractLegacyVideo(node.playlistPanelVideoRenderer, "playlistPanelVideoRenderer");
+        if (v && !seenIds.has(v.id)) {
+          seenIds.add(v.id);
+          tracks.push(v);
+        }
+      } else if (node.lockupViewModel) {
+        const v = extractLockupVideo(node.lockupViewModel);
+        if (v && !seenIds.has(v.id)) {
+          seenIds.add(v.id);
+          tracks.push(v);
+        }
+      }
+    }
+  }
+
+  // Fallback: If browse returned 0 tracks, try /next with playlistId (works for radio mixes & watch mixes)
+  if (tracks.length === 0) {
+    try {
+      const nextData = await fetchNext({ ...basePayload, playlistId: cleanId });
+      if (nextData) {
+        for (const [node] of walk(nextData)) {
+          if (!node || typeof node !== "object") continue;
+          if (node.playlistPanelVideoRenderer) {
+            const v = extractLegacyVideo(node.playlistPanelVideoRenderer, "playlistPanelVideoRenderer");
+            if (v && !seenIds.has(v.id)) {
+              seenIds.add(v.id);
+              tracks.push(v);
+            }
+          }
+        }
+        const panel = getPath(nextData, "contents", "twoColumnWatchNextResults", "playlist", "playlist");
+        if (panel) {
+          if (!playlistTitle) playlistTitle = panel.title || null;
+          if (!channel) channel = panel.ownerName?.simpleText || firstText(panel, "ownerName") || null;
+        }
+      }
+    } catch (_) {}
+  }
+
+  return {
+    success: true,
+    playlist_id: cleanId,
+    title: playlistTitle || "Playlist",
+    channel: channel || "YouTube",
+    video_count: videoCount || `${tracks.length} tracks`,
+    track_count: tracks.length,
+    tracks,
+  };
+}
+
 async function runExtractor(videoId, pages = 0, includeRaw = false, options = {}) {
   const basePayload = {
     context: {
@@ -594,19 +811,25 @@ function extractVideoId(raw) {
 
 export async function handleRecommendations(request, env, url) {
   let rawInput = null;
+  let playlistInput = null;
   let pages = 0;
   let includeRaw = false;
   let excludeShorts = false;
   let continuation = null;
 
   if (request.method === "GET") {
+    playlistInput =
+      url.searchParams.get("playlistId") ||
+      url.searchParams.get("playlist_id") ||
+      url.searchParams.get("list");
+
     rawInput =
       url.searchParams.get("videoId") ||
       url.searchParams.get("video_id") ||
       url.searchParams.get("v") ||
       url.searchParams.get("url");
 
-    if (!rawInput && url.pathname.includes("/recommendations/")) {
+    if (!rawInput && !playlistInput && url.pathname.includes("/recommendations/")) {
       rawInput = url.pathname.split("/recommendations/")[1];
     }
 
@@ -622,6 +845,7 @@ export async function handleRecommendations(request, env, url) {
       return jsonResponse({ success: false, error: "Request body must be valid JSON" }, 400);
     }
 
+    playlistInput = body?.playlistId ?? body?.playlist_id ?? body?.list;
     rawInput = body?.videoId ?? body?.video_id ?? body?.v ?? body?.url;
     continuation = body?.continuation ?? body?.continuation_token;
     pages = body?.pages ?? 0;
@@ -629,6 +853,28 @@ export async function handleRecommendations(request, env, url) {
     excludeShorts = body?.excludeShorts === true;
   } else {
     return jsonResponse({ success: false, error: "Method not allowed. Use GET or POST." }, 405);
+  }
+
+  // Handle on-demand playlist tracks fetch
+  if (playlistInput) {
+    const playlistId = extractPlaylistId(playlistInput);
+    if (!playlistId) {
+      return jsonResponse(
+        { success: false, error: "Valid playlistId is required (e.g. ?playlistId=PL12345)" },
+        400
+      );
+    }
+    try {
+      const result = await fetchPlaylistTracks(playlistId);
+      const isFresh = url.searchParams.get("nocache") === "1" || url.searchParams.get("fresh") === "1";
+      const cacheControl = (request.method === "GET" && !isFresh)
+        ? "public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400"
+        : "no-store";
+      return jsonResponse(result, 200, cacheControl);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return jsonResponse({ success: false, error: message }, 502);
+    }
   }
 
   // If a continuation cursor is provided, load the next page directly

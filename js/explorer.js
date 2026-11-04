@@ -137,7 +137,7 @@
       state.isLoading = loading;
       if (this.elements.refreshBtn) {
         this.elements.refreshBtn.disabled = loading;
-        const icon = this.elements.refreshBtn.querySelector('i');
+        const icon = this.elements.refreshBtn.querySelector('i, svg');
         if (icon) {
           if (loading) icon.classList.add('animate-spin');
           else icon.classList.remove('animate-spin');
@@ -145,7 +145,7 @@
       }
       if (this.elements.mobileRefreshBtn) {
         this.elements.mobileRefreshBtn.disabled = loading;
-        const mIcon = this.elements.mobileRefreshBtn.querySelector('i');
+        const mIcon = this.elements.mobileRefreshBtn.querySelector('i, svg');
         if (mIcon) {
           if (loading) mIcon.classList.add('animate-spin');
           else mIcon.classList.remove('animate-spin');

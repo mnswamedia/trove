@@ -225,9 +225,13 @@
 
       const btn = document.getElementById('btn-purge-cache');
       const statusLabel = document.getElementById('purge-status-label');
+      let origBtnHtml = null;
       if (btn) {
+        origBtnHtml = btn.innerHTML;
         btn.disabled = true;
-        btn.style.opacity = '0.6';
+        btn.classList.add('opacity-75', 'pointer-events-none');
+        btn.innerHTML = '<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Purging...</span>';
+        if (window.lucide) window.lucide.createIcons();
       }
       if (statusLabel) statusLabel.innerText = 'Purging selected cache...';
 
@@ -350,9 +354,11 @@
         if (statusLabel) statusLabel.innerText = 'Purge failed: ' + (err.message || err);
         if (showToast) showToast('Error purging cache');
       } finally {
-        if (btn) {
+        if (btn && origBtnHtml !== null) {
           btn.disabled = false;
-          btn.style.opacity = '1';
+          btn.classList.remove('opacity-75', 'pointer-events-none');
+          btn.innerHTML = origBtnHtml;
+          if (window.lucide) window.lucide.createIcons();
         }
       }
     },

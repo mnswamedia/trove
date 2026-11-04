@@ -287,6 +287,24 @@
           this.elements.lyricsLoading.classList.add('hidden');
         }
       }
+
+      if (this.elements.btnRefreshLyrics) {
+        this.elements.btnRefreshLyrics.disabled = loading;
+        const icon = this.elements.btnRefreshLyrics.querySelector('i, svg');
+        if (icon) {
+          icon.classList.toggle('animate-spin', loading);
+        }
+      }
+
+      if (this.elements.btnRetryLyrics) {
+        this.elements.btnRetryLyrics.disabled = loading;
+        if (loading) {
+          this.elements.btnRetryLyrics.innerHTML = '<span class="inline-flex items-center gap-1.5"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i><span>Retrying...</span></span>';
+          if (window.lucide) window.lucide.createIcons();
+        } else {
+          this.elements.btnRetryLyrics.innerText = 'Retry';
+        }
+      }
     },
 
     renderLyrics(data) {
