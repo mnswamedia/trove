@@ -448,11 +448,10 @@
 
           <!-- Download Progress Bar in Bottom Bar (Active during downloading/loading) -->
           <div id="bar-download-group" class="hidden items-center gap-2 mt-0.5 w-full">
-            <div class="relative flex-1 h-4 rounded-md overflow-hidden bg-almond-cream/60 dark:bg-[#1a1e27] border border-almond-cream/80 dark:border-[#2b3240] flex items-center">
+            <div class="relative flex-1 h-4 rounded-md overflow-hidden bg-almond-cream/60 dark:bg-[#1a1e27] border border-almond-cream/80 dark:border-[#2b3240] flex items-center justify-center">
               <div id="bar-download-fill" class="absolute left-0 top-0 bottom-0 bg-jet-black/25 dark:bg-[#c6ac8f]/30 border-r border-jet-black dark:border-[#c6ac8f] transition-all duration-150 ease-out" style="width: 0%;"></div>
-              <span id="bar-download-done" class="relative z-10 px-2 text-[10px] font-mono text-jet-black dark:text-[#f3f4f6] font-medium truncate">0 B / 0 B</span>
+              <span id="bar-download-done" class="relative z-10 px-2 text-[10px] font-mono text-jet-black dark:text-[#f3f4f6] font-medium truncate">0 B / 0 B (0%)</span>
             </div>
-            <span id="bar-download-remains" class="text-[10px] font-mono text-stone-brown dark:text-[#c6ac8f] shrink-0 font-medium">-- remains</span>
           </div>
         </div>
       </div>
@@ -545,40 +544,36 @@
           </div>
         </div>
 
-        <!-- Lyrics View (Hidden by default; takes more vertical space than thumbnail and is scrollable) -->
-        <div id="expanded-lyrics-container" class="w-full max-w-xl h-[48vh] sm:h-[54vh] max-h-[58vh] rounded-2xl bg-white/70 dark:bg-[#15181f]/85 backdrop-blur-md border border-almond-cream dark:border-[#2b3240] p-3.5 sm:p-5 overflow-hidden flex flex-col shadow-2xl transition-all duration-300 select-text hidden">
-          <!-- Lyrics Header / Meta Bar -->
-          <div class="flex items-center justify-between pb-2.5 mb-2 border-b border-almond-cream/60 dark:border-[#252a36] shrink-0 text-xs">
-            <div class="flex items-center gap-2 min-w-0">
-              <span id="lyrics-source-badge" class="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f] truncate">Lyrics</span>
-            </div>
-            <div class="flex items-center gap-1.5 shrink-0">
-              <button id="btn-copy-lyrics" type="button" class="p-1.5 rounded-lg text-stone-brown/70 dark:text-[#8b95a5] hover:text-black dark:hover:text-white hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition" title="Copy Lyrics to Clipboard">
-                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
-              </button>
-              <button id="btn-refresh-lyrics" type="button" class="p-1.5 rounded-lg text-stone-brown/70 dark:text-[#8b95a5] hover:text-black dark:hover:text-white hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition" title="Refresh Lyrics">
-                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-              </button>
-            </div>
+        <!-- Lyrics View (Direct on background - no bordered box, matching cover art dimensions to prevent layout shift) -->
+        <div id="expanded-lyrics-container" class="relative w-full max-w-full h-64 sm:h-80 max-h-[38vh] sm:max-h-[42vh] flex flex-col items-center justify-center select-text overflow-hidden hidden">
+          <!-- Subtle Floating Lyrics Actions (Top Right) -->
+          <div class="absolute top-0 right-1 flex items-center gap-1 z-20 text-stone-brown/60 dark:text-[#8b95a5]">
+            <span id="lyrics-source-badge" class="hidden">Lyrics</span>
+            <button id="btn-copy-lyrics" type="button" class="p-1.5 rounded-lg hover:text-black dark:hover:text-white hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition cursor-pointer" title="Copy Lyrics to Clipboard">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+            </button>
+            <button id="btn-refresh-lyrics" type="button" class="p-1.5 rounded-lg hover:text-black dark:hover:text-white hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition cursor-pointer" title="Refresh Lyrics">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            </button>
           </div>
 
-          <!-- Scrollable Lyrics Body -->
-          <div id="lyrics-scroll-body" class="flex-1 overflow-y-auto pr-1 text-center font-sans focus:outline-none">
+          <!-- Scrollable Lyrics Body (Directly on background with smooth edge fade) -->
+          <div id="lyrics-scroll-body" class="w-full h-full overflow-y-auto px-4 py-2 text-center font-sans focus:outline-none no-scrollbar lyrics-fade-mask">
             <!-- Loading State -->
-            <div id="lyrics-loading" class="h-full flex flex-col items-center justify-center gap-2.5 text-stone-brown/60 dark:text-[#8b95a5] py-12">
+            <div id="lyrics-loading" class="h-full flex flex-col items-center justify-center gap-2.5 text-stone-brown/60 dark:text-[#8b95a5] py-8">
               <i data-lucide="loader-2" class="w-6 h-6 animate-spin text-stone-brown dark:text-[#c6ac8f]"></i>
               <span class="text-xs font-mono">Fetching lyrics...</span>
             </div>
 
             <!-- Empty / Error State -->
-            <div id="lyrics-empty" class="h-full flex flex-col items-center justify-center gap-2 text-stone-brown/60 dark:text-[#8b95a5] py-12 hidden">
-              <i data-lucide="file-question" class="w-8 h-8 text-stone-brown/40 dark:text-[#525d70]"></i>
+            <div id="lyrics-empty" class="h-full flex flex-col items-center justify-center gap-2 text-stone-brown/60 dark:text-[#8b95a5] py-8 hidden">
+              <i data-lucide="file-question" class="w-7 h-7 text-stone-brown/40 dark:text-[#525d70]"></i>
               <p id="lyrics-empty-message" class="text-xs font-medium">Lyrics not available for this track.</p>
-              <button id="btn-retry-lyrics" type="button" class="mt-2 px-3 py-1 rounded-lg text-xs font-semibold bg-jet-black text-white dark:bg-[#f3f4f6] dark:text-[#0e1116] transition shadow-xs">Retry</button>
+              <button id="btn-retry-lyrics" type="button" class="mt-1 px-3 py-1 rounded-lg text-xs font-semibold bg-jet-black text-white dark:bg-[#f3f4f6] dark:text-[#0e1116] transition shadow-xs cursor-pointer">Retry</button>
             </div>
 
-            <!-- Lyrics Content -->
-            <div id="lyrics-content" class="py-2 px-3 text-sm sm:text-base leading-relaxed sm:leading-loose whitespace-pre-line text-black dark:text-[#e4e7ec] font-normal hidden select-text">
+            <!-- Lyrics Content (Directly rendered on background) -->
+            <div id="lyrics-content" class="py-4 px-2 text-sm sm:text-base md:text-lg leading-relaxed sm:leading-loose whitespace-pre-line text-black/90 dark:text-[#f3f4f6] font-medium hidden select-text">
             </div>
           </div>
         </div>
@@ -604,12 +599,37 @@
       <!-- Scrubber & Download Progress Container -->
       <div class="relative flex flex-col gap-1.5" id="expanded-progress-container">
         <!-- Normal Scrubber Group -->
-        <div id="expanded-scrubber-group" class="relative flex flex-col gap-1.5">
-          <div id="expanded-time-bubble" class="absolute -top-7 left-0 -translate-x-1/2 pointer-events-none opacity-0 scale-75 transition-all duration-150 z-20 px-2 py-0.5 rounded-full bg-jet-black dark:bg-[#282f3e] text-white dark:text-[#f3f4f6] font-mono text-[11px] font-bold shadow-md flex items-center justify-center">
-            0:00
+        <div id="expanded-scrubber-group" class="relative flex flex-col">
+          <!-- Repeat A-B Flow Pill Button (Above progress bar with safe vertical clearance) -->
+          <div class="flex items-center justify-center mb-3 sm:mb-4">
+            <div id="repeat-ab-container" class="flex items-center gap-1.5 select-none">
+              <button 
+                id="btn-repeat-ab" 
+                type="button" 
+                class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-semibold transition-all border border-almond-cream/80 dark:border-[#2b3240] bg-white/70 dark:bg-[#1a1e27] text-stone-brown/80 dark:text-[#9aa4b2] hover:text-black dark:hover:text-white hover:border-jet-black/30 dark:hover:border-[#c6ac8f]/40 shadow-sm cursor-pointer"
+                title="Repeat A-B: Click to loop a section (Hotkeys: [ to set A, ] to set B, \ to clear)"
+              >
+                <i data-lucide="repeat" class="w-3.5 h-3.5"></i>
+                <span id="repeat-ab-label">A-B</span>
+              </button>
+              <button 
+                id="btn-repeat-ab-clear" 
+                type="button" 
+                class="hidden p-1 rounded-full hover:bg-almond-cream dark:hover:bg-[#252a36] text-stone-brown/60 dark:text-[#8b95a5] hover:text-red-500 transition cursor-pointer"
+                title="Clear Repeat A-B"
+              >
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
           </div>
 
+          <!-- Slider Track Wrapper -->
           <div class="relative w-full flex items-center">
+            <!-- Time Bubble tooltip directly above the slider -->
+            <div id="expanded-time-bubble" class="absolute -top-7 left-0 -translate-x-1/2 pointer-events-none opacity-0 scale-75 transition-all duration-150 z-20 px-2 py-0.5 rounded-full bg-jet-black dark:bg-[#282f3e] text-white dark:text-[#f3f4f6] font-mono text-[11px] font-bold shadow-md flex items-center justify-center">
+              0:00
+            </div>
+
             <!-- Repeat A-B Highlight Band -->
             <div id="expanded-ab-highlight" class="absolute h-2 rounded-lg bg-emerald-500/40 dark:bg-[#c6ac8f]/50 border-x border-emerald-600 dark:border-[#c6ac8f] pointer-events-none z-10 hidden transition-all duration-75"></div>
             <!-- Repeat Point A Marker -->
@@ -627,30 +647,8 @@
             >
           </div>
 
-          <div class="flex items-center justify-between text-xs font-mono text-stone-brown/70 dark:text-[#8b95a5]">
+          <div class="flex items-center justify-between text-xs font-mono text-stone-brown/70 dark:text-[#8b95a5] mt-1.5">
             <span id="expanded-time-current">0:00</span>
-
-            <!-- Repeat A-B Flow Pill Button -->
-            <div id="repeat-ab-container" class="flex items-center gap-1 select-none">
-              <button 
-                id="btn-repeat-ab" 
-                type="button" 
-                class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold transition-all border border-almond-cream/80 dark:border-[#2b3240] bg-white/70 dark:bg-[#1a1e27] text-stone-brown/80 dark:text-[#9aa4b2] hover:text-black dark:hover:text-white hover:border-jet-black/30 dark:hover:border-[#c6ac8f]/40 shadow-sm cursor-pointer"
-                title="Repeat A-B: Click to loop a section (Hotkeys: [ to set A, ] to set B, \ to clear)"
-              >
-                <i data-lucide="repeat" class="w-3 h-3"></i>
-                <span id="repeat-ab-label">A-B</span>
-              </button>
-              <button 
-                id="btn-repeat-ab-clear" 
-                type="button" 
-                class="hidden p-0.5 rounded-full hover:bg-almond-cream dark:hover:bg-[#252a36] text-stone-brown/60 dark:text-[#8b95a5] hover:text-red-500 transition cursor-pointer"
-                title="Clear Repeat A-B"
-              >
-                <i data-lucide="x" class="w-3 h-3"></i>
-              </button>
-            </div>
-
             <span id="expanded-time-duration">0:00</span>
           </div>
         </div>
@@ -660,14 +658,11 @@
           <div class="relative w-full h-8 sm:h-9 rounded-lg overflow-hidden bg-almond-cream/60 dark:bg-[#1a1e27] border border-almond-cream/90 dark:border-[#2b3240] flex items-center shadow-inner">
             <!-- Rectangular Animated Fill -->
             <div id="expanded-download-fill" class="absolute left-0 top-0 bottom-0 bg-jet-black/25 dark:bg-[#c6ac8f]/30 border-r-2 border-jet-black dark:border-[#c6ac8f] transition-all duration-150 ease-out rounded-l-md" style="width: 0%;"></div>
-            <!-- Labels (How much done / How much remains) -->
-            <div class="relative z-10 w-full px-3 flex items-center justify-between text-xs font-mono font-semibold select-none pointer-events-none">
-              <div class="flex items-center gap-1.5 text-jet-black dark:text-[#f3f4f6] truncate">
+            <!-- Labels (How much done) -->
+            <div class="relative z-10 w-full px-3 flex items-center justify-center text-xs font-mono font-semibold select-none pointer-events-none text-jet-black dark:text-[#f3f4f6]">
+              <div class="flex items-center gap-2 truncate">
                 <i data-lucide="download" class="w-3.5 h-3.5 shrink-0 text-stone-brown dark:text-[#c6ac8f] animate-pulse"></i>
                 <span id="expanded-download-done">0 B / 0 B (0%)</span>
-              </div>
-              <div class="text-stone-brown dark:text-[#c6ac8f] shrink-0 font-medium ml-2">
-                <span id="expanded-download-remains">-- remains</span>
               </div>
             </div>
           </div>

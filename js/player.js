@@ -721,20 +721,14 @@
         if (this.elements.barDownloadGroup) this.elements.barDownloadGroup.classList.remove('hidden');
 
         const pct = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : (loaded > 0 ? 50 : 0);
-        const remaining = total > loaded ? total - loaded : 0;
 
         let doneText = '';
-        let remainsText = '';
-
         if (total > 0) {
           doneText = `${formatBytes(loaded)} / ${formatBytes(total)} (${pct}%)`;
-          remainsText = `${formatBytes(remaining)} remains`;
         } else if (loaded > 0) {
-          doneText = `${formatBytes(loaded)} downloaded`;
-          remainsText = 'Downloading...';
+          doneText = `${formatBytes(loaded)} loaded`;
         } else {
-          doneText = 'Connecting...';
-          remainsText = 'Starting download...';
+          doneText = 'Loading media...';
         }
 
         if (this.elements.expandedDownloadFill) {
@@ -743,18 +737,12 @@
         if (this.elements.expandedDownloadDone) {
           this.elements.expandedDownloadDone.innerText = doneText;
         }
-        if (this.elements.expandedDownloadRemains) {
-          this.elements.expandedDownloadRemains.innerText = remainsText;
-        }
 
         if (this.elements.barDownloadFill) {
           this.elements.barDownloadFill.style.width = `${pct}%`;
         }
         if (this.elements.barDownloadDone) {
           this.elements.barDownloadDone.innerText = doneText;
-        }
-        if (this.elements.barDownloadRemains) {
-          this.elements.barDownloadRemains.innerText = remainsText;
         }
       } else {
         if (this.elements.expandedScrubberGroup) this.elements.expandedScrubberGroup.classList.remove('hidden');
@@ -856,13 +844,13 @@
 
       if (this.elements.btnRepeatAb) {
         if (pointA === null) {
-          this.elements.btnRepeatAb.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold transition-all border border-almond-cream/80 dark:border-[#2b3240] bg-white/70 dark:bg-[#1a1e27] text-stone-brown/80 dark:text-[#9aa4b2] hover:text-black dark:hover:text-white hover:border-jet-black/30 dark:hover:border-[#c6ac8f]/40 shadow-sm cursor-pointer';
+          this.elements.btnRepeatAb.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-semibold transition-all border border-almond-cream/80 dark:border-[#2b3240] bg-white/70 dark:bg-[#1a1e27] text-stone-brown/80 dark:text-[#9aa4b2] hover:text-black dark:hover:text-white hover:border-jet-black/30 dark:hover:border-[#c6ac8f]/40 shadow-sm cursor-pointer';
           this.elements.btnRepeatAb.title = 'Repeat A-B: Click to loop a section (Hotkeys: [ to set A, ] to set B, \\ to clear)';
         } else if (pointB === null) {
-          this.elements.btnRepeatAb.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold transition-all border border-amber-500/60 bg-amber-500/15 text-amber-800 dark:text-amber-300 shadow-sm cursor-pointer animate-pulse';
+          this.elements.btnRepeatAb.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold transition-all border border-amber-500/60 bg-amber-500/15 text-amber-800 dark:text-amber-300 shadow-sm cursor-pointer animate-pulse';
           this.elements.btnRepeatAb.title = 'Point A set! Play or seek to end of loop and click to set Point B.';
         } else {
-          this.elements.btnRepeatAb.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold transition-all border border-emerald-500/60 bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 shadow-sm cursor-pointer';
+          this.elements.btnRepeatAb.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold transition-all border border-emerald-500/60 bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 shadow-sm cursor-pointer';
           this.elements.btnRepeatAb.title = `Looping ${formatTime(pointA)} to ${formatTime(pointB)}. Click to clear.`;
         }
       }
@@ -1352,7 +1340,6 @@
         barDownloadGroup: document.getElementById('bar-download-group'),
         barDownloadFill: document.getElementById('bar-download-fill'),
         barDownloadDone: document.getElementById('bar-download-done'),
-        barDownloadRemains: document.getElementById('bar-download-remains'),
         expandedPlayer: document.getElementById('expanded-player'),
         btnMinimizePlayer: document.getElementById('btn-minimize-player'),
         expandedCoverArt: document.getElementById('expanded-cover-art'),
@@ -1370,7 +1357,6 @@
         expandedDownloadGroup: document.getElementById('expanded-download-group'),
         expandedDownloadFill: document.getElementById('expanded-download-fill'),
         expandedDownloadDone: document.getElementById('expanded-download-done'),
-        expandedDownloadRemains: document.getElementById('expanded-download-remains'),
         repeatAbContainer: document.getElementById('repeat-ab-container'),
         btnRepeatAb: document.getElementById('btn-repeat-ab'),
         btnRepeatAbClear: document.getElementById('btn-repeat-ab-clear'),

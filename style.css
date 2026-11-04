@@ -392,3 +392,9 @@ code, .font-mono {
   background-image: repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(16, 185, 129, 0.2) 5px, rgba(16, 185, 129, 0.2) 10px);
 }
 
+/* Smooth fade edges for scrollable lyrics directly on background */
+.lyrics-fade-mask {
+  mask-image: linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%);
+}
+
