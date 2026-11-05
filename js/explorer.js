@@ -24,6 +24,8 @@
     thumbnailObserver: null,
     extractionQueue: [],
     isExtractingQueue: false,
+    filterDownloaded: false,
+    downloadedPaths: [],
 
     init() {
       this.elements = {
@@ -34,6 +36,7 @@
         searchInput: document.getElementById('search-input'),
         clearSearchBtn: document.getElementById('clear-search-btn'),
         viewToggleBtn: document.getElementById('view-toggle-btn'),
+        btnFilterDownloaded: document.getElementById('btn-filter-downloaded'),
         filterDropdownBtn: document.getElementById('filter-dropdown-btn'),
         filterDropdownMenu: document.getElementById('filter-dropdown-menu'),
         filterActiveLabel: document.getElementById('filter-active-label'),
@@ -543,6 +546,14 @@
       const state = window.Trove.state || {};
       let items = state.allItems || [];
 
+      if (this.filterDownloaded && this.downloadedPaths) {
+        const dlSet = new Set(this.downloadedPaths);
+        items = items.filter(i => {
+          if (i.isDir) return true;
+          return dlSet.has(i.path);
+        });
+      }
+
       if (state.searchQuery) {
         const q = state.searchQuery.toLowerCase();
         items = items.filter(i => !i.isDir && i.name !== '.gitattributes' && i.name !== '.trove_status.json' && i.path.toLowerCase().includes(q));
@@ -567,6 +578,18 @@
       let filteredChildren = directChildren;
       if (state.filterType !== 'all') {
         filteredChildren = directChildren.filter(i => i.isDir || i.category === state.filterType || (i.ext && i.ext.toLowerCase() === state.filterType));
+      }
+
+      if (this.filterDownloaded && this.downloadedPaths) {
+        const dlSet = new Set(this.downloadedPaths);
+        filteredChildren = filteredChildren.filter(i => {
+          if (!i.isDir) return dlSet.has(i.path);
+          const prefix = i.path + '/';
+          for (const p of dlSet) {
+            if (p.startsWith(prefix)) return true;
+          }
+          return false;
+        });
       }
 
       return this.sortItems(filteredChildren);
@@ -703,7 +726,15 @@
           dateTooltip = `Downloaded: ${item.ingestedAtIso || new Date(item.ingestedAt).toLocaleString()}`;
         }
 
+        const isFav = isPlayable && window.Trove.utils?.isFavorite ? window.Trove.utils.isFavorite(item.path) : false;
+        const favBtnHtml = isPlayable ? `
+          <button type="button" class="btn-row-favorite p-1.5 sm:p-2 rounded-xl hover:bg-almond-cream/60 dark:hover:bg-[#252b37] ${isFav ? 'text-rose-500 dark:text-rose-400' : 'text-stone-brown/40 dark:text-[#758092] hover:text-rose-500'} transition shrink-0 min-w-[34px] min-h-[34px] flex items-center justify-center select-none" title="${isFav ? 'Remove from Liked Songs' : 'Add to Liked Songs'}" data-path="${escapeHtml(item.path)}">
+            <i data-lucide="heart" class="w-4 h-4" ${isFav ? 'fill="currentColor"' : ''}></i>
+          </button>
+        ` : '';
+
         const actionBtnHtml = isPlayable ? `
+          ${favBtnHtml}
           <button type="button" class="btn-add-to-playlist p-1.5 sm:p-2 rounded-xl hover:bg-almond-cream/60 dark:hover:bg-[#252b37] text-stone-brown/70 hover:text-jet-black dark:text-[#9aa4b2] dark:hover:text-[#f3f4f6] transition shrink-0 min-w-[34px] min-h-[34px] flex items-center justify-center select-none" title="Add to Playlist or Queue" data-path="${escapeHtml(item.path)}">
             <i data-lucide="list-plus" class="w-4 h-4"></i>
           </button>
@@ -1043,6 +1074,44 @@
         });
       }
 
+      // Downloaded only filter toggle
+      const btnDownloaded = document.getElementById('btn-filter-downloaded');
+      if (btnDownloaded) {
+        btnDownloaded.addEventListener('click', async () => {
+          this.filterDownloaded = !this.filterDownloaded;
+          if (this.filterDownloaded) {
+            this.downloadedPaths = await window.Trove.utils.getAllDownloadedMediaPaths();
+            btnDownloaded.classList.add('bg-emerald-50', 'dark:bg-emerald-950/40', 'text-emerald-700', 'dark:text-emerald-300', 'border-emerald-400', 'dark:border-emerald-600/60');
+            btnDownloaded.classList.remove('text-stone-brown', 'dark:text-[#9aa4b2]', 'bg-white', 'dark:bg-[#15181f]');
+          } else {
+            btnDownloaded.classList.remove('bg-emerald-50', 'dark:bg-emerald-950/40', 'text-emerald-700', 'dark:text-emerald-300', 'border-emerald-400', 'dark:border-emerald-600/60');
+            btnDownloaded.classList.add('text-stone-brown', 'dark:text-[#9aa4b2]', 'bg-white', 'dark:bg-[#15181f]');
+          }
+          this.render();
+        });
+      }
+
+      window.addEventListener('trove:favorites-changed', () => {
+        const fileList = this.elements.fileList;
+        if (fileList && fileList.children.length > 0) {
+          const favs = window.Trove.utils?.getFavorites ? window.Trove.utils.getFavorites() : [];
+          fileList.querySelectorAll('.btn-row-favorite').forEach(btn => {
+            const p = btn.dataset.path;
+            const isFav = favs.includes(p);
+            const icon = btn.querySelector('[data-lucide="heart"]');
+            if (isFav) {
+              btn.classList.add('text-rose-500', 'dark:text-rose-400');
+              btn.classList.remove('text-stone-brown/40', 'dark:text-[#758092]');
+              if (icon) icon.setAttribute('fill', 'currentColor');
+            } else {
+              btn.classList.remove('text-rose-500', 'dark:text-rose-400');
+              btn.classList.add('text-stone-brown/40', 'dark:text-[#758092]');
+              if (icon) icon.removeAttribute('fill');
+            }
+          });
+        }
+      });
+
       // Filter dropdown
       if (this.elements.filterDropdownBtn && this.elements.filterDropdownMenu) {
         this.elements.filterDropdownBtn.addEventListener('click', (e) => {
@@ -1174,6 +1243,34 @@
             const item = (state.allItems || []).find(i => i.path === filePath);
             if (item && window.Trove.playlists) {
               window.Trove.playlists.openAddModal(item);
+            }
+            return;
+          }
+
+          // Favorite button click
+          const favBtn = e.target.closest('.btn-row-favorite');
+          if (favBtn) {
+            e.stopPropagation();
+            const filePath = favBtn.dataset.path;
+            if (window.Trove.utils?.toggleFavorite) {
+              const isFav = window.Trove.utils.toggleFavorite(filePath);
+              const icon = favBtn.querySelector('[data-lucide="heart"]');
+              if (isFav) {
+                favBtn.classList.add('text-rose-500', 'dark:text-rose-400');
+                favBtn.classList.remove('text-stone-brown/40', 'dark:text-[#758092]');
+                if (icon) icon.setAttribute('fill', 'currentColor');
+                favBtn.title = 'Remove from Liked Songs';
+              } else {
+                favBtn.classList.remove('text-rose-500', 'dark:text-rose-400');
+                favBtn.classList.add('text-stone-brown/40', 'dark:text-[#758092]');
+                if (icon) icon.removeAttribute('fill');
+                favBtn.title = 'Add to Liked Songs';
+              }
+              const item = (state.allItems || []).find(i => i.path === filePath);
+              const name = (item?.name || filePath.split('/').pop()).replace(/\.[a-zA-Z0-9]+$/, '');
+              if (window.Trove.utils?.showToast) {
+                window.Trove.utils.showToast(isFav ? `Added "${name}" to Liked Songs` : `Removed "${name}" from Liked Songs`);
+              }
             }
             return;
           }

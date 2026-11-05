@@ -340,6 +340,12 @@
           <button id="view-toggle-btn" class="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm shrink-0" title="Current: Tree View. Click to switch to Flat View.">
             <i data-lucide="folder-tree" class="w-4 h-4 text-stone-brown dark:text-[#c6ac8f]" id="view-toggle-icon"></i>
           </button>
+
+          <!-- Downloaded Only Filter Pill -->
+          <button id="btn-filter-downloaded" type="button" class="h-8 inline-flex items-center gap-1.5 px-2.5 text-xs font-semibold rounded-lg bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] text-stone-brown dark:text-[#9aa4b2] hover:text-jet-black dark:hover:text-white hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition shadow-sm select-none shrink-0" title="Filter to show only downloaded / offline-cached tracks">
+            <i data-lucide="download-cloud" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Downloaded</span>
+          </button>
         </div>
       </div>
 
@@ -468,6 +474,10 @@
         
         <button id="btn-next" class="p-2 text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white transition rounded-full hover:bg-almond-cream/40 dark:hover:bg-[#202532]" title="Next Track (N)">
           <i data-lucide="skip-forward" class="w-4 h-4"></i>
+        </button>
+
+        <button id="bar-btn-favorite" class="p-2 text-stone-brown/60 dark:text-[#9aa4b2]/60 hover:text-rose-500 dark:hover:text-rose-400 transition rounded-full hover:bg-almond-cream/40 dark:hover:bg-[#202532]" title="Add to Liked Songs">
+          <i data-lucide="heart" class="w-4 h-4"></i>
         </button>
 
         <button id="btn-expand-player" class="p-2 text-stone-brown dark:text-[#9aa4b2] hover:text-black dark:hover:text-white transition rounded-full hover:bg-almond-cream/40 dark:hover:bg-[#202532] ml-1" title="Expand Player">
@@ -707,6 +717,11 @@
 
         <!-- Right Utilities: Add to Playlist, Related Tracks, EQ Button & Vertical Volume Pill -->
         <div class="flex items-center gap-1.5 sm:gap-2">
+          <!-- Favorite Track Button -->
+          <button id="btn-expanded-favorite" type="button" class="flex items-center justify-center p-2 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-white/80 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition text-stone-brown/60 dark:text-[#9aa4b2]/60 hover:text-rose-500 dark:hover:text-rose-400 text-xs font-semibold select-none shadow-sm cursor-pointer" title="Add to Liked Songs">
+            <i data-lucide="heart" class="w-4 h-4"></i>
+          </button>
+
           <!-- Add Current Track to Playlist Button -->
           <button id="btn-player-add-playlist" type="button" class="flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-2 min-h-[36px] min-w-[68px] sm:min-w-[76px] rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-white/80 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition text-stone-brown dark:text-[#c6ac8f] text-xs font-semibold select-none shadow-sm cursor-pointer" title="Add Track to Playlist or Queue">
             <i data-lucide="bookmark-plus" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f]"></i>
@@ -725,6 +740,41 @@
             <span class="hidden xs:inline">EQ</span>
             <span id="eq-badge" class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-almond-cream/60 dark:bg-[#252a36] text-stone-brown dark:text-[#c6ac8f]">Flat</span>
           </button>
+
+          <!-- Sleep Timer Wrapper & Menu -->
+          <div class="relative" id="sleep-timer-wrapper">
+            <button id="btn-sleep-timer" type="button" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-white/80 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition text-stone-brown dark:text-[#c6ac8f] text-xs font-semibold select-none shadow-sm cursor-pointer" title="Sleep Timer">
+              <i data-lucide="moon" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f]"></i>
+              <span id="sleep-timer-badge" class="font-mono text-[10px] hidden">Off</span>
+            </button>
+            <div id="sleep-timer-menu" class="absolute bottom-full mb-2.5 right-0 w-44 bg-white dark:bg-[#191d26] border border-almond-cream dark:border-[#2b3240] rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,0.28)] p-2 flex flex-col gap-1 z-50 hidden select-none animate-in fade-in slide-in-from-bottom-2">
+              <div class="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-brown/60 dark:text-[#758092]">Sleep Timer</div>
+              <button type="button" class="sleep-timer-opt w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition flex items-center justify-between" data-minutes="0">
+                <span>Off</span>
+                <i data-lucide="check" class="w-3.5 h-3.5 check-icon"></i>
+              </button>
+              <button type="button" class="sleep-timer-opt w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition flex items-center justify-between" data-minutes="15">
+                <span>15 Minutes</span>
+                <i data-lucide="check" class="w-3.5 h-3.5 check-icon hidden"></i>
+              </button>
+              <button type="button" class="sleep-timer-opt w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition flex items-center justify-between" data-minutes="30">
+                <span>30 Minutes</span>
+                <i data-lucide="check" class="w-3.5 h-3.5 check-icon hidden"></i>
+              </button>
+              <button type="button" class="sleep-timer-opt w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition flex items-center justify-between" data-minutes="45">
+                <span>45 Minutes</span>
+                <i data-lucide="check" class="w-3.5 h-3.5 check-icon hidden"></i>
+              </button>
+              <button type="button" class="sleep-timer-opt w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition flex items-center justify-between" data-minutes="60">
+                <span>60 Minutes</span>
+                <i data-lucide="check" class="w-3.5 h-3.5 check-icon hidden"></i>
+              </button>
+              <button type="button" class="sleep-timer-opt w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition flex items-center justify-between" data-minutes="track">
+                <span>End of Track</span>
+                <i data-lucide="check" class="w-3.5 h-3.5 check-icon hidden"></i>
+              </button>
+            </div>
+          </div>
 
           <!-- Volume Pill & Vertical Popover -->
           <div class="relative" id="volume-wrapper">
@@ -1633,6 +1683,64 @@
                 </button>
               </div>
               <span class="text-[10px] text-stone-brown/60 dark:text-[#758092]">Shared secret token for Bearer authentication.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 3.5: Device Storage & Audio Experience -->
+        <div class="border-t border-almond-cream dark:border-[#262c38] pt-4 flex flex-col gap-3.5">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-black dark:text-[#f3f4f6]">Audio & Device Storage</h3>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <!-- Device Media Cache Limit Slider -->
+            <div class="sm:col-span-2 p-3 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-almond-cream/20 dark:bg-[#181c25] flex flex-col gap-2">
+              <div class="flex items-center justify-between">
+                <div>
+                  <label for="device-media-cache-slider" class="text-xs font-semibold text-black dark:text-[#f3f4f6]">Device Media Cache Limit</label>
+                  <p class="text-[10px] text-stone-brown/70 dark:text-[#758092]">How many offline audio/video blobs to cache in IndexedDB on this device.</p>
+                </div>
+                <span id="device-media-cache-val" class="px-2 py-0.5 rounded-md bg-white dark:bg-[#202532] border border-almond-cream dark:border-[#2f3747] text-xs font-mono font-bold text-jet-black dark:text-[#c6ac8f] shrink-0">10 tracks</span>
+              </div>
+              <input 
+                type="range" 
+                id="device-media-cache-slider" 
+                min="5" 
+                max="100" 
+                step="5" 
+                value="10" 
+                class="w-full h-1.5 bg-almond-cream dark:bg-[#2b3240] rounded-lg appearance-none cursor-pointer accent-jet-black dark:accent-[#c6ac8f]"
+              >
+              <div class="flex justify-between text-[10px] font-mono text-stone-brown/50 dark:text-[#6b7688]">
+                <span>5 tracks (laptop/light)</span>
+                <span>50 tracks (balanced)</span>
+                <span>100 tracks (mobile/heavy)</span>
+              </div>
+            </div>
+
+            <!-- Volume Normalization Toggle -->
+            <label class="flex items-start gap-2.5 p-3 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-almond-cream/20 dark:bg-[#181c25] hover:bg-almond-cream/30 dark:hover:bg-[#1e2330] cursor-pointer transition select-none">
+              <input type="checkbox" id="chk-vol-normalization" class="mt-0.5 rounded border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#c6ac8f] focus:ring-0" checked>
+              <div class="flex flex-col">
+                <span class="text-xs font-semibold text-black dark:text-[#f3f4f6]">Auto Volume Normalization</span>
+                <span class="text-[10px] text-stone-brown/70 dark:text-[#758092]">Compress dynamic peaks to even out volume levels between songs via Web Audio.</span>
+              </div>
+            </label>
+
+            <!-- Crossfade Duration Selector -->
+            <div class="p-3 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-almond-cream/20 dark:bg-[#181c25] flex flex-col justify-between gap-1.5">
+              <div>
+                <label for="select-crossfade" class="text-xs font-semibold text-black dark:text-[#f3f4f6]">Crossfade & Gapless</label>
+                <p class="text-[10px] text-stone-brown/70 dark:text-[#758092]">Smooth volume fade transition between consecutive tracks.</p>
+              </div>
+              <select id="select-crossfade" class="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-[#15181f] border border-khaki-beige dark:border-[#353c4d] rounded-lg text-black dark:text-[#f3f4f6] focus:outline-none cursor-pointer">
+                <option value="0">Off (Immediate switch)</option>
+                <option value="2">2 seconds (Quick fade)</option>
+                <option value="3">3 seconds (Standard crossfade)</option>
+                <option value="5">5 seconds (Smooth DJ blend)</option>
+              </select>
             </div>
           </div>
         </div>

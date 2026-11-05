@@ -444,14 +444,35 @@
   };
 
   // =========================================================================
-  // PERSISTENT INDEXEDDB STORAGE (Media Blobs & Original-Quality Thumbnails)
+  // PERSISTENT INDEXEDDB STORAGE (Media Blobs, Thumbnails & Lyrics)
   // =========================================================================
   const IDB_NAME = 'TroveMediaStorage';
-  const IDB_VERSION = 2;
+  const IDB_VERSION = 3;
   const IDB_STORE_MEDIA = 'media_blobs';
   const IDB_STORE_THUMBS = 'thumbnails';
-  const MAX_MEDIA_CACHE = storage.maxMediaBlobs || 10;
+  const IDB_STORE_LYRICS = 'lyrics';
   const MAX_THUMB_CACHE = storage.maxCachedThumbnails || 50;
+
+  function getDeviceMaxMediaCache() {
+    try {
+      const custom = localStorage.getItem('trove_device_max_media_cache');
+      if (custom !== null) {
+        const val = parseInt(custom, 10);
+        if (!isNaN(val) && val >= 1) return val;
+      }
+    } catch (_) {}
+    return storage.maxMediaBlobs || 10;
+  }
+
+  function setDeviceMaxMediaCache(num) {
+    try {
+      const n = Math.max(1, Math.min(200, parseInt(num, 10) || 10));
+      localStorage.setItem('trove_device_max_media_cache', String(n));
+      return n;
+    } catch (_) {
+      return 10;
+    }
+  }
 
   let idbPromise = null;
   function getIDB() {
@@ -472,6 +493,10 @@
             if (!db.objectStoreNames.contains(IDB_STORE_THUMBS)) {
               const thumbStore = db.createObjectStore(IDB_STORE_THUMBS, { keyPath: 'path' });
               thumbStore.createIndex('cachedAt', 'cachedAt', { unique: false });
+            }
+            if (!db.objectStoreNames.contains(IDB_STORE_LYRICS)) {
+              const lyricsStore = db.createObjectStore(IDB_STORE_LYRICS, { keyPath: 'path' });
+              lyricsStore.createIndex('cachedAt', 'cachedAt', { unique: false });
             }
           };
           request.onsuccess = () => resolve(request.result);
@@ -534,12 +559,13 @@
       const store = tx.objectStore(IDB_STORE_MEDIA);
       store.put({ path, blob, cachedAt: Date.now() });
 
+      const maxLimit = getDeviceMaxMediaCache();
       const getAllReq = store.index('cachedAt').getAll();
       getAllReq.onsuccess = () => {
         const records = getAllReq.result;
-        if (records && records.length > MAX_MEDIA_CACHE) {
+        if (records && records.length > maxLimit) {
           records.sort((a, b) => (a.cachedAt || 0) - (b.cachedAt || 0));
-          const excess = records.length - MAX_MEDIA_CACHE;
+          const excess = records.length - maxLimit;
           const deleteTx = db.transaction(IDB_STORE_MEDIA, 'readwrite');
           const deleteStore = deleteTx.objectStore(IDB_STORE_MEDIA);
           for (let i = 0; i < excess; i++) {
@@ -565,6 +591,22 @@
       });
     } catch (e) {
       return null;
+    }
+  }
+
+  async function getAllDownloadedMediaPaths() {
+    try {
+      const db = await getIDB();
+      if (!db) return [];
+      return new Promise((resolve) => {
+        const tx = db.transaction(IDB_STORE_MEDIA, 'readonly');
+        const store = tx.objectStore(IDB_STORE_MEDIA);
+        const req = store.getAllKeys();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => resolve([]);
+      });
+    } catch (e) {
+      return [];
     }
   }
 
@@ -600,6 +642,97 @@
     }
   }
 
+  // =========================================================================
+  // PERSISTENT LYRICS STORAGE (IndexedDB Cache)
+  // =========================================================================
+  async function saveLyricsToIDB(path, data) {
+    if (!path || !data) return;
+    try {
+      const db = await getIDB();
+      if (!db) return;
+      const tx = db.transaction(IDB_STORE_LYRICS, 'readwrite');
+      const store = tx.objectStore(IDB_STORE_LYRICS);
+      store.put({ path, data, cachedAt: Date.now() });
+    } catch (e) {
+      console.warn('IDB lyrics write failed:', e);
+    }
+  }
+
+  async function getLyricsFromIDB(path) {
+    if (!path) return null;
+    try {
+      const db = await getIDB();
+      if (!db) return null;
+      return new Promise((resolve) => {
+        const tx = db.transaction(IDB_STORE_LYRICS, 'readonly');
+        const store = tx.objectStore(IDB_STORE_LYRICS);
+        const req = store.get(path);
+        req.onsuccess = () => resolve(req.result ? req.result.data : null);
+        req.onerror = () => resolve(null);
+      });
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function clearLyricsIDB() {
+    try {
+      const db = await getIDB();
+      if (!db) return false;
+      return new Promise((resolve) => {
+        const tx = db.transaction(IDB_STORE_LYRICS, 'readwrite');
+        const store = tx.objectStore(IDB_STORE_LYRICS);
+        const req = store.clear();
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => resolve(false);
+      });
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // =========================================================================
+  // FAVORITES / LIKED SONGS (Local State & Sync Dispatcher)
+  // =========================================================================
+  function getFavorites() {
+    try {
+      const raw = localStorage.getItem('trove_favorites');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function isFavorite(path) {
+    if (!path) return false;
+    const favs = getFavorites();
+    return favs.includes(path);
+  }
+
+  function toggleFavorite(path) {
+    if (!path) return false;
+    try {
+      let favs = getFavorites();
+      let isFav = false;
+      if (favs.includes(path)) {
+        favs = favs.filter(p => p !== path);
+        isFav = false;
+      } else {
+        favs.push(path);
+        isFav = true;
+      }
+      localStorage.setItem('trove_favorites', JSON.stringify(favs));
+      window.dispatchEvent(new CustomEvent('trove:favorites-changed', {
+        detail: { path, isFavorite: isFav, favorites: favs }
+      }));
+      return isFav;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // Export to Trove namespace
   window.Trove.utils = {
     getFileInfo,
@@ -615,12 +748,21 @@
     showExitToast,
     MotionAnim,
     getIDB,
+    getDeviceMaxMediaCache,
+    setDeviceMaxMediaCache,
     saveThumbnailBlobToIDB,
     getThumbnailBlobFromIDB,
     clearThumbsIDB,
     saveMediaToIDB,
     getMediaFromIDB,
-    clearMediaIDB
+    getAllDownloadedMediaPaths,
+    clearMediaIDB,
+    saveLyricsToIDB,
+    getLyricsFromIDB,
+    clearLyricsIDB,
+    getFavorites,
+    isFavorite,
+    toggleFavorite
   };
 
   // Backwards compatibility alias

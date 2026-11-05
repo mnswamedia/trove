@@ -224,12 +224,22 @@
       if (this.elements.btnPlayAllPlaylist) {
         this.elements.btnPlayAllPlaylist.addEventListener('click', () => {
           if (!this.currentDetailId) return;
+          if (this.currentDetailId === '_favorites') {
+            this.playFavorites();
+            return;
+          }
           const pl = this.playlists.find(p => p.id === this.currentDetailId);
           if (pl && pl.items.length > 0) {
             this.playPlaylist(pl);
           }
         });
       }
+
+      window.addEventListener('trove:favorites-changed', () => {
+        if (this.isOpen && this.activeTab === 'playlists') {
+          this.renderPlaylists();
+        }
+      });
 
       // Subview Delete
       if (this.elements.btnDeletePlaylist) {
@@ -424,21 +434,55 @@
 
     renderPlaylists() {
       const list = this.playlists.filter(p => p.id !== '_queue');
+      const favPaths = window.Trove.utils?.getFavorites ? window.Trove.utils.getFavorites() : [];
 
       if (this.elements.playlistsCountPill) {
-        this.elements.playlistsCountPill.innerText = list.length;
-      }
-
-      if (list.length === 0) {
-        if (this.elements.playlistsEmpty) this.elements.playlistsEmpty.classList.remove('hidden');
-        if (this.elements.playlistsGrid) this.elements.playlistsGrid.innerHTML = '';
-        return;
+        this.elements.playlistsCountPill.innerText = list.length + (favPaths.length > 0 ? 1 : 0);
       }
 
       if (this.elements.playlistsEmpty) this.elements.playlistsEmpty.classList.add('hidden');
       if (!this.elements.playlistsGrid) return;
 
       this.elements.playlistsGrid.innerHTML = '';
+
+      // 1. Smart "Liked Songs" Card
+      const favCard = document.createElement('div');
+      favCard.className = 'p-3.5 sm:p-4 rounded-2xl bg-rose-50/70 dark:bg-[#1f1622] border border-rose-200/80 dark:border-rose-900/40 shadow-xs hover:border-rose-300 dark:hover:border-rose-800/60 transition flex flex-col justify-between gap-3 group cursor-pointer';
+      favCard.innerHTML = `
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-8 h-8 rounded-xl bg-rose-500/15 dark:bg-rose-500/20 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0">
+              <i data-lucide="heart" class="w-4 h-4 fill-current"></i>
+            </div>
+            <div class="min-w-0">
+              <h4 class="text-xs sm:text-sm font-bold text-black dark:text-[#f3f4f6] truncate">Liked Songs</h4>
+              <p class="text-[10px] font-mono text-stone-brown/60 dark:text-[#8b95a5]">${favPaths.length} ${favPaths.length === 1 ? 'track' : 'tracks'}</p>
+            </div>
+          </div>
+          <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-rose-500/10 text-rose-600 dark:text-rose-400">Smart</span>
+        </div>
+
+        <div class="flex items-center justify-between pt-2 border-t border-rose-200/50 dark:border-rose-900/30">
+          <span class="text-[10px] font-mono text-stone-brown/60 dark:text-[#758092]">Tap to inspect</span>
+          <button type="button" class="btn-card-play px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white transition shadow-xs flex items-center gap-1" title="Play Liked Songs">
+            <i data-lucide="play" class="w-3 h-3"></i>
+            <span>Play</span>
+          </button>
+        </div>
+      `;
+
+      favCard.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-card-play')) return;
+        this.openFavoritesDetail();
+      });
+
+      const btnPlayFav = favCard.querySelector('.btn-card-play');
+      btnPlayFav.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.playFavorites();
+      });
+
+      this.elements.playlistsGrid.appendChild(favCard);
 
       list.forEach((pl) => {
         const count = pl.items ? pl.items.length : 0;
@@ -496,10 +540,18 @@
     },
 
     openPlaylistDetail(id) {
+      if (id === '_favorites') {
+        this.openFavoritesDetail();
+        return;
+      }
+
       const pl = this.playlists.find(p => p.id === id);
       if (!pl) return;
 
       this.currentDetailId = id;
+      if (this.elements.btnDeletePlaylist) {
+        this.elements.btnDeletePlaylist.classList.remove('hidden');
+      }
       if (this.elements.detailTitle) this.elements.detailTitle.innerText = pl.name;
       const count = pl.items ? pl.items.length : 0;
       if (this.elements.detailMeta) {
@@ -556,6 +608,98 @@
         this.elements.playlistDetailView.classList.remove('hidden');
       }
       if (window.lucide) window.lucide.createIcons();
+    },
+
+    openFavoritesDetail() {
+      const tracks = this.getFavoriteTracks();
+      this.currentDetailId = '_favorites';
+      if (this.elements.detailTitle) this.elements.detailTitle.innerText = 'Liked Songs';
+      if (this.elements.detailMeta) {
+        this.elements.detailMeta.innerText = `${tracks.length} ${tracks.length === 1 ? 'track' : 'tracks'}`;
+      }
+      if (this.elements.btnDeletePlaylist) {
+        this.elements.btnDeletePlaylist.classList.add('hidden');
+      }
+
+      if (this.elements.detailTrackList) {
+        this.elements.detailTrackList.innerHTML = '';
+        if (tracks.length === 0) {
+          this.elements.detailTrackList.innerHTML = `
+            <div class="py-12 flex flex-col items-center justify-center text-center gap-2 text-stone-brown/60 dark:text-[#8b95a5]">
+              <i data-lucide="heart" class="w-8 h-8 text-stone-brown/40 dark:text-[#525d70]"></i>
+              <p class="text-xs">No liked songs yet! Tap the heart icon on any song to add it here.</p>
+            </div>
+          `;
+        } else {
+          tracks.forEach((item, index) => {
+            const row = document.createElement('div');
+            row.className = 'p-2.5 sm:p-3 rounded-xl bg-white dark:bg-[#1a1e27] border border-almond-cream/60 dark:border-[#282e3b] flex items-center justify-between gap-3 group hover:border-stone-brown/40 dark:hover:border-[#384152] transition cursor-pointer';
+            row.innerHTML = `
+              <div class="flex items-center gap-2.5 min-w-0">
+                <span class="w-5 text-center text-[10px] font-mono text-stone-brown/50 dark:text-[#6b7688] shrink-0">${index + 1}</span>
+                <div class="min-w-0">
+                  <h5 class="text-xs sm:text-sm font-semibold text-black dark:text-[#f3f4f6] truncate">${escapeHtml(item.name || item.path.split('/').pop())}</h5>
+                  <p class="text-[10px] font-mono text-stone-brown/60 dark:text-[#8b95a5] truncate">${escapeHtml(item.path)}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-1 shrink-0">
+                <button type="button" class="btn-fav-remove p-1.5 rounded-lg text-rose-500 hover:text-stone-brown hover:bg-almond-cream/30 dark:hover:bg-[#252a36] transition" title="Unlike song">
+                  <i data-lucide="heart" class="w-4 h-4 fill-current"></i>
+                </button>
+              </div>
+            `;
+
+            row.addEventListener('click', (e) => {
+              if (e.target.closest('.btn-fav-remove')) return;
+              const player = window.Trove.player;
+              if (player && typeof player.setCustomContext === 'function') {
+                player.setCustomContext(tracks, index);
+              }
+            });
+
+            const btnRemove = row.querySelector('.btn-fav-remove');
+            btnRemove.addEventListener('click', (e) => {
+              e.stopPropagation();
+              if (window.Trove.utils?.toggleFavorite) {
+                window.Trove.utils.toggleFavorite(item.path);
+                this.openFavoritesDetail();
+              }
+            });
+
+            this.elements.detailTrackList.appendChild(row);
+          });
+        }
+      }
+
+      if (this.elements.playlistDetailView) {
+        this.elements.playlistDetailView.classList.remove('hidden');
+      }
+      if (window.lucide) window.lucide.createIcons();
+    },
+
+    getFavoriteTracks() {
+      const favPaths = window.Trove.utils?.getFavorites ? window.Trove.utils.getFavorites() : [];
+      const state = window.Trove.state || {};
+      const allItems = state.allItems || [];
+      return favPaths.map(p => {
+        const found = allItems.find(i => i.path === p);
+        if (found) return found;
+        const name = p.split('/').pop();
+        return { name, path: p, category: 'music', isDir: false };
+      });
+    },
+
+    playFavorites() {
+      const tracks = this.getFavoriteTracks();
+      if (tracks.length === 0) {
+        if (showToast) showToast('No liked songs yet! Tap the heart icon on any song.');
+        return;
+      }
+      const player = window.Trove.player;
+      if (player && typeof player.setCustomContext === 'function') {
+        player.setCustomContext(tracks, 0);
+        if (showToast) showToast(`Playing Liked Songs (${tracks.length} tracks)`);
+      }
     },
 
     playPlaylist(pl) {

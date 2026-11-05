@@ -45,6 +45,15 @@
 
       this.updateHeaderBadge();
       this.setupEventListeners();
+
+      // Live bind device media cache limit slider
+      const slider = document.getElementById('device-media-cache-slider');
+      const valLabel = document.getElementById('device-media-cache-val');
+      if (slider && valLabel) {
+        slider.addEventListener('input', (e) => {
+          valLabel.innerText = `${e.target.value} tracks`;
+        });
+      }
     },
 
     updateHeaderBadge() {
@@ -90,6 +99,25 @@
       }
       if (this.elements.workerTokenInput) {
         this.elements.workerTokenInput.value = localStorage.getItem(storage.workerTokenKey) || '';
+      }
+
+      // Populate Audio & Device Storage Settings
+      const slider = document.getElementById('device-media-cache-slider');
+      const valLabel = document.getElementById('device-media-cache-val');
+      if (slider) {
+        const currentLimit = window.Trove.utils?.getDeviceMaxMediaCache ? window.Trove.utils.getDeviceMaxMediaCache() : 10;
+        slider.value = currentLimit;
+        if (valLabel) valLabel.innerText = `${currentLimit} tracks`;
+      }
+
+      const chkNorm = document.getElementById('chk-vol-normalization');
+      if (chkNorm) {
+        chkNorm.checked = localStorage.getItem('trove_vol_normalization') !== 'false';
+      }
+
+      const selCrossfade = document.getElementById('select-crossfade');
+      if (selCrossfade) {
+        selCrossfade.value = localStorage.getItem('trove_crossfade_sec') || '0';
       }
 
       if (errorText) {
@@ -195,6 +223,30 @@
         localStorage.setItem(storage.workerTokenKey, workerToken);
       } else {
         localStorage.removeItem(storage.workerTokenKey);
+      }
+
+      // 4. Audio & Device Storage Settings
+      const slider = document.getElementById('device-media-cache-slider');
+      if (slider && window.Trove.utils?.setDeviceMaxMediaCache) {
+        window.Trove.utils.setDeviceMaxMediaCache(slider.value);
+      }
+
+      const chkNorm = document.getElementById('chk-vol-normalization');
+      if (chkNorm) {
+        const normEnabled = chkNorm.checked;
+        localStorage.setItem('trove_vol_normalization', normEnabled ? 'true' : 'false');
+        if (window.Trove.equalizer) {
+          window.Trove.equalizer.setVolumeNormalization(normEnabled);
+        }
+      }
+
+      const selCrossfade = document.getElementById('select-crossfade');
+      if (selCrossfade) {
+        const cfSec = selCrossfade.value || '0';
+        localStorage.setItem('trove_crossfade_sec', cfSec);
+        if (window.Trove.player) {
+          window.Trove.player.crossfadeSeconds = parseInt(cfSec, 10);
+        }
       }
 
       this.updateHeaderBadge();

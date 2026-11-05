@@ -150,6 +150,11 @@
     playbackRates: [0.75, 1.0, 1.25, 1.5, 2.0],
     speedIndex: 1,
     volume: 1.0,
+    crossfadeSeconds: parseInt(localStorage.getItem('trove_crossfade_sec') || '0', 10),
+    _isCrossfading: false,
+    sleepTimerRemaining: null,
+    sleepTimerMode: 'off',
+    sleepTimerInterval: null,
     savedStartTime: 0,
     blobCache: new Map(),
     thumbnailCache: new Map(),
@@ -160,7 +165,8 @@
         this.blobCache.delete(path);
       }
 
-      while (this.blobCache.size >= MAX_MEDIA_CACHE) {
+      const maxBlobs = window.Trove?.utils?.getDeviceMaxMediaCache ? window.Trove.utils.getDeviceMaxMediaCache() : MAX_MEDIA_CACHE;
+      while (this.blobCache.size >= maxBlobs) {
         const oldestKey = this.blobCache.keys().next().value;
         const oldEntry = this.blobCache.get(oldestKey);
         if (oldEntry && oldEntry.url) {
@@ -664,6 +670,25 @@
 
         const targetEl = this.getActiveElement();
         targetEl.playbackRate = this.playbackRates[this.speedIndex];
+        if (this._isCrossfading) {
+          const baseVol = this.volume;
+          targetEl.volume = 0;
+          const fadeInDurationMs = 1200;
+          const startFadeIn = Date.now();
+          const inInterval = setInterval(() => {
+            const elapsed = Date.now() - startFadeIn;
+            const progress = Math.min(1, elapsed / fadeInDurationMs);
+            targetEl.volume = Math.min(baseVol, baseVol * progress);
+            if (progress >= 1) {
+              clearInterval(inInterval);
+              targetEl.volume = baseVol;
+              this._isCrossfading = false;
+            }
+          }, 50);
+        } else {
+          targetEl.volume = this.volume;
+        }
+        this.updateFavoriteUI(item.path);
 
         if (window.Trove.equalizer) {
           window.Trove.equalizer.initAudioContext();
@@ -1099,7 +1124,13 @@
       }
     },
 
-    playNext() {
+    playNext(isCrossfade = false) {
+      if (!isCrossfade) {
+        this._isCrossfading = false;
+        const activeEl = this.getActiveElement();
+        if (activeEl) activeEl.volume = this.volume;
+      }
+
       // 1. Check if user explicitly queued tracks
       const playlists = window.Trove.playlists;
       if (playlists && typeof playlists.getNextQueuedTrack === 'function') {
@@ -1534,7 +1565,13 @@
         volumePercentageLabel: document.getElementById('volume-percentage-label'),
         volumePopoverPct: document.getElementById('volume-popover-pct'),
         volumeIcon: document.getElementById('volume-icon'),
-        popoverMuteIcon: document.getElementById('popover-mute-icon')
+        popoverMuteIcon: document.getElementById('popover-mute-icon'),
+        barBtnFavorite: document.getElementById('bar-btn-favorite'),
+        btnExpandedFavorite: document.getElementById('btn-expanded-favorite'),
+        btnSleepTimer: document.getElementById('btn-sleep-timer'),
+        sleepTimerBadge: document.getElementById('sleep-timer-badge'),
+        sleepTimerMenu: document.getElementById('sleep-timer-menu'),
+        sleepTimerWrapper: document.getElementById('sleep-timer-wrapper')
       };
 
       this.setupMediaEventListeners(this.elements.playerAudio);
@@ -1586,6 +1623,15 @@
           } catch (_) {}
         }
 
+        // Crossfade trigger
+        if (this.crossfadeSeconds > 0 && dur > 12 && cur > 5 && !this._isCrossfading) {
+          const timeLeft = dur - cur;
+          if (timeLeft <= this.crossfadeSeconds && (this.queue.length > 1 || this.repeat === 'all')) {
+            this._isCrossfading = true;
+            this.startCrossfadeTransition(el, timeLeft);
+          }
+        }
+
         const now = Date.now();
         if (now - lastSave > 2500) {
           lastSave = now;
@@ -1627,6 +1673,16 @@
           const endedTrack = this.currentTrack;
           const duration = el.duration || 0;
           this.recordMetricsComplete(endedTrack, duration);
+
+          if (this.sleepTimerMode === 'track') {
+            this.sleepTimerMode = 'off';
+            this.sleepTimerRemaining = null;
+            this.updateSleepTimerUI();
+            this.pause();
+            if (showToast) showToast('Sleep timer: Playback stopped at end of track');
+            return;
+          }
+
           this.playNext();
           this.savePlaybackState();
         }
@@ -1860,6 +1916,214 @@
             }
           }
         });
+      }
+
+      // Favorites buttons
+      if (this.elements.barBtnFavorite) {
+        this.elements.barBtnFavorite.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (MotionAnim) MotionAnim.pulseButton(this.elements.barBtnFavorite);
+          this.toggleCurrentFavorite();
+        });
+      }
+      if (this.elements.btnExpandedFavorite) {
+        this.elements.btnExpandedFavorite.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (MotionAnim) MotionAnim.pulseButton(this.elements.btnExpandedFavorite);
+          this.toggleCurrentFavorite();
+        });
+      }
+
+      window.addEventListener('trove:favorites-changed', () => {
+        this.updateFavoriteUI();
+      });
+
+      // Sleep Timer
+      if (this.elements.btnSleepTimer && this.elements.sleepTimerMenu) {
+        this.elements.btnSleepTimer.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.elements.sleepTimerMenu.classList.toggle('hidden');
+          if (window.lucide) window.lucide.createIcons();
+        });
+
+        document.addEventListener('click', (e) => {
+          if (this.elements.sleepTimerWrapper && !this.elements.sleepTimerWrapper.contains(e.target)) {
+            this.elements.sleepTimerMenu.classList.add('hidden');
+          }
+        });
+
+        const timerOpts = this.elements.sleepTimerMenu.querySelectorAll('.sleep-timer-opt');
+        timerOpts.forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const mins = btn.getAttribute('data-minutes');
+            this.setSleepTimer(mins);
+            this.elements.sleepTimerMenu.classList.add('hidden');
+          });
+        });
+      }
+    },
+
+    startCrossfadeTransition(activeEl, timeLeft) {
+      const baseVol = this.volume;
+      const fadeDurationMs = Math.max(800, (timeLeft || this.crossfadeSeconds) * 1000);
+      const startTime = Date.now();
+
+      const fadeInterval = setInterval(() => {
+        if (!this._isCrossfading || activeEl !== this.getActiveElement()) {
+          clearInterval(fadeInterval);
+          return;
+        }
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(1, elapsed / fadeDurationMs);
+        const currentFadeVol = Math.max(0, baseVol * (1 - progress));
+        activeEl.volume = currentFadeVol;
+
+        if (progress >= 1) {
+          clearInterval(fadeInterval);
+          this.playNext(true);
+        }
+      }, 50);
+    },
+
+    updateFavoriteUI(trackPath) {
+      const path = trackPath || (this.currentTrack ? this.currentTrack.path : null);
+      const isFav = path && window.Trove.utils?.isFavorite ? window.Trove.utils.isFavorite(path) : false;
+
+      const updateBtn = (btn) => {
+        if (!btn) return;
+        const icon = btn.querySelector('[data-lucide="heart"]');
+        if (isFav) {
+          btn.classList.add('text-rose-500', 'dark:text-rose-400');
+          btn.classList.remove('text-stone-brown/60', 'dark:text-[#9aa4b2]/60');
+          if (icon) {
+            icon.setAttribute('fill', 'currentColor');
+          }
+          btn.title = 'Remove from Liked Songs';
+        } else {
+          btn.classList.remove('text-rose-500', 'dark:text-rose-400');
+          btn.classList.add('text-stone-brown/60', 'dark:text-[#9aa4b2]/60');
+          if (icon) {
+            icon.removeAttribute('fill');
+          }
+          btn.title = 'Add to Liked Songs';
+        }
+      };
+
+      updateBtn(this.elements.barBtnFavorite);
+      updateBtn(this.elements.btnExpandedFavorite);
+    },
+
+    toggleCurrentFavorite() {
+      if (!this.currentTrack || !this.currentTrack.path) return;
+      if (window.Trove.utils?.toggleFavorite) {
+        const isFav = window.Trove.utils.toggleFavorite(this.currentTrack.path);
+        this.updateFavoriteUI(this.currentTrack.path);
+        if (showToast) {
+          const name = (this.currentTrack.name || '').replace(/\.[a-zA-Z0-9]+$/, '');
+          showToast(isFav ? `Added "${name}" to Liked Songs` : `Removed "${name}" from Liked Songs`);
+        }
+      }
+    },
+
+    setSleepTimer(mode) {
+      if (this.sleepTimerInterval) {
+        clearInterval(this.sleepTimerInterval);
+        this.sleepTimerInterval = null;
+      }
+
+      this.sleepTimerMode = String(mode);
+
+      if (this.sleepTimerMode === '0' || this.sleepTimerMode === 'off') {
+        this.sleepTimerRemaining = null;
+        this.updateSleepTimerUI();
+        if (showToast) showToast('Sleep timer turned off');
+        return;
+      }
+
+      if (this.sleepTimerMode === 'track') {
+        this.sleepTimerRemaining = 'track';
+        this.updateSleepTimerUI();
+        if (showToast) showToast('Sleep timer: Playback will stop at end of current track');
+        return;
+      }
+
+      const mins = parseInt(this.sleepTimerMode, 10);
+      if (isNaN(mins) || mins <= 0) return;
+
+      this.sleepTimerRemaining = mins * 60;
+      this.updateSleepTimerUI();
+      if (showToast) showToast(`Sleep timer set for ${mins} minutes`);
+
+      const baseVol = this.volume;
+
+      this.sleepTimerInterval = setInterval(() => {
+        if (this.sleepTimerRemaining === null || this.sleepTimerRemaining === 'track') {
+          clearInterval(this.sleepTimerInterval);
+          return;
+        }
+
+        this.sleepTimerRemaining--;
+        this.updateSleepTimerBadge();
+
+        // Gentle 10-second volume fadeout
+        if (this.sleepTimerRemaining <= 10 && this.sleepTimerRemaining > 0) {
+          const el = this.getActiveElement();
+          if (el) {
+            el.volume = Math.max(0, baseVol * (this.sleepTimerRemaining / 10));
+          }
+        }
+
+        if (this.sleepTimerRemaining <= 0) {
+          clearInterval(this.sleepTimerInterval);
+          this.sleepTimerInterval = null;
+          this.sleepTimerRemaining = null;
+          this.sleepTimerMode = 'off';
+
+          const el = this.getActiveElement();
+          this.pause();
+          if (el) el.volume = baseVol;
+
+          this.updateSleepTimerUI();
+          if (showToast) showToast('Sleep timer ended. Playback paused.');
+        }
+      }, 1000);
+    },
+
+    updateSleepTimerUI() {
+      this.updateSleepTimerBadge();
+      if (this.elements.sleepTimerMenu) {
+        const opts = this.elements.sleepTimerMenu.querySelectorAll('.sleep-timer-opt');
+        opts.forEach(btn => {
+          const mins = btn.getAttribute('data-minutes');
+          const isSel = mins === this.sleepTimerMode || (mins === '0' && this.sleepTimerMode === 'off');
+          const check = btn.querySelector('.check-icon');
+          if (check) {
+            if (isSel) check.classList.remove('hidden');
+            else check.classList.add('hidden');
+          }
+          if (isSel) {
+            btn.classList.add('font-semibold', 'text-black', 'dark:text-white');
+          } else {
+            btn.classList.remove('font-semibold', 'text-black', 'dark:text-white');
+          }
+        });
+      }
+    },
+
+    updateSleepTimerBadge() {
+      if (!this.elements.sleepTimerBadge) return;
+      if (!this.sleepTimerRemaining || this.sleepTimerMode === 'off') {
+        this.elements.sleepTimerBadge.classList.add('hidden');
+        this.elements.sleepTimerBadge.innerText = 'Off';
+      } else if (this.sleepTimerRemaining === 'track') {
+        this.elements.sleepTimerBadge.classList.remove('hidden');
+        this.elements.sleepTimerBadge.innerText = 'Track';
+      } else {
+        this.elements.sleepTimerBadge.classList.remove('hidden');
+        const m = Math.floor(this.sleepTimerRemaining / 60);
+        const s = this.sleepTimerRemaining % 60;
+        this.elements.sleepTimerBadge.innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
       }
     }
   };

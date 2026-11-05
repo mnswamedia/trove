@@ -27,6 +27,7 @@
     hallBuffer: null,
 
     enabled: true,
+    volumeNormalization: localStorage.getItem('trove_vol_normalization') !== 'false',
     currentPreset: 'flat',
     spatialWidth: 0, // 0% to 100%
     roomMode: 'off', // 'off' | 'studio' | 'hall'
@@ -133,13 +134,9 @@
         this.merger.connect(this.convolver);
         this.convolver.connect(this.reverbWetGain);
 
-        // 4. Output Stage: DynamicsCompressor (protective limiter) -> Destination
+        // 4. Output Stage: DynamicsCompressor (protective limiter & volume normalizer) -> Destination
         this.compressor = this.ctx.createDynamicsCompressor();
-        this.compressor.threshold.value = -24;
-        this.compressor.knee.value = 30;
-        this.compressor.ratio.value = 12;
-        this.compressor.attack.value = 0.003;
-        this.compressor.release.value = 0.25;
+        this.applyNormalization();
 
         this.reverbDryGain.connect(this.compressor);
         this.reverbWetGain.connect(this.compressor);
@@ -221,6 +218,28 @@
       }
     },
 
+    applyNormalization() {
+      if (!this.compressor || !this.ctx) return;
+      if (this.enabled && this.volumeNormalization) {
+        this.compressor.threshold.setTargetAtTime(-24, this.ctx.currentTime, 0.02);
+        this.compressor.ratio.setTargetAtTime(10, this.ctx.currentTime, 0.02);
+        this.compressor.knee.setTargetAtTime(30, this.ctx.currentTime, 0.02);
+        this.compressor.attack.setTargetAtTime(0.005, this.ctx.currentTime, 0.02);
+        this.compressor.release.setTargetAtTime(0.25, this.ctx.currentTime, 0.02);
+      } else {
+        this.compressor.threshold.setTargetAtTime(0, this.ctx.currentTime, 0.02);
+        this.compressor.ratio.setTargetAtTime(1, this.ctx.currentTime, 0.02);
+      }
+    },
+
+    setVolumeNormalization(enabled) {
+      this.volumeNormalization = !!enabled;
+      try {
+        localStorage.setItem('trove_vol_normalization', this.volumeNormalization ? 'true' : 'false');
+      } catch (_) {}
+      this.applyNormalization();
+    },
+
     setBand(bandIdx, val) {
       const parsed = Math.max(-12, Math.min(12, parseFloat(val) || 0));
       this.gains[bandIdx] = parsed;
@@ -267,6 +286,7 @@
       this.applyGains();
       this.applySpatialWidth();
       this.applyRoomMode();
+      this.applyNormalization();
       this.save();
       this.updateUI();
     },

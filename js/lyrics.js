@@ -158,6 +158,7 @@
 
       this.currentTrackPath = track.path;
 
+      // 1. In-memory Cache Check
       if (!forceRefresh && this.cache.has(track.path)) {
         this.renderLyrics(this.cache.get(track.path));
         return;
@@ -166,13 +167,18 @@
       this.setLoading(true);
 
       try {
-        // 1. Resolve YouTube videoId if available
-        let videoId = null;
-        if (window.Trove.recommendations && typeof window.Trove.recommendations.resolveVideoId === 'function') {
-          videoId = await window.Trove.recommendations.resolveVideoId(track);
+        // 2. Offline IndexedDB Cache Check
+        if (!forceRefresh && window.Trove.utils?.getLyricsFromIDB) {
+          const idbLyrics = await window.Trove.utils.getLyricsFromIDB(track.path);
+          if (idbLyrics && idbLyrics.lyrics) {
+            this.cache.set(track.path, idbLyrics);
+            this.renderLyrics(idbLyrics);
+            this.setLoading(false);
+            return;
+          }
         }
 
-        // 2. Extract song title and artist from filename or track name
+        // Clean song name for search & filename
         const cleanName = track.name
           .replace(/\.[a-zA-Z0-9]+$/, '')
           .replace(/\[[A-Za-z0-9_-]{11}\]/g, '')
@@ -187,7 +193,45 @@
           trackTitle = parts.slice(1).join(' - ').trim();
         }
 
-        // 3. Prepare Cloudflare Worker request
+        const baseName = track.name
+          ? track.name.replace(/\.[a-zA-Z0-9]+$/, '').trim()
+          : track.path.split('/').pop().replace(/\.[a-zA-Z0-9]+$/, '').trim();
+        const safeLyricsFileName = `${baseName.replace(/[^\w\s\-\.\(\)]/gi, '_').trim()}.json`;
+
+        const state = window.Trove.state || {};
+        const repo = state.repo || CONFIG.repo;
+
+        // 3. Direct Hugging Face Dataset Check (check HF from UI directly)
+        if (!forceRefresh && repo && repo.id) {
+          try {
+            const hfRawUrl = `https://huggingface.co/datasets/${repo.id}/raw/${repo.branch || 'main'}/lyrics/${encodeURIComponent(safeLyricsFileName)}`;
+            const hfHeaders = state.token ? { 'Authorization': `Bearer ${state.token}` } : {};
+            const hfRes = await fetch(hfRawUrl, { headers: hfHeaders });
+            if (hfRes.ok) {
+              const hfJson = await hfRes.json();
+              if (hfJson && hfJson.lyrics) {
+                hfJson.source = hfJson.source ? `${hfJson.source} (HF)` : 'Hugging Face';
+                this.cache.set(track.path, hfJson);
+                if (window.Trove.utils?.saveLyricsToIDB) {
+                  await window.Trove.utils.saveLyricsToIDB(track.path, hfJson);
+                }
+                this.renderLyrics(hfJson);
+                this.setLoading(false);
+                return;
+              }
+            }
+          } catch (hfErr) {
+            console.warn('Direct HF lyrics check note:', hfErr);
+          }
+        }
+
+        // 4. Resolve YouTube videoId if available
+        let videoId = null;
+        if (window.Trove.recommendations && typeof window.Trove.recommendations.resolveVideoId === 'function') {
+          videoId = await window.Trove.recommendations.resolveVideoId(track);
+        }
+
+        // 5. Cloudflare Worker API request
         const workerUrl =
           (CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/lyrics') : null) ||
           localStorage.getItem(storage.workerLyricsUrlKey) ||
@@ -224,7 +268,7 @@
           }
         }
 
-        // 4. Zero-config direct LRCLIB fallback if worker is unset or returned no lyrics
+        // 6. Zero-config direct LRCLIB fallback if worker is unset or returned no lyrics
         if (!lyricsData) {
           try {
             const query = [trackTitle, artistName].filter(Boolean).join(' ');
@@ -258,6 +302,15 @@
 
         if (lyricsData && lyricsData.lyrics) {
           this.cache.set(track.path, lyricsData);
+          if (window.Trove.utils?.saveLyricsToIDB) {
+            window.Trove.utils.saveLyricsToIDB(track.path, lyricsData);
+          }
+
+          // Asynchronously commit to Hugging Face dataset under lyrics/ folder
+          if (state.token && repo && repo.id) {
+            this.commitLyricsToHF(repo, state.token, safeLyricsFileName, lyricsData, cleanName);
+          }
+
           this.renderLyrics(lyricsData);
         } else {
           this.renderEmpty(
@@ -273,6 +326,39 @@
         );
       } finally {
         this.setLoading(false);
+      }
+    },
+
+    async commitLyricsToHF(repo, token, fileName, lyricsData, trackTitle) {
+      if (!repo || !repo.id || !token || !fileName || !lyricsData) return;
+      try {
+        const jsonStr = JSON.stringify(lyricsData, null, 2);
+        const encodedContent = btoa(unescape(encodeURIComponent(jsonStr)));
+        const filePath = `lyrics/${fileName}`;
+
+        const commitUrl = `https://huggingface.co/api/datasets/${repo.id}/commit/${repo.branch || 'main'}`;
+        const formData = new FormData();
+        formData.append('operations', JSON.stringify([
+          {
+            operation: 'upload',
+            path: filePath,
+            encoding: 'base64',
+            content: encodedContent
+          }
+        ]));
+        formData.append('summary', `Save lyrics for "${trackTitle || fileName}"`);
+
+        const res = await fetch(commitUrl, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+
+        if (res.ok) {
+          console.log(`Lyrics for "${trackTitle}" stored in HF dataset (${filePath})`);
+        }
+      } catch (err) {
+        console.warn('Asynchronous HF lyrics upload note:', err);
       }
     },
 
