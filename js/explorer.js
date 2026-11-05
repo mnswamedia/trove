@@ -46,14 +46,20 @@
     isExtractingQueue: false,
     filterDownloaded: false,
     downloadedPaths: [],
-    pageSize: 60,
-    renderedCount: 60,
     currentDisplayItems: [],
-    sentinelObserver: null,
+    virtualStartIndex: -1,
+    virtualEndIndex: -1,
+    scrollRafId: null,
+    rowHeight: 58,
+    bufferSize: 12,
 
     init() {
       this.elements = {
         fileList: document.getElementById('file-list'),
+        virtualParentDir: document.getElementById('virtual-parent-dir'),
+        topSpacer: document.getElementById('virtual-spacer-top'),
+        itemsContainer: document.getElementById('virtual-items-container'),
+        bottomSpacer: document.getElementById('virtual-spacer-bottom'),
         breadcrumbs: document.getElementById('breadcrumbs'),
         refreshBtn: document.getElementById('refresh-btn'),
         mobileRefreshBtn: document.getElementById('mobile-refresh-btn'),
@@ -150,7 +156,8 @@
         }
       });
 
-      if (window.lucide) window.lucide.createIcons();
+      const colHeader = document.getElementById('col-sort-name')?.parentElement;
+      if (window.lucide && colHeader) window.lucide.createIcons({ root: colHeader });
     },
 
     updateFooterStatus(text) {
@@ -201,12 +208,14 @@
         }
       }
 
-      if (window.lucide) window.lucide.createIcons();
+      if (window.lucide && this.elements.explorerState) {
+        window.lucide.createIcons({ root: this.elements.explorerState });
+      }
     },
 
     hideState() {
       if (this.elements.explorerState) this.elements.explorerState.style.display = 'none';
-      if (this.elements.fileList) this.elements.fileList.style.display = 'block';
+      if (this.elements.fileList) this.elements.fileList.style.display = '';
     },
 
     async fetchHFTree(token) {
@@ -369,7 +378,7 @@
             player.updateQueue(player.currentTrack);
           }
           this.setLoading(false);
-          this.render();
+          this.render(true);
           return;
         }
       }
@@ -449,7 +458,7 @@
         this.updateFooterStatus('Error loading repository');
       } finally {
         this.setLoading(false);
-        this.render();
+        this.render(true);
       }
     },
 
@@ -691,20 +700,6 @@
 
       return `
         <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f] select-none ${isCurrentActive ? 'is-playing-active' : ''}" data-file-path="${escapeHtml(item.path)}">
-          ${isPlayable ? `
-          <div class="swipe-queue-reveal absolute inset-y-0 left-0 w-full bg-emerald-600 dark:bg-emerald-600 items-center px-4 text-white font-semibold text-xs select-none pointer-events-none transition-colors" style="display: none;">
-            <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs transition-transform duration-150">
-              <span class="w-4 h-4 shrink-0 text-white flex items-center justify-center">${getRowSvg('list-plus')}</span>
-              <span class="tracking-wider text-[11px] font-bold uppercase text-white">Add to Queue</span>
-            </div>
-          </div>
-          <div class="swipe-playlist-reveal absolute inset-y-0 right-0 w-full bg-amber-600 dark:bg-amber-600 items-center justify-end px-4 text-white font-semibold text-xs select-none pointer-events-none transition-colors" style="display: none;">
-            <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs transition-transform duration-150">
-              <span class="tracking-wider text-[11px] font-bold uppercase text-white">Add to Playlist</span>
-              <span class="w-4 h-4 shrink-0 text-white flex items-center justify-center">${getRowSvg('folder-plus')}</span>
-            </div>
-          </div>
-          ` : ''}
           <div class="file-row relative bg-white dark:bg-[#15181f] grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 transition text-sm cursor-pointer select-none ${activeRowClass}" data-path="${escapeHtml(item.path)}" data-is-dir="${isFolder}" title="${escapeHtml(item.name)} (${isFolder ? 'Folder' : (isPlayable ? 'Click to play' : 'Click to open in new tab')})">
             <div class="col-span-8 md:col-span-8 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-1">
               ${thumbSlotHtml}
@@ -725,18 +720,30 @@
       `;
     },
 
-    render() {
-      const state = window.Trove.state || {};
-      const player = window.Trove.player || {};
-
-      if (this.sentinelObserver) {
-        this.sentinelObserver.disconnect();
-        this.sentinelObserver = null;
+    ensureContainerStructure() {
+      if (!this.elements.fileList) return;
+      if (!this.elements.itemsContainer || !this.elements.fileList.contains(this.elements.itemsContainer)) {
+        this.elements.fileList.innerHTML = `
+          <div id="virtual-parent-dir"></div>
+          <div id="virtual-spacer-top" style="height: 0px; pointer-events: none;"></div>
+          <div id="virtual-items-container" class="divide-y divide-almond-cream/60 dark:divide-[#202530]"></div>
+          <div id="virtual-spacer-bottom" style="height: 0px; pointer-events: none;"></div>
+        `;
+        this.elements.virtualParentDir = document.getElementById('virtual-parent-dir');
+        this.elements.topSpacer = document.getElementById('virtual-spacer-top');
+        this.elements.itemsContainer = document.getElementById('virtual-items-container');
+        this.elements.bottomSpacer = document.getElementById('virtual-spacer-bottom');
       }
+    },
+
+    render(resetScroll = false) {
+      const state = window.Trove.state || {};
 
       if (state.isLoading) {
         this.showState('loader-2', 'Loading Repository', 'Connecting to Hugging Face dataset tree...', false, '', null, true);
-        if (this.elements.fileList) this.elements.fileList.innerHTML = '';
+        if (this.elements.itemsContainer) this.elements.itemsContainer.innerHTML = '';
+        if (this.elements.topSpacer) this.elements.topSpacer.style.height = '0px';
+        if (this.elements.bottomSpacer) this.elements.bottomSpacer.style.height = '0px';
         return;
       }
 
@@ -749,7 +756,9 @@
           'Enter Token / Retry',
           () => { if (window.Trove.settings) window.Trove.settings.open(); }
         );
-        if (this.elements.fileList) this.elements.fileList.innerHTML = '';
+        if (this.elements.itemsContainer) this.elements.itemsContainer.innerHTML = '';
+        if (this.elements.topSpacer) this.elements.topSpacer.style.height = '0px';
+        if (this.elements.bottomSpacer) this.elements.bottomSpacer.style.height = '0px';
         return;
       }
 
@@ -758,7 +767,11 @@
       this.currentDisplayItems = this.getDisplayItems();
 
       if (this.currentDisplayItems.length === 0) {
-        if (this.elements.fileList) this.elements.fileList.innerHTML = '';
+        this.ensureContainerStructure();
+        if (this.elements.itemsContainer) this.elements.itemsContainer.innerHTML = '';
+        if (this.elements.virtualParentDir) this.elements.virtualParentDir.innerHTML = '';
+        if (this.elements.topSpacer) this.elements.topSpacer.style.height = '0px';
+        if (this.elements.bottomSpacer) this.elements.bottomSpacer.style.height = '0px';
         const filterLabel = FILTER_CONFIG[state.filterType]?.fullLabel || state.filterType;
         const message = state.searchQuery
           ? `No files matching "${state.searchQuery}"`
@@ -770,106 +783,93 @@
       }
 
       this.hideState();
+      this.ensureContainerStructure();
 
-      let html = '';
+      if (resetScroll && this.elements.fileList) {
+        this.elements.fileList.scrollTop = 0;
+      }
 
-      if (state.viewMode === 'tree' && state.currentDirectory !== '' && !state.searchQuery) {
-        html += `
-          <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f] select-none">
-            <div class="grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 hover:bg-almond-cream/20 dark:hover:bg-[#1a1f28] cursor-pointer transition text-sm" data-action="go-parent">
-              <div class="col-span-8 md:col-span-8 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-1">
-                <div class="w-9 h-9 rounded-lg bg-almond-cream/60 dark:bg-[#202532] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0">
-                  ${getRowSvg('corner-left-up')}
+      // Render parent directory item if in tree view and inside a subfolder
+      if (this.elements.virtualParentDir) {
+        if (state.viewMode === 'tree' && state.currentDirectory !== '' && !state.searchQuery) {
+          this.elements.virtualParentDir.innerHTML = `
+            <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f] select-none border-b border-almond-cream/60 dark:border-[#202530]">
+              <div class="grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 hover:bg-almond-cream/20 dark:hover:bg-[#1a1f28] cursor-pointer transition text-sm" data-action="go-parent">
+                <div class="col-span-8 md:col-span-8 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-1">
+                  <div class="w-9 h-9 rounded-lg bg-almond-cream/60 dark:bg-[#202532] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0">
+                    ${getRowSvg('corner-left-up')}
+                  </div>
+                  <div class="flex flex-col min-w-0 flex-1">
+                    <span class="font-semibold text-black dark:text-[#f3f4f6] truncate">..</span>
+                    <span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">Parent Directory</span>
+                  </div>
                 </div>
-                <div class="flex flex-col min-w-0 flex-1">
-                  <span class="font-semibold text-black dark:text-[#f3f4f6] truncate">..</span>
-                  <span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">Parent Directory</span>
+                <div class="col-span-4 md:col-span-4 flex items-center justify-end pr-1 sm:pr-2">
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">UP</span>
                 </div>
-              </div>
-              <div class="col-span-4 md:col-span-4 flex items-center justify-end pr-1 sm:pr-2">
-                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">UP</span>
               </div>
             </div>
-          </div>
-        `;
+          `;
+        } else {
+          this.elements.virtualParentDir.innerHTML = '';
+        }
       }
 
-      // Progressive window: render initial batch
-      this.renderedCount = Math.min(this.pageSize, this.currentDisplayItems.length);
-      const visibleItems = this.currentDisplayItems.slice(0, this.renderedCount);
-
-      visibleItems.forEach(item => {
-        const isCurrentActive = Boolean(player.currentTrack && player.currentTrack.path === item.path);
-        html += this.renderItemHtml(item, isCurrentActive);
-      });
-
-      if (this.renderedCount < this.currentDisplayItems.length) {
-        html += `
-          <div id="explorer-scroll-sentinel" class="py-3 px-4 flex items-center justify-center gap-2 text-xs font-mono text-stone-brown/70 dark:text-[#8b95a5] select-none">
-            <svg class="w-3.5 h-3.5 animate-spin text-stone-brown dark:text-[#c6ac8f]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
-            <span>Loading more (${this.renderedCount} of ${this.currentDisplayItems.length})...</span>
-          </div>
-        `;
-      }
-
-      if (this.elements.fileList) {
-        this.elements.fileList.innerHTML = html;
-      }
-
-      this.setupInfiniteScrollObserver();
-      this.initListThumbnailObserver();
+      // Reset window indices and recalculate virtual window
+      this.virtualStartIndex = -1;
+      this.virtualEndIndex = -1;
+      this.updateVirtualWindow(true);
     },
 
-    setupInfiniteScrollObserver() {
-      if (this.sentinelObserver) {
-        this.sentinelObserver.disconnect();
-        this.sentinelObserver = null;
+    updateVirtualWindow(force = false) {
+      if (!this.elements.fileList) return;
+      const total = (this.currentDisplayItems || []).length;
+      if (total === 0) return;
+
+      this.ensureContainerStructure();
+
+      const state = window.Trove.state || {};
+      const isFlatOrSearch = state.viewMode === 'flat' || Boolean(state.searchQuery);
+      const rowHeight = isFlatOrSearch ? 64 : 58;
+      this.rowHeight = rowHeight;
+
+      const scrollTop = Math.max(0, this.elements.fileList.scrollTop);
+      const viewportHeight = this.elements.fileList.clientHeight || 600;
+
+      const firstVisible = Math.floor(scrollTop / rowHeight);
+      const visibleCount = Math.ceil(viewportHeight / rowHeight);
+
+      const startIndex = Math.max(0, firstVisible - this.bufferSize);
+      const endIndex = Math.min(total, firstVisible + visibleCount + this.bufferSize);
+
+      if (!force && startIndex === this.virtualStartIndex && endIndex === this.virtualEndIndex) {
+        return;
       }
 
-      const sentinel = document.getElementById('explorer-scroll-sentinel');
-      if (!sentinel || !('IntersectionObserver' in window)) return;
+      this.virtualStartIndex = startIndex;
+      this.virtualEndIndex = endIndex;
 
-      this.sentinelObserver = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            this.loadNextBatch();
-          }
-        });
-      }, { rootMargin: '250px' });
+      const topHeight = startIndex * rowHeight;
+      const bottomHeight = (total - endIndex) * rowHeight;
 
-      this.sentinelObserver.observe(sentinel);
-    },
+      if (this.elements.topSpacer) {
+        this.elements.topSpacer.style.height = `${topHeight}px`;
+      }
+      if (this.elements.bottomSpacer) {
+        this.elements.bottomSpacer.style.height = `${bottomHeight}px`;
+      }
 
-    loadNextBatch() {
-      if (this.renderedCount >= this.currentDisplayItems.length) return;
       const player = window.Trove.player || {};
-      const sentinel = document.getElementById('explorer-scroll-sentinel');
-      if (!sentinel) return;
-
-      const prevCount = this.renderedCount;
-      const nextCount = Math.min(this.renderedCount + 40, this.currentDisplayItems.length);
-      this.renderedCount = nextCount;
-
-      const nextSlice = this.currentDisplayItems.slice(prevCount, nextCount);
+      const visibleSlice = this.currentDisplayItems.slice(startIndex, endIndex);
       let batchHtml = '';
-      nextSlice.forEach(item => {
+      for (let i = 0; i < visibleSlice.length; i++) {
+        const item = visibleSlice[i];
         const isCurrentActive = Boolean(player.currentTrack && player.currentTrack.path === item.path);
         batchHtml += this.renderItemHtml(item, isCurrentActive);
-      });
+      }
 
-      sentinel.insertAdjacentHTML('beforebegin', batchHtml);
-
-      if (this.renderedCount >= this.currentDisplayItems.length) {
-        if (this.sentinelObserver) {
-          this.sentinelObserver.disconnect();
-          this.sentinelObserver = null;
-        }
-        sentinel.remove();
-      } else {
-        const textSpan = sentinel.querySelector('span');
-        if (textSpan) {
-          textSpan.innerText = `Loading more (${this.renderedCount} of ${this.currentDisplayItems.length})...`;
-        }
+      if (this.elements.itemsContainer) {
+        this.elements.itemsContainer.innerHTML = batchHtml;
       }
 
       this.initListThumbnailObserver();
@@ -963,7 +963,7 @@
       });
 
       this.elements.breadcrumbs.innerHTML = html;
-      if (window.lucide) window.lucide.createIcons();
+      if (window.lucide && this.elements.breadcrumbs) window.lucide.createIcons({ root: this.elements.breadcrumbs });
     },
 
     updateViewToggleUI() {
@@ -974,7 +974,7 @@
         ? 'Current: Tree View. Click to switch to Flat View.' 
         : 'Current: Flat View. Click to switch to Tree View.';
       this.elements.viewToggleBtn.innerHTML = `<i data-lucide="${isTree ? 'folder-tree' : 'list'}" class="w-4 h-4"></i>`;
-      if (window.lucide) window.lucide.createIcons();
+      if (window.lucide) window.lucide.createIcons({ root: this.elements.viewToggleBtn });
     },
 
     updateFilterDropdownUI() {
@@ -998,7 +998,9 @@
           }
         });
       }
-      if (window.lucide) window.lucide.createIcons();
+      if (window.lucide && this.elements.filterDropdownBtn) {
+        window.lucide.createIcons({ root: this.elements.filterDropdownBtn });
+      }
     },
 
     initListThumbnailObserver() {
@@ -1170,6 +1172,17 @@
       const state = window.Trove.state || {};
       const player = window.Trove.player || {};
 
+      // Virtual windowed scroll listener
+      if (this.elements.fileList) {
+        this.elements.fileList.addEventListener('scroll', () => {
+          if (this.scrollRafId) return;
+          this.scrollRafId = requestAnimationFrame(() => {
+            this.scrollRafId = null;
+            this.updateVirtualWindow();
+          });
+        }, { passive: true });
+      }
+
       if (this.elements.refreshBtn) {
         this.elements.refreshBtn.addEventListener('click', () => {
           this.loadRepository(true);
@@ -1194,7 +1207,7 @@
           } else {
             this.elements.clearSearchBtn?.classList.add('hidden');
           }
-          this.render();
+          this.render(true);
         });
       }
 
@@ -1203,7 +1216,7 @@
           if (this.elements.searchInput) this.elements.searchInput.value = '';
           state.searchQuery = '';
           this.elements.clearSearchBtn.classList.add('hidden');
-          this.render();
+          this.render(true);
         });
       }
 
@@ -1213,7 +1226,7 @@
           state.viewMode = state.viewMode === 'tree' ? 'flat' : 'tree';
           this.updateViewToggleUI();
           if (window.Trove.store) window.Trove.store.saveViewSettings();
-          this.render();
+          this.render(true);
         });
       }
 
@@ -1230,7 +1243,7 @@
             btnDownloaded.classList.remove('bg-emerald-50', 'dark:bg-emerald-950/40', 'text-emerald-700', 'dark:text-emerald-300', 'border-emerald-400', 'dark:border-emerald-600/60');
             btnDownloaded.classList.add('text-stone-brown', 'dark:text-[#9aa4b2]', 'bg-white', 'dark:bg-[#15181f]');
           }
-          this.render();
+          this.render(true);
         });
       }
 
@@ -1279,7 +1292,7 @@
           this.updateFilterDropdownUI();
           this.elements.filterDropdownMenu.classList.add('hidden');
           if (window.Trove.store) window.Trove.store.saveViewSettings();
-          this.render();
+          this.render(true);
         });
 
         document.addEventListener('click', (e) => {
@@ -1317,7 +1330,7 @@
           this.updateSortUI();
           this.elements.sortDropdownMenu.classList.add('hidden');
           if (window.Trove.store) window.Trove.store.saveViewSettings();
-          this.render();
+          this.render(true);
         });
 
         document.addEventListener('click', (e) => {
@@ -1342,7 +1355,7 @@
           }
           this.updateSortUI();
           if (window.Trove.store) window.Trove.store.saveViewSettings();
-          this.render();
+          this.render(true);
         });
       };
 
@@ -1357,7 +1370,7 @@
           if (item && item.dataset.dir !== undefined) {
             state.currentDirectory = item.dataset.dir;
             if (window.Trove.store) window.Trove.store.saveViewSettings();
-            this.render();
+            this.render(true);
           }
         });
       }
@@ -1371,7 +1384,7 @@
             parts.pop();
             state.currentDirectory = parts.join('/');
             if (window.Trove.store) window.Trove.store.saveViewSettings();
-            this.render();
+            this.render(true);
             return;
           }
 
@@ -1423,7 +1436,7 @@
           if (isDir) {
             state.currentDirectory = path;
             if (window.Trove.store) window.Trove.store.saveViewSettings();
-            this.render();
+            this.render(true);
           } else {
             const item = (state.allItems || []).find(i => i.path === path);
             if (!item) return;

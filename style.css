@@ -398,12 +398,4 @@ code, .font-mono {
   -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%);
 }
 
-/* =========================================================================
-   PERFORMANCE & DOM OPTIMIZATION (Option C)
-   Skips off-screen row layouts and rendering, saving GPU memory and layout cost
-   ========================================================================= */
-.file-row-wrapper {
-  content-visibility: auto;
-  contain-intrinsic-size: 0 58px;
-}
 
