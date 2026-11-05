@@ -132,7 +132,8 @@ def parse_targets(raw_text: str):
         elif re.match(r"^[a-zA-Z0-9_-]{11}$", clean):
             targets.append(f"https://www.youtube.com/watch?v={clean}")
         elif "youtube.com" in clean or "youtu.be" in clean:
-            clean = re.sub(r'[?&](?:si|feature|pp)=[^&\s]+', '', clean)
+            clean = re.sub(r'[?&](?:si|su|feature|pp|igsh|fbclid|utm_[a-zA-Z0-9_]+)=[^&\s#]+', '', clean)
+            clean = re.sub(r'[?&]+$', '', clean)
             if not clean.startswith("http://") and not clean.startswith("https://"):
                 clean = f"https://{clean}"
             targets.append(clean)

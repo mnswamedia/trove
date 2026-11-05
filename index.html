@@ -1059,12 +1059,24 @@
       </div>
 
       <!-- Multi-select Toolbar (shows when items are available) -->
-      <div id="related-toolbar" class="px-5 sm:px-7 py-2 bg-almond-cream/20 dark:bg-[#181c25] border-b border-almond-cream dark:border-[#262c38] flex items-center justify-between text-xs">
-        <label class="flex items-center gap-2 cursor-pointer select-none">
-          <input type="checkbox" id="related-select-all" class="rounded border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#c6ac8f] focus:ring-0">
-          <span class="font-medium text-stone-brown dark:text-[#9aa4b2]">Select All</span>
-        </label>
-        <span id="related-selected-summary" class="font-mono text-[11px] text-stone-brown/70 dark:text-[#758092]">0 selected</span>
+      <div id="related-toolbar" class="px-4 sm:px-7 py-2 bg-almond-cream/20 dark:bg-[#181c25] border-b border-almond-cream dark:border-[#262c38] flex items-center justify-between text-xs gap-2 select-none">
+        <div class="flex items-center gap-2.5 min-w-0" id="related-toolbar-left">
+          <label class="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" id="related-select-all" class="rounded border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#c6ac8f] focus:ring-0">
+            <span class="font-medium text-stone-brown dark:text-[#9aa4b2]" id="related-select-all-label">Select All</span>
+          </label>
+          <span id="related-selected-summary" class="font-mono text-[11px] text-stone-brown/70 dark:text-[#758092]">0 selected</span>
+        </div>
+
+        <!-- Segmented Tab Switcher (Visible when playlists are present) -->
+        <div id="related-view-tabs" class="flex items-center gap-0.5 bg-almond-cream/60 dark:bg-[#12151c] p-0.5 rounded-lg border border-almond-cream/80 dark:border-[#262c38] text-[11px] font-semibold shrink-0 hidden">
+          <button type="button" id="tab-recs-tracks" class="px-2.5 py-1 rounded-md transition shadow-xs bg-white dark:bg-[#202532] text-jet-black dark:text-[#f3f4f6] cursor-pointer">
+            Tracks
+          </button>
+          <button type="button" id="tab-recs-playlists" class="px-2.5 py-1 rounded-md transition text-stone-brown/70 dark:text-[#9aa4b2] hover:text-black dark:hover:text-white cursor-pointer">
+            Playlists
+          </button>
+        </div>
       </div>
 
       <!-- Scrollable Tracks List -->

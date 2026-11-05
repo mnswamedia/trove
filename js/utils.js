@@ -100,10 +100,10 @@
       .replace(/'/g, '&#039;');
   }
 
-  // YouTube URL Cleaner (Strips playlists, tracking tokens, ?si=..., &feature=..., etc.)
+  // YouTube and Media URL Cleaner (Strips playlists tracking tokens, ?si=..., ?su=..., &feature=..., utm_*, etc.)
   function cleanYouTubeUrl(urlStr) {
     if (!urlStr) return '';
-    const trimmed = urlStr.trim();
+    let trimmed = urlStr.trim();
     if (!trimmed) return '';
 
     // If bare 11-char video ID
@@ -111,32 +111,43 @@
       return `https://www.youtube.com/watch?v=${trimmed}`;
     }
 
-    // Directly extract 11-char YouTube ID (handles youtu.be, watch?v=, watch?...&v=, shorts/, live/, embed/)
+    // Directly extract 11-char YouTube ID (handles youtu.be, watch?v=, watch?...&v=, shorts/, live/, embed/, v/)
     const match = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?(?:.*&)?v=|shorts\/|live\/))([a-zA-Z0-9_-]{11})/i);
     if (match && match[1]) {
-      if (trimmed.includes('/shorts/')) {
-        return `https://www.youtube.com/shorts/${match[1]}`;
+      const vid = match[1];
+      if (trimmed.toLowerCase().includes('/shorts/')) {
+        return `https://www.youtube.com/shorts/${vid}`;
       }
-      return `https://www.youtube.com/watch?v=${match[1]}`;
+      return `https://www.youtube.com/watch?v=${vid}`;
     }
 
-    // Fallback: parse URL and strip tracking parameters
+    // Check for YouTube / YouTube Music playlist URL (extract list= parameter cleanly without tracking query params)
+    const playlistMatch = trimmed.match(/(?:youtube\.com|youtu\.be)\/.*[?&]list=([a-zA-Z0-9_-]+)/i);
+    if (playlistMatch && playlistMatch[1]) {
+      return `https://www.youtube.com/playlist?list=${playlistMatch[1]}`;
+    }
+
+    // Fallback: parse URL and strip tracking parameters (si, su, feature, pp, igsh, fbclid, gclid, utm_*, etc.)
     let parsedUrl = trimmed;
-    if (!/^https?:\/\//i.test(parsedUrl)) {
+    if (!/^https?:\/\//i.test(parsedUrl) && (parsedUrl.includes('youtube.com') || parsedUrl.includes('youtu.be') || parsedUrl.includes('.'))) {
       parsedUrl = 'https://' + parsedUrl;
     }
 
     try {
       const u = new URL(parsedUrl);
-      u.searchParams.delete('si');
-      u.searchParams.delete('feature');
-      u.searchParams.delete('pp');
+      const trackingParams = ['si', 'su', 'feature', 'pp', 'igsh', 'fbclid', 'gclid', 'ref', 'source'];
+      trackingParams.forEach(p => u.searchParams.delete(p));
+      Array.from(u.searchParams.keys()).forEach(key => {
+        if (/^utm_/i.test(key)) {
+          u.searchParams.delete(key);
+        }
+      });
       return u.toString();
     } catch (_) {
       return trimmed
-        .replace(/[?&]si=[^&\s]+/gi, '')
-        .replace(/[?&]feature=[^&\s]+/gi, '')
-        .replace(/[?&]pp=[^&\s]+/gi, '');
+        .replace(/([?&])(?:si|su|feature|pp|igsh|fbclid|gclid|utm_[a-zA-Z0-9_]+)=[^&\s#]+/gi, '$1')
+        .replace(/[?&]+$/, '')
+        .replace(/\?&/, '?');
     }
   }
 
@@ -147,7 +158,7 @@
       if (!trimmedLine || trimmedLine.startsWith('#')) return line;
       return line.split(/\s+/).map(token => {
         if (!token) return '';
-        if (token.includes('youtu.be') || token.includes('youtube.com') || /^[a-zA-Z0-9_-]{11}$/.test(token)) {
+        if (token.includes('youtu.be') || token.includes('youtube.com') || /^[a-zA-Z0-9_-]{11}$/.test(token) || /[?&](?:si|su|feature|pp|igsh|utm_)/i.test(token)) {
           return cleanYouTubeUrl(token);
         }
         return token;

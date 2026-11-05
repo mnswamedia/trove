@@ -61,7 +61,8 @@
       }
 
       if (prefillUrl && this.elements.urlsInput) {
-        const cleaned = cleanAllInputUrls ? cleanAllInputUrls(prefillUrl) : prefillUrl;
+        const cleanFn = window.Trove.utils?.cleanAllInputUrls || cleanAllInputUrls;
+        const cleaned = cleanFn ? cleanFn(prefillUrl) : prefillUrl;
         this.elements.urlsInput.value = cleaned;
       }
 
@@ -104,7 +105,8 @@
       if (e) e.preventDefault();
 
       const rawUrls = this.elements.urlsInput ? this.elements.urlsInput.value.trim() : '';
-      const urlsText = cleanAllInputUrls ? cleanAllInputUrls(rawUrls) : rawUrls;
+      const cleanFn = window.Trove.utils?.cleanAllInputUrls || cleanAllInputUrls;
+      const urlsText = cleanFn ? cleanFn(rawUrls) : rawUrls;
       if (this.elements.urlsInput) this.elements.urlsInput.value = urlsText;
 
       const file = this.elements.fileInput?.files && this.elements.fileInput.files[0];
@@ -139,7 +141,7 @@
           return;
         }
       }
-      combinedTargets = cleanAllInputUrls ? cleanAllInputUrls(combinedTargets) : combinedTargets;
+      combinedTargets = cleanFn ? cleanFn(combinedTargets) : combinedTargets;
 
       const selectedFormat = document.querySelector('input[name="import-format"]:checked')?.value || 'm4a';
       const workflowFile = CONFIG.github?.workflowFile || 'ingest.yml';
@@ -305,29 +307,44 @@
         this.elements.form.addEventListener('submit', (e) => this.handleSubmit(e));
       }
 
-      // Auto-clean pasted or entered URLs (strips ?si=..., &feature=..., etc.)
+      // Auto-clean pasted or entered URLs (strips ?si=..., ?su=..., &feature=..., etc.)
       if (this.elements.urlsInput) {
-        this.elements.urlsInput.addEventListener('paste', () => {
-          setTimeout(() => {
-            if (this.elements.urlsInput) {
-              const raw = this.elements.urlsInput.value;
-              const cleaned = cleanAllInputUrls ? cleanAllInputUrls(raw) : raw;
-              if (cleaned !== raw) {
-                this.elements.urlsInput.value = cleaned;
-              }
-            }
-          }, 0);
-        });
+        const cleanInputTextarea = () => {
+          if (!this.elements.urlsInput) return;
+          const raw = this.elements.urlsInput.value;
+          const cleanFn = window.Trove.utils?.cleanAllInputUrls || cleanAllInputUrls;
+          if (!cleanFn) return;
+          const cleaned = cleanFn(raw);
+          if (cleaned !== raw) {
+            const start = this.elements.urlsInput.selectionStart;
+            const end = this.elements.urlsInput.selectionEnd;
+            this.elements.urlsInput.value = cleaned;
+            try {
+              this.elements.urlsInput.setSelectionRange(
+                Math.min(start, cleaned.length),
+                Math.min(end, cleaned.length)
+              );
+            } catch (_) {}
+          }
+        };
 
-        this.elements.urlsInput.addEventListener('blur', () => {
-          if (this.elements.urlsInput) {
-            const raw = this.elements.urlsInput.value;
-            const cleaned = cleanAllInputUrls ? cleanAllInputUrls(raw) : raw;
-            if (cleaned !== raw) {
-              this.elements.urlsInput.value = cleaned;
-            }
+        // Listen to 'input' event (handles mobile keyboard suggestion bar, Gboard, Samsung Keyboard, autofill)
+        this.elements.urlsInput.addEventListener('input', () => {
+          const val = this.elements.urlsInput.value;
+          // If input contains query params (si=, su=, feature=, pp=, etc.) or youtu, clean immediately
+          if (/[?&](?:si|su|feature|pp|igsh|utm_)/i.test(val) || val.includes('youtu.be') || val.includes('watch?')) {
+            cleanInputTextarea();
           }
         });
+
+        // Listen to 'paste' event
+        this.elements.urlsInput.addEventListener('paste', () => {
+          setTimeout(cleanInputTextarea, 0);
+        });
+
+        // Listen to 'change' and 'blur'
+        this.elements.urlsInput.addEventListener('change', cleanInputTextarea);
+        this.elements.urlsInput.addEventListener('blur', cleanInputTextarea);
       }
 
       // Dropzone & File input
