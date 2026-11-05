@@ -330,32 +330,71 @@
     },
 
     async commitLyricsToHF(repo, token, fileName, lyricsData, trackTitle) {
-      if (!repo || !repo.id || !token || !fileName || !lyricsData) return;
+      if (!repo || !token || !fileName || !lyricsData) return;
+      const repoId = (
+        (CONFIG.storage?.hfRepoKey && localStorage.getItem(CONFIG.storage.hfRepoKey)) ||
+        repo.id ||
+        'mnswa/trove_dataset'
+      ).trim();
+      if (!repoId) return;
+
       try {
         const jsonStr = JSON.stringify(lyricsData, null, 2);
-        const encodedContent = btoa(unescape(encodeURIComponent(jsonStr)));
+        let encodedContent;
+        try {
+          const bytes = new TextEncoder().encode(jsonStr);
+          let binary = '';
+          for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          encodedContent = btoa(binary);
+        } catch (_) {
+          encodedContent = btoa(unescape(encodeURIComponent(jsonStr)));
+        }
+
         const filePath = `lyrics/${fileName}`;
 
-        const commitUrl = `https://huggingface.co/api/datasets/${repo.id}/commit/${repo.branch || 'main'}`;
-        const formData = new FormData();
-        formData.append('operations', JSON.stringify([
-          {
-            operation: 'upload',
-            path: filePath,
-            encoding: 'base64',
-            content: encodedContent
+        const headerLine = JSON.stringify({
+          key: 'header',
+          value: {
+            summary: `Save lyrics for "${trackTitle || fileName}"`,
+            description: ''
           }
-        ]));
-        formData.append('summary', `Save lyrics for "${trackTitle || fileName}"`);
-
-        const res = await fetch(commitUrl, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` },
-          body: formData
         });
+        const fileLine = JSON.stringify({
+          key: 'file',
+          value: {
+            path: filePath,
+            content: encodedContent,
+            encoding: 'base64'
+          }
+        });
+        const ndjsonBody = `${headerLine}\n${fileLine}\n`;
 
-        if (res.ok) {
-          console.log(`Lyrics for "${trackTitle}" stored in HF dataset (${filePath})`);
+        const branch = repo.branch || 'main';
+        const candidateEndpoints = [
+          `https://huggingface.co/api/datasets/${repoId}/commit/${encodeURIComponent(branch)}`,
+          `https://huggingface.co/api/datasets/${repoId}/commit/main`,
+          `https://huggingface.co/api/datasets/${repoId}/commit/master`,
+          `https://huggingface.co/api/models/${repoId}/commit/${encodeURIComponent(branch)}`
+        ].filter((u, idx, arr) => arr.indexOf(u) === idx);
+
+        for (const commitUrl of candidateEndpoints) {
+          try {
+            const res = await fetch(commitUrl, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/x-ndjson'
+              },
+              body: ndjsonBody
+            });
+
+            if (res.ok) {
+              console.log(`Lyrics for "${trackTitle}" stored in HF dataset (${filePath})`);
+              return;
+            }
+          } catch (_) {}
         }
       } catch (err) {
         console.warn('Asynchronous HF lyrics upload note:', err);

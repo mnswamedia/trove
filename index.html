@@ -1187,9 +1187,13 @@
         </div>
 
         <div id="playlists-actions-bar" class="flex items-center gap-1.5 hidden">
-          <button id="btn-backup-playlists-hf" type="button" class="px-2.5 py-1 text-xs font-medium rounded-lg text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition flex items-center gap-1" title="Backup all playlists to Hugging Face dataset">
+          <button id="btn-backup-playlists-hf" type="button" class="px-2.5 py-1 text-xs font-medium rounded-lg text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition flex items-center gap-1" title="Sync playlists & liked songs to Hugging Face dataset">
             <i data-lucide="cloud-upload" class="w-3.5 h-3.5"></i>
-            <span class="hidden sm:inline">Backup to HF</span>
+            <span class="hidden sm:inline">Sync to HF</span>
+          </button>
+          <button id="btn-restore-playlists-hf" type="button" class="px-2.5 py-1 text-xs font-medium rounded-lg text-stone-brown dark:text-[#c6ac8f] hover:bg-almond-cream/40 dark:hover:bg-[#202532] transition flex items-center gap-1" title="Restore playlists & liked songs from Hugging Face">
+            <i data-lucide="cloud-download" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Restore</span>
           </button>
           <button id="btn-new-playlist" type="button" class="px-3 py-1 text-xs font-semibold rounded-lg bg-jet-black text-white dark:bg-[#f3f4f6] dark:text-[#0e1116] transition shadow-xs flex items-center gap-1">
             <i data-lucide="plus" class="w-3.5 h-3.5"></i>

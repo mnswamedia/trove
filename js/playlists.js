@@ -104,6 +104,7 @@
         btnNewPlaylist: document.getElementById('btn-new-playlist'),
         btnCreateFirst: document.getElementById('btn-create-first-playlist'),
         btnBackupHf: document.getElementById('btn-backup-playlists-hf'),
+        btnRestoreHf: document.getElementById('btn-restore-playlists-hf'),
         playlistDetailView: document.getElementById('playlist-detail-view'),
         btnBackToPlaylists: document.getElementById('btn-back-to-playlists'),
         detailTitle: document.getElementById('detail-playlist-title'),
@@ -127,6 +128,10 @@
       this.setupEventListeners();
       this.loadLocalCache();
       this.fetchFromD1();
+      // If local cache is empty, attempt silent background restore from Hugging Face backup
+      if (this.playlists.length === 0) {
+        this.restoreFromHuggingFace(true);
+      }
     },
 
     setupEventListeners() {
@@ -211,6 +216,9 @@
       if (this.elements.btnBackupHf) {
         this.elements.btnBackupHf.addEventListener('click', () => this.backupToHuggingFace());
       }
+      if (this.elements.btnRestoreHf) {
+        this.elements.btnRestoreHf.addEventListener('click', () => this.restoreFromHuggingFace());
+      }
 
       // Subview Details Back
       if (this.elements.btnBackToPlaylists) {
@@ -236,6 +244,7 @@
       }
 
       window.addEventListener('trove:favorites-changed', () => {
+        this.syncFavoritesToD1();
         if (this.isOpen && this.activeTab === 'playlists') {
           this.renderPlaylists();
         }
@@ -909,6 +918,15 @@
       }, 1500);
     },
 
+    syncFavoritesToD1() {
+      // Debounce saving liked songs to D1 (2s)
+      clearTimeout(this.pendingFavsSyncTimer);
+      this.pendingFavsSyncTimer = setTimeout(() => {
+        const favTracks = this.getFavoriteTracks();
+        this.syncPlaylistToD1('_favorites', 'Liked Songs', favTracks);
+      }, 2000);
+    },
+
     async syncPlaylistToD1(id, customName = null, customItems = null) {
       const workerUrl = this.getWorkerUrl();
       if (!workerUrl) return;
@@ -950,8 +968,8 @@
         if (res.ok) {
           const json = await res.json();
           if (json && json.success && Array.isArray(json.playlists)) {
-            // Reconcile playlists
-            const serverPlaylists = json.playlists.filter(p => p.id !== '_queue');
+            // Reconcile custom playlists
+            const serverPlaylists = json.playlists.filter(p => p.id !== '_queue' && p.id !== '_favorites');
             if (serverPlaylists.length > 0) {
               this.playlists = serverPlaylists;
               this.saveLocalCache();
@@ -964,6 +982,21 @@
               if (localQueue.length === 0 && serverQueue.items.length > 0) {
                 this.saveStoredQueue(serverQueue.items);
                 this.updateQueueCounterUI();
+              }
+            }
+
+            // Reconcile liked songs from D1 if local is empty
+            const serverFavs = json.playlists.find(p => p.id === '_favorites');
+            if (serverFavs && Array.isArray(serverFavs.items) && serverFavs.items.length > 0) {
+              const localFavs = window.Trove.utils?.getFavorites ? window.Trove.utils.getFavorites() : [];
+              if (localFavs.length === 0) {
+                const paths = serverFavs.items.map(it => (typeof it === 'string' ? it : it.path)).filter(Boolean);
+                if (paths.length > 0) {
+                  localStorage.setItem('trove_favorites', JSON.stringify(paths));
+                  window.dispatchEvent(new CustomEvent('trove:favorites-changed', {
+                    detail: { favorites: paths }
+                  }));
+                }
               }
             }
 
@@ -986,10 +1019,17 @@
     async backupToHuggingFace() {
       const state = window.Trove.state || {};
       const repo = CONFIG.repo || {};
-      if (!state.token) {
+      const token = state.token || (CONFIG.storage?.tokenKey && localStorage.getItem(CONFIG.storage.tokenKey)) || localStorage.getItem('trove_hf_token');
+      if (!token) {
         if (showToast) showToast('Hugging Face token required to backup');
         return;
       }
+
+      const repoId = (
+        (CONFIG.storage?.hfRepoKey && localStorage.getItem(CONFIG.storage.hfRepoKey)) ||
+        repo.id ||
+        'mnswa/trove_dataset'
+      ).trim();
 
       const btn = this.elements.btnBackupHf;
       let origHtml = null;
@@ -997,53 +1037,273 @@
         origHtml = btn.innerHTML;
         btn.disabled = true;
         btn.classList.add('opacity-75', 'pointer-events-none');
-        btn.innerHTML = '<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Backing up...</span>';
+        btn.innerHTML = '<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Syncing...</span>';
         if (window.lucide) window.lucide.createIcons();
       }
 
-      if (showToast) showToast('Backing up playlists to Hugging Face...');
+      if (showToast) showToast('Syncing playlists & liked songs to Hugging Face...');
 
       try {
+        const favPaths = window.Trove.utils?.getFavorites
+          ? window.Trove.utils.getFavorites()
+          : (() => {
+              try { return JSON.parse(localStorage.getItem('trove_favorites') || '[]'); } catch (_) { return []; }
+            })();
+
+        const favTracks = this.getFavoriteTracks();
+        const userPlaylists = this.playlists.filter(p => p.id !== '_queue' && p.id !== '_favorites');
+
+        // Create standard smart playlist entry for Liked Songs
+        const likedPlaylistEntry = {
+          id: '_favorites',
+          name: 'Liked Songs',
+          items: favTracks,
+          updatedAt: Date.now()
+        };
+
         const snapshot = {
-          version: 1,
+          version: 2,
           updatedAt: new Date().toISOString(),
-          playlists: this.playlists,
+          playlists: [likedPlaylistEntry, ...userPlaylists],
+          favorites: favPaths,
+          likedTracks: favTracks,
           activeQueue: this.getStoredQueue() || []
         };
 
         const jsonStr = JSON.stringify(snapshot, null, 2);
-        const encodedContent = btoa(unescape(encodeURIComponent(jsonStr)));
+        let encodedContent;
+        try {
+          const bytes = new TextEncoder().encode(jsonStr);
+          let binary = '';
+          for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          encodedContent = btoa(binary);
+        } catch (_) {
+          encodedContent = btoa(unescape(encodeURIComponent(jsonStr)));
+        }
+
         const filePath = 'metadata/playlists.json';
 
-        // Hugging Face Hub Commit API
-        const commitUrl = `https://huggingface.co/api/datasets/${repo.id}/commit/${repo.branch || 'main'}`;
-        const formData = new FormData();
-        formData.append('operations', JSON.stringify([
-          {
-            operation: 'upload',
-            path: filePath,
-            encoding: 'base64',
-            content: encodedContent
+        // Hugging Face Hub Commit API requires application/x-ndjson
+        const headerLine = JSON.stringify({
+          key: 'header',
+          value: {
+            summary: 'Backup custom playlists, liked songs, and queue',
+            description: `Trove snapshot with ${userPlaylists.length} custom playlists and ${favPaths.length} liked tracks`
           }
-        ]));
-        formData.append('summary', 'Backup custom playlists and queue');
-
-        const res = await fetch(commitUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${state.token}`
-          },
-          body: formData
         });
+        const fileLine = JSON.stringify({
+          key: 'file',
+          value: {
+            path: filePath,
+            content: encodedContent,
+            encoding: 'base64'
+          }
+        });
+        const ndjsonBody = `${headerLine}\n${fileLine}\n`;
 
-        if (res.ok) {
-          if (showToast) showToast('Playlists backed up to Hugging Face!');
+        const branch = repo.branch || 'main';
+        const candidateEndpoints = [
+          `https://huggingface.co/api/datasets/${repoId}/commit/${encodeURIComponent(branch)}`,
+          `https://huggingface.co/api/datasets/${repoId}/commit/main`,
+          `https://huggingface.co/api/datasets/${repoId}/commit/master`,
+          `https://huggingface.co/api/models/${repoId}/commit/${encodeURIComponent(branch)}`,
+          `https://huggingface.co/api/models/${repoId}/commit/main`
+        ].filter((u, idx, arr) => arr.indexOf(u) === idx);
+
+        let commitSuccess = false;
+        let lastError = null;
+
+        for (const commitUrl of candidateEndpoints) {
+          try {
+            const res = await fetch(commitUrl, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/x-ndjson'
+              },
+              body: ndjsonBody
+            });
+
+            if (res.ok) {
+              commitSuccess = true;
+              break;
+            } else if (res.status === 401 || res.status === 403) {
+              throw new Error(`HF returned ${res.status}: Token lacks write permissions`);
+            } else if (res.status === 404) {
+              lastError = new Error(`Commit route not found (404) on ${commitUrl}`);
+              continue;
+            } else {
+              const errText = await res.text().catch(() => '');
+              throw new Error(`HF responded with HTTP ${res.status}: ${errText.slice(0, 100)}`);
+            }
+          } catch (e) {
+            if (e.message && e.message.includes('Token lacks write permissions')) {
+              throw e;
+            }
+            lastError = e;
+          }
+        }
+
+        // Direct raw PUT upload fallback if commit endpoints return 404
+        if (!commitSuccess) {
+          const rawUploadUrls = [
+            `https://huggingface.co/api/datasets/${repoId}/upload/main/${filePath}`,
+            `https://huggingface.co/api/buckets/${repoId}/raw/${filePath}`
+          ];
+          for (const rawUrl of rawUploadUrls) {
+            try {
+              const rawRes = await fetch(rawUrl, {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                },
+                body: jsonStr
+              });
+              if (rawRes.ok) {
+                commitSuccess = true;
+                break;
+              }
+            } catch (_) {}
+          }
+        }
+
+        if (commitSuccess) {
+          if (showToast) showToast(`Playlists & ${favPaths.length} liked songs synced to HF!`);
         } else {
-          throw new Error(`HF responded with HTTP ${res.status}`);
+          throw lastError || new Error('Could not commit playlists to Hugging Face');
         }
       } catch (err) {
         console.error('Backup error:', err);
-        if (showToast) showToast(`Backup failed: ${err.message}`);
+        if (showToast) showToast(`Sync failed: ${err.message}`);
+      } finally {
+        if (btn && origHtml !== null) {
+          btn.disabled = false;
+          btn.classList.remove('opacity-75', 'pointer-events-none');
+          btn.innerHTML = origHtml;
+          if (window.lucide) window.lucide.createIcons();
+        }
+      }
+    },
+
+    async restoreFromHuggingFace(silent = false) {
+      const state = window.Trove.state || {};
+      const repo = CONFIG.repo || {};
+      const token = state.token || (CONFIG.storage?.tokenKey && localStorage.getItem(CONFIG.storage.tokenKey)) || localStorage.getItem('trove_hf_token');
+      const repoId = (
+        (CONFIG.storage?.hfRepoKey && localStorage.getItem(CONFIG.storage.hfRepoKey)) ||
+        repo.id ||
+        'mnswa/trove_dataset'
+      ).trim();
+      const branch = repo.branch || 'main';
+
+      const btn = this.elements.btnRestoreHf;
+      let origHtml = null;
+      if (btn && !silent) {
+        origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.classList.add('opacity-75', 'pointer-events-none');
+        btn.innerHTML = '<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Restoring...</span>';
+        if (window.lucide) window.lucide.createIcons();
+      }
+
+      if (!silent && showToast) showToast('Restoring playlists from Hugging Face...');
+
+      const candidateUrls = [
+        `https://huggingface.co/api/buckets/${repoId}/raw/metadata/playlists.json`,
+        `https://huggingface.co/buckets/${repoId}/raw/metadata/playlists.json`,
+        `https://huggingface.co/buckets/${repoId}/resolve/metadata/playlists.json`,
+        `https://huggingface.co/datasets/${repoId}/raw/${branch}/metadata/playlists.json`,
+        `https://huggingface.co/datasets/${repoId}/resolve/${branch}/metadata/playlists.json`,
+        `https://huggingface.co/datasets/${repoId}/raw/main/metadata/playlists.json`,
+        `https://huggingface.co/datasets/${repoId}/raw/master/metadata/playlists.json`
+      ];
+
+      let snapshot = null;
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+      for (const url of candidateUrls) {
+        try {
+          const res = await fetch(url, { headers });
+          if (res.ok) {
+            snapshot = await res.json();
+            if (snapshot && (Array.isArray(snapshot.playlists) || Array.isArray(snapshot.favorites))) {
+              break;
+            }
+          }
+        } catch (_) {}
+      }
+
+      try {
+        if (!snapshot) {
+          if (!silent && showToast) showToast('No remote playlist backup found on Hugging Face');
+          return false;
+        }
+
+        // 1. Restore Custom Playlists
+        if (Array.isArray(snapshot.playlists)) {
+          const validPlaylists = snapshot.playlists.filter(p => p.id !== '_queue' && p.id !== '_favorites');
+          if (validPlaylists.length > 0) {
+            if (this.playlists.length === 0) {
+              this.playlists = validPlaylists;
+            } else {
+              const existingIds = new Set(this.playlists.map(p => p.id));
+              for (const pl of validPlaylists) {
+                if (!existingIds.has(pl.id)) {
+                  this.playlists.push(pl);
+                }
+              }
+            }
+            this.saveLocalCache();
+          }
+        }
+
+        // 2. Restore Liked Songs / Favorites
+        let favPaths = [];
+        if (Array.isArray(snapshot.favorites)) {
+          favPaths = snapshot.favorites.map(it => (typeof it === 'string' ? it : it?.path)).filter(Boolean);
+        } else if (Array.isArray(snapshot.likedTracks)) {
+          favPaths = snapshot.likedTracks.map(it => (typeof it === 'string' ? it : it?.path)).filter(Boolean);
+        } else if (Array.isArray(snapshot.playlists)) {
+          const favPl = snapshot.playlists.find(p => p.id === '_favorites');
+          if (favPl && Array.isArray(favPl.items)) {
+            favPaths = favPl.items.map(it => (typeof it === 'string' ? it : it?.path)).filter(Boolean);
+          }
+        }
+
+        if (favPaths.length > 0) {
+          const localFavs = window.Trove.utils?.getFavorites ? window.Trove.utils.getFavorites() : [];
+          const mergedFavs = Array.from(new Set([...localFavs, ...favPaths]));
+          localStorage.setItem('trove_favorites', JSON.stringify(mergedFavs));
+          window.dispatchEvent(new CustomEvent('trove:favorites-changed', {
+            detail: { favorites: mergedFavs }
+          }));
+        }
+
+        // 3. Restore active queue if local queue is empty
+        if (Array.isArray(snapshot.activeQueue) && snapshot.activeQueue.length > 0) {
+          const localQueue = this.getQueue();
+          if (localQueue.length === 0) {
+            this.saveStoredQueue(snapshot.activeQueue);
+            this.updateQueueCounterUI();
+          }
+        }
+
+        if (this.isOpen) {
+          if (this.activeTab === 'queue') this.renderQueue();
+          else this.renderPlaylists();
+        }
+
+        if (!silent && showToast) {
+          showToast(`Playlists & Liked Songs restored from HF! (${this.playlists.length} playlists, ${favPaths.length} liked)`);
+        }
+        return true;
+      } catch (err) {
+        console.error('Restore error:', err);
+        if (!silent && showToast) showToast(`Restore error: ${err.message}`);
+        return false;
       } finally {
         if (btn && origHtml !== null) {
           btn.disabled = false;
