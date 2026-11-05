@@ -79,28 +79,31 @@ class WarpTunnel:
             os.chmod(local_path, 0o755)
         return local_path
 
-    def _generate_wg_conf(self) -> str:
+    def _generate_wg_conf(self, work_dir: str = None) -> str:
         """Generate a fresh WireGuard profile via wgcf, mapping domain to IPv4 Anycast IP."""
+        target_dir = work_dir or self.temp_dir
         wgcf_bin = self._ensure_wgcf()
-        log_event("info", "warp:tunnel", message="Auto-generating fresh Cloudflare WARP account via wgcf...")
+        log_event("info", "warp:tunnel", message=f"Auto-generating fresh Cloudflare WARP account via wgcf...")
 
         subprocess.run(
             [wgcf_bin, "register", "--accept-tos"],
-            cwd=self.temp_dir,
+            cwd=target_dir,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            check=False
+            check=False,
+            timeout=30
         )
         subprocess.run(
             [wgcf_bin, "generate"],
-            cwd=self.temp_dir,
+            cwd=target_dir,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            check=False
+            check=False,
+            timeout=30
         )
 
-        profile_path = os.path.join(self.temp_dir, "wgcf-profile.conf")
-        target_conf = os.path.join(self.temp_dir, "wg.conf")
+        profile_path = os.path.join(target_dir, "wgcf-profile.conf")
+        target_conf = os.path.join(target_dir, "wg.conf")
 
         if os.path.exists(profile_path):
             with open(profile_path, "r", encoding="utf-8") as f:
@@ -188,6 +191,28 @@ class WarpTunnel:
                 self.log_file.close()
             except Exception:
                 pass
+        self.log_file = None
+        self.proxy_url = None
+
+    def renew(self) -> str | None:
+        """
+        Force-regenerate a brand-new Cloudflare WARP account via wgcf in a fresh subfolder,
+        restart wireproxy, and verify proxy connectivity.
+        Returns the new proxy URL or None on failure.
+        """
+        log_event("info", "warp:renew", message="Regenerating Cloudflare WARP account and reconnecting tunnel...")
+        self._terminate_proc()
+
+        renew_dir = tempfile.mkdtemp(prefix="renew_", dir=self.temp_dir)
+        fresh_conf = self._generate_wg_conf(work_dir=renew_dir)
+
+        if fresh_conf and os.path.exists(fresh_conf):
+            if self._start_and_verify(fresh_conf):
+                log_event("success", "warp:renew", proxy=self.proxy_url, message=f"Cloudflare WARP renewed successfully: {self.proxy_url}")
+                return self.proxy_url
+
+        log_event("error", "warp:renew", message="Failed to re-establish WARP tunnel during renewal.")
+        return None
 
     def start(self):
         """Initialize tunnel: try WARP_WG_CONF first, fallback to on-the-fly wgcf generation."""

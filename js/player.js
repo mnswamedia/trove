@@ -649,8 +649,8 @@
       this.setDownloadProgress(false);
       this.setLoading(true);
 
-      if (window.Trove.explorer && typeof window.Trove.explorer.render === 'function') {
-        window.Trove.explorer.render();
+      if (window.Trove.explorer && typeof window.Trove.explorer.updateActiveTrackHighlight === 'function') {
+        window.Trove.explorer.updateActiveTrackHighlight(item);
       }
 
       try {

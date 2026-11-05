@@ -115,7 +115,7 @@ class MediaDownloader:
                 continue
             if line_clean.startswith("ERROR:"):
                 err_lines.append(line_clean[6:].strip())
-            elif any(phrase in line_clean for phrase in ["Sign in to confirm", "Private video", "Video unavailable", "HTTP Error", "IncompleteRead"]):
+            elif any(phrase.lower() in line_clean.lower() for phrase in ["sign in to confirm", "sign in to continue", "not a bot", "bot confirmation", "private video", "video unavailable", "http error", "incompleteread"]):
                 err_lines.append(line_clean)
 
         err_msg = "; ".join(dict.fromkeys(err_lines)) if err_lines else (stderr.strip() or stdout.strip())[:250]

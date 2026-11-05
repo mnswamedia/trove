@@ -19,6 +19,26 @@
     other: { label: 'Other', fullLabel: 'Other Files', icon: 'file' }
   };
 
+  // High-performance direct SVG icons for track rows (eliminates Lucide scan bottleneck)
+  const ROW_ICONS = {
+    heart: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>',
+    heartFilled: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>',
+    'list-plus': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M11 12H3"/><path d="M16 6H3"/><path d="M16 18H3"/><path d="M18 9v6"/><path d="M21 12h-6"/></svg>',
+    'folder-plus': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><line x1="12" y1="10" x2="12" y2="16"/><line x1="9" y1="13" x2="15" y2="13"/></svg>',
+    'volume-2': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>',
+    music: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
+    video: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>',
+    folder: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>',
+    'file-text': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>',
+    image: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>',
+    file: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>',
+    'corner-left-up': '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><polyline points="14 9 9 4 4 9"/><path d="M20 20h-7a4 4 0 0 1-4-4V4"/></svg>'
+  };
+
+  function getRowSvg(name) {
+    return ROW_ICONS[name] || ROW_ICONS.file;
+  }
+
   const ExplorerManager = {
     elements: {},
     thumbnailObserver: null,
@@ -26,6 +46,10 @@
     isExtractingQueue: false,
     filterDownloaded: false,
     downloadedPaths: [],
+    pageSize: 60,
+    renderedCount: 60,
+    currentDisplayItems: [],
+    sentinelObserver: null,
 
     init() {
       this.elements = {
@@ -595,9 +619,120 @@
       return this.sortItems(filteredChildren);
     },
 
+    renderItemHtml(item, isCurrentActive = false) {
+      const state = window.Trove.state || {};
+      const player = window.Trove.player || {};
+      const isFolder = item.isDir;
+      const isPlayable = !isFolder && (item.category === 'music' || item.category === 'video');
+
+      const pathSub = state.viewMode === 'flat' || state.searchQuery 
+        ? item.path 
+        : (item.isDir ? 'Folder' : '');
+
+      let badgeClasses = 'bg-gray-100 text-stone-brown dark:bg-[#242a38] dark:text-[#9aa4b2]';
+      let iconColor = 'bg-almond-cream/40 text-stone-brown dark:bg-[#202532] dark:text-[#c6ac8f]';
+
+      if (item.category === 'music') {
+        badgeClasses = 'bg-almond-cream text-stone-brown dark:bg-[#242a38] dark:text-[#c6ac8f]';
+        iconColor = isCurrentActive 
+          ? 'bg-jet-black text-almond-cream dark:bg-[#c6ac8f] dark:text-[#0e1116]' 
+          : 'bg-almond-cream text-stone-brown dark:bg-[#202532] dark:text-[#c6ac8f]';
+      } else if (item.category === 'video') {
+        badgeClasses = 'bg-jet-black text-almond-cream dark:bg-[#323846] dark:text-[#f3f4f6]';
+        iconColor = 'bg-jet-black text-almond-cream dark:bg-[#323846] dark:text-[#f3f4f6]';
+      } else if (item.category === 'folder') {
+        badgeClasses = 'bg-almond-cream/60 text-stone-brown dark:bg-[#202532] dark:text-[#9aa4b2]';
+        iconColor = 'bg-almond-cream/60 text-stone-brown dark:bg-[#202532] dark:text-[#c6ac8f]';
+      } else if (item.category === 'document') {
+        badgeClasses = 'bg-khaki-beige/35 text-jet-black font-semibold dark:bg-[#2a303e] dark:text-[#d4bfa6]';
+        iconColor = 'bg-khaki-beige/25 text-stone-brown dark:bg-[#242a38] dark:text-[#c6ac8f]';
+      } else if (item.category === 'image') {
+        badgeClasses = 'bg-amber-100 text-amber-900 font-semibold dark:bg-[#382d1c] dark:text-[#fbbf24]';
+        iconColor = 'bg-amber-50 text-amber-800 dark:bg-[#2d2516] dark:text-[#fbbf24]';
+      }
+
+      const activeRowClass = isCurrentActive 
+        ? 'bg-almond-cream/40 dark:bg-[#202736] border-l-4 border-l-jet-black dark:border-l-[#c6ac8f] font-medium' 
+        : 'bg-white dark:bg-[#15181f] hover:bg-almond-cream/15 dark:hover:bg-[#1a1f28]';
+
+      let thumbSlotHtml = '';
+      if (isPlayable) {
+        const cachedThumb = player.thumbnailCache?.get(item.path);
+        const iconName = (isCurrentActive && player.isPlaying) ? 'volume-2' : (item.icon || 'music');
+        thumbSlotHtml = `
+          <div class="w-9 h-9 rounded-lg ${iconColor} flex items-center justify-center shrink-0 relative overflow-hidden list-thumb-slot shadow-sm" data-file-path="${escapeHtml(item.path)}">
+            <img class="w-full h-full object-contain list-thumb-img ${cachedThumb ? '' : 'hidden'}" ${cachedThumb ? `src="${cachedThumb}"` : ''} alt="Thumbnail">
+            <div class="list-thumb-icon-wrapper flex items-center justify-center ${cachedThumb ? 'hidden' : ''}">
+              ${getRowSvg(iconName)}
+            </div>
+          </div>
+        `;
+      } else {
+        thumbSlotHtml = `
+          <div class="w-9 h-9 rounded-lg ${iconColor} flex items-center justify-center shrink-0 relative overflow-hidden shadow-sm">
+            ${getRowSvg(item.icon || 'file')}
+          </div>
+        `;
+      }
+
+      const isFav = isPlayable && window.Trove.utils?.isFavorite ? window.Trove.utils.isFavorite(item.path) : false;
+      const favBtnHtml = isPlayable ? `
+        <button type="button" class="btn-row-favorite p-1.5 sm:p-2 rounded-xl hover:bg-almond-cream/60 dark:hover:bg-[#252b37] ${isFav ? 'text-rose-500 dark:text-rose-400' : 'text-stone-brown/40 dark:text-[#758092] hover:text-rose-500'} transition shrink-0 min-w-[34px] min-h-[34px] flex items-center justify-center select-none" title="${isFav ? 'Remove from Liked Songs' : 'Add to Liked Songs'}" data-path="${escapeHtml(item.path)}">
+          ${isFav ? getRowSvg('heartFilled') : getRowSvg('heart')}
+        </button>
+      ` : '';
+
+      const actionBtnHtml = isPlayable ? `
+        ${favBtnHtml}
+        <button type="button" class="btn-add-to-playlist p-1.5 sm:p-2 rounded-xl hover:bg-almond-cream/60 dark:hover:bg-[#252b37] text-stone-brown/70 hover:text-jet-black dark:text-[#9aa4b2] dark:hover:text-[#f3f4f6] transition shrink-0 min-w-[34px] min-h-[34px] flex items-center justify-center select-none" title="Add to Playlist or Queue" data-path="${escapeHtml(item.path)}">
+          ${getRowSvg('list-plus')}
+        </button>
+      ` : '';
+
+      return `
+        <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f] select-none ${isCurrentActive ? 'is-playing-active' : ''}" data-file-path="${escapeHtml(item.path)}">
+          ${isPlayable ? `
+          <div class="swipe-queue-reveal absolute inset-y-0 left-0 w-full bg-emerald-600 dark:bg-emerald-600 items-center px-4 text-white font-semibold text-xs select-none pointer-events-none transition-colors" style="display: none;">
+            <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs transition-transform duration-150">
+              <span class="w-4 h-4 shrink-0 text-white flex items-center justify-center">${getRowSvg('list-plus')}</span>
+              <span class="tracking-wider text-[11px] font-bold uppercase text-white">Add to Queue</span>
+            </div>
+          </div>
+          <div class="swipe-playlist-reveal absolute inset-y-0 right-0 w-full bg-amber-600 dark:bg-amber-600 items-center justify-end px-4 text-white font-semibold text-xs select-none pointer-events-none transition-colors" style="display: none;">
+            <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs transition-transform duration-150">
+              <span class="tracking-wider text-[11px] font-bold uppercase text-white">Add to Playlist</span>
+              <span class="w-4 h-4 shrink-0 text-white flex items-center justify-center">${getRowSvg('folder-plus')}</span>
+            </div>
+          </div>
+          ` : ''}
+          <div class="file-row relative bg-white dark:bg-[#15181f] grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 transition text-sm cursor-pointer select-none ${activeRowClass}" data-path="${escapeHtml(item.path)}" data-is-dir="${isFolder}" title="${escapeHtml(item.name)} (${isFolder ? 'Folder' : (isPlayable ? 'Click to play' : 'Click to open in new tab')})">
+            <div class="col-span-8 md:col-span-8 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-1">
+              ${thumbSlotHtml}
+              <div class="flex flex-col min-w-0 flex-1">
+                <span class="file-name-span font-semibold text-black dark:text-[#f3f4f6] truncate ${isCurrentActive ? 'text-jet-black dark:text-white' : ''}">${escapeHtml(item.name)}</span>
+                ${pathSub ? `<span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">${escapeHtml(pathSub)}</span>` : ''}
+              </div>
+            </div>
+            <div class="col-span-4 md:col-span-4 flex items-center justify-end gap-1.5 sm:gap-2 min-w-0">
+              <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase ${badgeClasses} shrink-0">
+                ${escapeHtml(item.label)}
+              </span>
+              ${!isFolder ? `<span class="font-mono text-xs text-stone-brown dark:text-[#9aa4b2] shrink-0 whitespace-nowrap">${formatBytes(item.size)}</span>` : ''}
+              ${actionBtnHtml}
+            </div>
+          </div>
+        </div>
+      `;
+    },
+
     render() {
       const state = window.Trove.state || {};
       const player = window.Trove.player || {};
+
+      if (this.sentinelObserver) {
+        this.sentinelObserver.disconnect();
+        this.sentinelObserver = null;
+      }
 
       if (state.isLoading) {
         this.showState('loader-2', 'Loading Repository', 'Connecting to Hugging Face dataset tree...', false, '', null, true);
@@ -620,9 +755,9 @@
 
       this.renderBreadcrumbs();
 
-      const items = this.getDisplayItems();
+      this.currentDisplayItems = this.getDisplayItems();
 
-      if (items.length === 0) {
+      if (this.currentDisplayItems.length === 0) {
         if (this.elements.fileList) this.elements.fileList.innerHTML = '';
         const filterLabel = FILTER_CONFIG[state.filterType]?.fullLabel || state.filterType;
         const message = state.searchQuery
@@ -644,7 +779,7 @@
             <div class="grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 hover:bg-almond-cream/20 dark:hover:bg-[#1a1f28] cursor-pointer transition text-sm" data-action="go-parent">
               <div class="col-span-8 md:col-span-8 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-1">
                 <div class="w-9 h-9 rounded-lg bg-almond-cream/60 dark:bg-[#202532] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0">
-                  <i data-lucide="corner-left-up" class="w-4 h-4"></i>
+                  ${getRowSvg('corner-left-up')}
                 </div>
                 <div class="flex flex-col min-w-0 flex-1">
                   <span class="font-semibold text-black dark:text-[#f3f4f6] truncate">..</span>
@@ -659,130 +794,138 @@
         `;
       }
 
-      items.forEach(item => {
-        const isFolder = item.isDir;
-        const isPlayable = !isFolder && (item.category === 'music' || item.category === 'video');
-        const isCurrentActive = player.currentTrack && player.currentTrack.path === item.path;
+      // Progressive window: render initial batch
+      this.renderedCount = Math.min(this.pageSize, this.currentDisplayItems.length);
+      const visibleItems = this.currentDisplayItems.slice(0, this.renderedCount);
 
-        const pathSub = state.viewMode === 'flat' || state.searchQuery 
-          ? item.path 
-          : (item.isDir ? 'Folder' : '');
+      visibleItems.forEach(item => {
+        const isCurrentActive = Boolean(player.currentTrack && player.currentTrack.path === item.path);
+        html += this.renderItemHtml(item, isCurrentActive);
+      });
 
-        let badgeClasses = 'bg-gray-100 text-stone-brown dark:bg-[#242a38] dark:text-[#9aa4b2]';
-        let iconColor = 'bg-almond-cream/40 text-stone-brown dark:bg-[#202532] dark:text-[#c6ac8f]';
-
-        if (item.category === 'music') {
-          badgeClasses = 'bg-almond-cream text-stone-brown dark:bg-[#242a38] dark:text-[#c6ac8f]';
-          iconColor = isCurrentActive 
-            ? 'bg-jet-black text-almond-cream dark:bg-[#c6ac8f] dark:text-[#0e1116]' 
-            : 'bg-almond-cream text-stone-brown dark:bg-[#202532] dark:text-[#c6ac8f]';
-        } else if (item.category === 'video') {
-          badgeClasses = 'bg-jet-black text-almond-cream dark:bg-[#323846] dark:text-[#f3f4f6]';
-          iconColor = 'bg-jet-black text-almond-cream dark:bg-[#323846] dark:text-[#f3f4f6]';
-        } else if (item.category === 'folder') {
-          badgeClasses = 'bg-almond-cream/60 text-stone-brown dark:bg-[#202532] dark:text-[#9aa4b2]';
-          iconColor = 'bg-almond-cream/60 text-stone-brown dark:bg-[#202532] dark:text-[#c6ac8f]';
-        } else if (item.category === 'document') {
-          badgeClasses = 'bg-khaki-beige/35 text-jet-black font-semibold dark:bg-[#2a303e] dark:text-[#d4bfa6]';
-          iconColor = 'bg-khaki-beige/25 text-stone-brown dark:bg-[#242a38] dark:text-[#c6ac8f]';
-        } else if (item.category === 'image') {
-          badgeClasses = 'bg-amber-100 text-amber-900 font-semibold dark:bg-[#382d1c] dark:text-[#fbbf24]';
-          iconColor = 'bg-amber-50 text-amber-800 dark:bg-[#2d2516] dark:text-[#fbbf24]';
-        }
-
-        const activeRowClass = isCurrentActive 
-          ? 'bg-almond-cream/40 dark:bg-[#202736] border-l-4 border-l-jet-black dark:border-l-[#c6ac8f] font-medium' 
-          : 'bg-white dark:bg-[#15181f] hover:bg-almond-cream/15 dark:hover:bg-[#1a1f28]';
-
-        let thumbSlotHtml = '';
-        if (isPlayable) {
-          const cachedThumb = player.thumbnailCache?.get(item.path);
-          thumbSlotHtml = `
-            <div class="w-9 h-9 rounded-lg ${iconColor} flex items-center justify-center shrink-0 relative overflow-hidden list-thumb-slot shadow-sm" data-file-path="${escapeHtml(item.path)}">
-              <img class="w-full h-full object-contain list-thumb-img ${cachedThumb ? '' : 'hidden'}" ${cachedThumb ? `src="${cachedThumb}"` : ''} alt="Thumbnail">
-              <div class="list-thumb-icon-wrapper flex items-center justify-center ${cachedThumb ? 'hidden' : ''}">
-                <i data-lucide="${isCurrentActive && player.isPlaying ? 'volume-2' : item.icon}" class="w-4 h-4"></i>
-              </div>
-            </div>
-          `;
-        } else {
-          thumbSlotHtml = `
-            <div class="w-9 h-9 rounded-lg ${iconColor} flex items-center justify-center shrink-0 relative overflow-hidden shadow-sm">
-              <i data-lucide="${item.icon}" class="w-4 h-4"></i>
-            </div>
-          `;
-        }
-
-        const statusText = isFolder 
-          ? 'Folder' 
-          : (isPlayable ? (isCurrentActive ? 'Playing Now' : 'Click to Play') : 'Click to Open ↗');
-
-        let displayStatus = statusText;
-        let dateTooltip = '';
-        if (isCurrentActive && isPlayable) {
-          displayStatus = 'Playing Now';
-        } else if (!isFolder && item.ingestedAt) {
-          displayStatus = formatRelativeTime(item.ingestedAt);
-          dateTooltip = `Downloaded: ${item.ingestedAtIso || new Date(item.ingestedAt).toLocaleString()}`;
-        }
-
-        const isFav = isPlayable && window.Trove.utils?.isFavorite ? window.Trove.utils.isFavorite(item.path) : false;
-        const favBtnHtml = isPlayable ? `
-          <button type="button" class="btn-row-favorite p-1.5 sm:p-2 rounded-xl hover:bg-almond-cream/60 dark:hover:bg-[#252b37] ${isFav ? 'text-rose-500 dark:text-rose-400' : 'text-stone-brown/40 dark:text-[#758092] hover:text-rose-500'} transition shrink-0 min-w-[34px] min-h-[34px] flex items-center justify-center select-none" title="${isFav ? 'Remove from Liked Songs' : 'Add to Liked Songs'}" data-path="${escapeHtml(item.path)}">
-            <i data-lucide="heart" class="w-4 h-4" ${isFav ? 'fill="currentColor"' : ''}></i>
-          </button>
-        ` : '';
-
-        const actionBtnHtml = isPlayable ? `
-          ${favBtnHtml}
-          <button type="button" class="btn-add-to-playlist p-1.5 sm:p-2 rounded-xl hover:bg-almond-cream/60 dark:hover:bg-[#252b37] text-stone-brown/70 hover:text-jet-black dark:text-[#9aa4b2] dark:hover:text-[#f3f4f6] transition shrink-0 min-w-[34px] min-h-[34px] flex items-center justify-center select-none" title="Add to Playlist or Queue" data-path="${escapeHtml(item.path)}">
-            <i data-lucide="list-plus" class="w-4 h-4"></i>
-          </button>
-        ` : '';
-
+      if (this.renderedCount < this.currentDisplayItems.length) {
         html += `
-          <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f] select-none">
-            ${isPlayable ? `
-            <div class="swipe-queue-reveal absolute inset-y-0 left-0 w-full bg-emerald-600 dark:bg-emerald-600 items-center px-4 text-white font-semibold text-xs select-none pointer-events-none transition-colors" style="display: none;">
-              <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs transition-transform duration-150">
-                <i data-lucide="list-plus" class="w-4 h-4 shrink-0 text-white"></i>
-                <span class="tracking-wider text-[11px] font-bold uppercase text-white">Add to Queue</span>
-              </div>
-            </div>
-            <div class="swipe-playlist-reveal absolute inset-y-0 right-0 w-full bg-amber-600 dark:bg-amber-600 items-center justify-end px-4 text-white font-semibold text-xs select-none pointer-events-none transition-colors" style="display: none;">
-              <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs transition-transform duration-150">
-                <span class="tracking-wider text-[11px] font-bold uppercase text-white">Add to Playlist</span>
-                <i data-lucide="folder-plus" class="w-4 h-4 shrink-0 text-white"></i>
-              </div>
-            </div>
-            ` : ''}
-            <div class="file-row relative bg-white dark:bg-[#15181f] grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 transition text-sm cursor-pointer select-none ${activeRowClass}" data-path="${escapeHtml(item.path)}" data-is-dir="${isFolder}" title="${escapeHtml(item.name)} (${isFolder ? 'Folder' : (isPlayable ? 'Click to play' : 'Click to open in new tab')})">
-              <div class="col-span-8 md:col-span-8 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-1">
-                ${thumbSlotHtml}
-                <div class="flex flex-col min-w-0 flex-1">
-                  <span class="font-semibold text-black dark:text-[#f3f4f6] truncate ${isCurrentActive ? 'text-jet-black dark:text-white' : ''}">${escapeHtml(item.name)}</span>
-                  ${pathSub ? `<span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">${escapeHtml(pathSub)}</span>` : ''}
-                </div>
-              </div>
-              <div class="col-span-4 md:col-span-4 flex items-center justify-end gap-1.5 sm:gap-2 min-w-0">
-                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase ${badgeClasses} shrink-0">
-                  ${escapeHtml(item.label)}
-                </span>
-                ${!isFolder ? `<span class="font-mono text-xs text-stone-brown dark:text-[#9aa4b2] shrink-0 whitespace-nowrap">${formatBytes(item.size)}</span>` : ''}
-                ${actionBtnHtml}
-              </div>
-            </div>
+          <div id="explorer-scroll-sentinel" class="py-3 px-4 flex items-center justify-center gap-2 text-xs font-mono text-stone-brown/70 dark:text-[#8b95a5] select-none">
+            <svg class="w-3.5 h-3.5 animate-spin text-stone-brown dark:text-[#c6ac8f]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+            <span>Loading more (${this.renderedCount} of ${this.currentDisplayItems.length})...</span>
           </div>
         `;
-      });
+      }
 
       if (this.elements.fileList) {
         this.elements.fileList.innerHTML = html;
       }
 
-      if (window.lucide) window.lucide.createIcons();
-      if (MotionAnim) MotionAnim.animateFileList(this.elements.fileList);
+      this.setupInfiniteScrollObserver();
       this.initListThumbnailObserver();
+    },
+
+    setupInfiniteScrollObserver() {
+      if (this.sentinelObserver) {
+        this.sentinelObserver.disconnect();
+        this.sentinelObserver = null;
+      }
+
+      const sentinel = document.getElementById('explorer-scroll-sentinel');
+      if (!sentinel || !('IntersectionObserver' in window)) return;
+
+      this.sentinelObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            this.loadNextBatch();
+          }
+        });
+      }, { rootMargin: '250px' });
+
+      this.sentinelObserver.observe(sentinel);
+    },
+
+    loadNextBatch() {
+      if (this.renderedCount >= this.currentDisplayItems.length) return;
+      const player = window.Trove.player || {};
+      const sentinel = document.getElementById('explorer-scroll-sentinel');
+      if (!sentinel) return;
+
+      const prevCount = this.renderedCount;
+      const nextCount = Math.min(this.renderedCount + 40, this.currentDisplayItems.length);
+      this.renderedCount = nextCount;
+
+      const nextSlice = this.currentDisplayItems.slice(prevCount, nextCount);
+      let batchHtml = '';
+      nextSlice.forEach(item => {
+        const isCurrentActive = Boolean(player.currentTrack && player.currentTrack.path === item.path);
+        batchHtml += this.renderItemHtml(item, isCurrentActive);
+      });
+
+      sentinel.insertAdjacentHTML('beforebegin', batchHtml);
+
+      if (this.renderedCount >= this.currentDisplayItems.length) {
+        if (this.sentinelObserver) {
+          this.sentinelObserver.disconnect();
+          this.sentinelObserver = null;
+        }
+        sentinel.remove();
+      } else {
+        const textSpan = sentinel.querySelector('span');
+        if (textSpan) {
+          textSpan.innerText = `Loading more (${this.renderedCount} of ${this.currentDisplayItems.length})...`;
+        }
+      }
+
+      this.initListThumbnailObserver();
+    },
+
+    updateActiveTrackHighlight(newTrack) {
+      if (!this.elements.fileList) return;
+      const state = window.Trove.state || {};
+      const player = window.Trove.player || {};
+
+      // 1. Remove active state from currently active row(s)
+      const prevActiveWrappers = this.elements.fileList.querySelectorAll('.file-row-wrapper.is-playing-active');
+      prevActiveWrappers.forEach(wrap => {
+        wrap.classList.remove('is-playing-active');
+        const row = wrap.querySelector('.file-row');
+        if (row) {
+          row.classList.remove('bg-almond-cream/40', 'dark:bg-[#202736]', 'border-l-4', 'border-l-jet-black', 'dark:border-l-[#c6ac8f]', 'font-medium');
+          row.classList.add('bg-white', 'dark:bg-[#15181f]', 'hover:bg-almond-cream/15', 'dark:hover:bg-[#1a1f28]');
+        }
+        const nameSpan = wrap.querySelector('.file-name-span');
+        if (nameSpan) {
+          nameSpan.classList.remove('text-jet-black', 'dark:text-white');
+        }
+        const iconWrap = wrap.querySelector('.list-thumb-icon-wrapper');
+        const filePath = wrap.dataset.filePath;
+        const itemObj = (this.currentDisplayItems || []).find(i => i.path === filePath);
+        if (iconWrap && itemObj) {
+          iconWrap.innerHTML = getRowSvg(itemObj.icon || 'music');
+        }
+      });
+
+      // 2. Add active state to the new track's row (if rendered in DOM)
+      if (newTrack && newTrack.path) {
+        let newWrap = null;
+        try {
+          const escapedPath = CSS.escape(newTrack.path);
+          newWrap = this.elements.fileList.querySelector(`.file-row-wrapper[data-file-path="${escapedPath}"]`);
+        } catch (_) {}
+
+        if (newWrap) {
+          newWrap.classList.add('is-playing-active');
+          const row = newWrap.querySelector('.file-row');
+          if (row) {
+            row.classList.remove('bg-white', 'dark:bg-[#15181f]', 'hover:bg-almond-cream/15', 'dark:hover:bg-[#1a1f28]');
+            row.classList.add('bg-almond-cream/40', 'dark:bg-[#202736]', 'border-l-4', 'border-l-jet-black', 'dark:border-l-[#c6ac8f]', 'font-medium');
+          }
+          const nameSpan = newWrap.querySelector('.file-name-span');
+          if (nameSpan) {
+            nameSpan.classList.add('text-jet-black', 'dark:text-white');
+          }
+          const iconWrap = newWrap.querySelector('.list-thumb-icon-wrapper');
+          if (iconWrap) {
+            iconWrap.innerHTML = getRowSvg('volume-2');
+          }
+        }
+      }
     },
 
     renderBreadcrumbs() {
@@ -1254,16 +1397,15 @@
             const filePath = favBtn.dataset.path;
             if (window.Trove.utils?.toggleFavorite) {
               const isFav = window.Trove.utils.toggleFavorite(filePath);
-              const icon = favBtn.querySelector('[data-lucide="heart"]');
               if (isFav) {
                 favBtn.classList.add('text-rose-500', 'dark:text-rose-400');
                 favBtn.classList.remove('text-stone-brown/40', 'dark:text-[#758092]');
-                if (icon) icon.setAttribute('fill', 'currentColor');
+                favBtn.innerHTML = getRowSvg('heartFilled');
                 favBtn.title = 'Remove from Liked Songs';
               } else {
                 favBtn.classList.remove('text-rose-500', 'dark:text-rose-400');
                 favBtn.classList.add('text-stone-brown/40', 'dark:text-[#758092]');
-                if (icon) icon.removeAttribute('fill');
+                favBtn.innerHTML = getRowSvg('heart');
                 favBtn.title = 'Add to Liked Songs';
               }
               const item = (state.allItems || []).find(i => i.path === filePath);

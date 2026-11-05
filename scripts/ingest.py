@@ -105,7 +105,8 @@ def main():
         storage.sync_ledger(archive_file)
 
         # 4. Activate Cloudflare WARP SOCKS5 Tunnel
-        with WarpTunnel() as warp_proxy:
+        warp_tunnel = WarpTunnel()
+        with warp_tunnel as warp_proxy:
             downloader = MediaDownloader(
                 workdir=workdir,
                 metadata_dir=metadata_dir,
@@ -135,6 +136,8 @@ def main():
             live_proxies = None
             successful_targets = 0
             total_targets = len(targets)
+            max_warp_regens = 3
+            warp_regens_count = 0
 
             def flush_chunk(reason="chunk"):
                 nonlocal total_uploaded, chunk_number
@@ -253,8 +256,50 @@ def main():
                 else:
                     log_event("warn", "ingest:download", attempt=1, method="direct", target=target, error=err_msg, message=f"Direct download failed: {err_msg}")
 
-                    # Attempt 2: Optional Rotating Proxies Fallback
-                    if ENABLE_PROXY_FALLBACK:
+                    # Check for YouTube bot block / Sign-in required error
+                    is_sign_in_err = any(phrase in (err_msg or "").lower() for phrase in [
+                        "sign in to confirm", "sign in to continue", "confirm you're not a bot", "not a bot", "bot confirmation"
+                    ])
+
+                    if is_sign_in_err:
+                        if warp_regens_count < max_warp_regens and warp_tunnel:
+                            warp_regens_count += 1
+                            log_event(
+                                "warn", "ingest:warp_renew",
+                                regen=warp_regens_count,
+                                max_regens=max_warp_regens,
+                                target=target,
+                                error=err_msg,
+                                message=f"Sign-in bot block encountered. Renewing WARP config ({warp_regens_count}/{max_warp_regens}) and retrying..."
+                            )
+                            new_proxy = warp_tunnel.renew()
+                            if new_proxy:
+                                downloader.proxy = new_proxy
+                                ok_w, dl_status_w, err_msg_w = downloader.download(target)
+                                if ok_w:
+                                    if dl_status_w == "skipped_archive":
+                                        log_event("info", "ingest:download", attempt=1, target=target, status="skipped", reason="already_in_archive", message=f"{target} has already been recorded in the archive")
+                                    else:
+                                        target_success = True
+                                        log_event("success", "ingest:download", method="warp_renewed", target=target, message="Download succeeded after WARP renewal!")
+                                else:
+                                    err_msg = err_msg_w
+                                    is_still_sign_in = any(phrase in (err_msg_w or "").lower() for phrase in [
+                                        "sign in to confirm", "sign in to continue", "confirm you're not a bot", "not a bot"
+                                    ])
+                                    if is_still_sign_in:
+                                        log_event("error", "ingest:fatal_bot_block", target=target, error=err_msg_w, message=f"Target still failed with sign-in error after WARP renewal ({warp_regens_count}/{max_warp_regens}). Aborting ingestion run.")
+                                        send_progress_ping("failed", title=f"Bot block persists after WARP renewal: {err_msg_w}")
+                                        send_telemetry_event("run_failed", run_id=JOB_ID, error=err_msg_w)
+                                        sys.exit(1)
+                        else:
+                            log_event("error", "ingest:fatal_bot_block", target=target, error=err_msg, message=f"Sign-in bot block encountered and max WARP renewals ({max_warp_regens}) exhausted. Aborting ingestion run.")
+                            send_progress_ping("failed", title=f"Bot block encountered ({err_msg})")
+                            send_telemetry_event("run_failed", run_id=JOB_ID, error=err_msg)
+                            sys.exit(1)
+
+                    # Attempt 2: Optional Rotating Proxies Fallback (only if not a fatal bot block)
+                    if not target_success and ENABLE_PROXY_FALLBACK:
                         log_event("info", "ingest:proxy", message="Switching to rotating verified proxies from Proxifly")
                         if live_proxies is None:
                             live_proxies = get_live_proxies(max_needed=MAX_PROXY_ATTEMPTS)
@@ -269,7 +314,7 @@ def main():
                                     break
                                 else:
                                     log_event("warn", "ingest:proxy", attempt=attempt_idx, proxy=proxy, target=target, error=err_msg_p, message=f"Proxy attempt failed: {err_msg_p}")
-                    else:
+                    elif not target_success and not is_sign_in_err:
                         log_event("info", "ingest:proxy", message="Proxy fallback is disabled (ENABLE_PROXY_FALLBACK=False). Skipping proxies.")
 
                     if not target_success and dl_status != "skipped_archive":
