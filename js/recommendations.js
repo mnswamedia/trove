@@ -9,7 +9,17 @@
   const repo = CONFIG.repo || {};
   const api = CONFIG.api || {};
   const storage = CONFIG.storage || {};
-  const { MotionAnim, showToast } = window.Trove.utils || {};
+  const { MotionAnim, showToast, escapeHtml } = window.Trove.utils || {};
+
+  const safeEscape = (str) => {
+    if (escapeHtml) return escapeHtml(str);
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
 
   const RelatedManager = {
     isOpen: false,
@@ -122,6 +132,14 @@
       if (!this.elements.bottomSheet) return;
       this.isOpen = true;
       this.elements.bottomSheet.style.display = 'flex';
+
+      // Temporarily suppress expanded cover art to eliminate GPU compositor bleed
+      const coverArt = document.getElementById('expanded-cover-art');
+      if (coverArt) {
+        this._prevCoverVisibility = coverArt.style.visibility;
+        coverArt.style.visibility = 'hidden';
+      }
+
       if (MotionAnim) MotionAnim.animateSheetIn(this.elements.bottomSheet);
 
       const player = window.Trove.player || {};
@@ -146,6 +164,13 @@
     close() {
       if (!this.elements.bottomSheet || this.elements.bottomSheet.style.display === 'none') return;
       this.isOpen = false;
+
+      // Restore expanded cover art visibility
+      const coverArt = document.getElementById('expanded-cover-art');
+      if (coverArt) {
+        coverArt.style.visibility = this._prevCoverVisibility || '';
+      }
+
       if (MotionAnim) {
         MotionAnim.animateSheetOut(this.elements.bottomSheet, () => {
           this.elements.bottomSheet.style.display = 'none';
@@ -425,7 +450,10 @@
 
     renderContent(videos, playlists, sourceTitle) {
       const vids = Array.isArray(videos) ? videos : [];
-      const pls = Array.isArray(playlists) ? playlists : [];
+      // Strictly filter out any invalid, headless or empty playlists
+      const pls = (Array.isArray(playlists) ? playlists : []).filter(p => p && p.id && p.title && typeof p.title === 'string' && p.title.trim().length > 0);
+      this.allVideos = vids;
+      this.allPlaylists = pls;
       const totalItems = vids.length + pls.length;
 
       if (totalItems === 0) {
@@ -438,18 +466,12 @@
       if (this.elements.toolbar) this.elements.toolbar.classList.remove('hidden');
       if (this.elements.listContainer) this.elements.listContainer.classList.remove('hidden');
 
-      if (this.elements.countBadge) {
-        if (pls.length > 0) {
-          this.elements.countBadge.innerText = `${vids.length} tracks • ${pls.length} playlists`;
-        } else {
-          this.elements.countBadge.innerText = `${vids.length} found`;
-        }
-      }
+      this.updateHeaderBadge();
       if (this.elements.footerStatus) {
         this.elements.footerStatus.innerText = `${totalItems} recommendations ready`;
       }
 
-      // Configure Tab Switcher in Toolbar
+      // Configure Tab Switcher in Toolbar (Only display tabs if real playlists exist)
       if (this.elements.viewTabs) {
         if (pls.length > 0) {
           this.elements.viewTabs.classList.remove('hidden');
@@ -464,13 +486,23 @@
         }
       }
 
-      // Default view is 'tracks' unless explicitly switching to playlist
+      // Default view is 'tracks'
       this.switchView('tracks');
+    },
+
+    updateHeaderBadge() {
+      if (!this.elements.countBadge) return;
+      if (this.currentView === 'playlists' || this.currentView === 'playlist-detail') {
+        this.elements.countBadge.innerText = `${this.allPlaylists.length} playlists`;
+      } else {
+        this.elements.countBadge.innerText = `${this.allVideos.length} tracks`;
+      }
     },
 
     switchView(view, playlist = null) {
       this.currentView = view;
       this.activePlaylist = playlist;
+      this.updateHeaderBadge();
 
       // Update Tab Pill styles
       if (this.elements.tabTracks && this.elements.tabPlaylists) {
@@ -499,7 +531,7 @@
       this.elements.listContainer.innerHTML = '';
 
       if (this.elements.toolbarLeft) {
-        this.elements.toolbarLeft.classList.remove('invisible');
+        this.elements.toolbarLeft.classList.remove('hidden', 'invisible');
       }
       if (this.elements.selectAllLabel) {
         this.elements.selectAllLabel.innerText = 'Select All';
@@ -517,7 +549,7 @@
 
       this.allVideos.forEach(video => {
         const card = this.createVideoCard(video);
-        this.elements.listContainer.appendChild(card);
+        if (card) this.elements.listContainer.appendChild(card);
       });
 
       if (this.continuationToken) {
@@ -533,10 +565,11 @@
       this.elements.listContainer.innerHTML = '';
 
       if (this.elements.toolbarLeft) {
-        this.elements.toolbarLeft.classList.add('invisible');
+        this.elements.toolbarLeft.classList.add('hidden');
       }
 
-      if (this.allPlaylists.length === 0) {
+      const validPlaylists = (this.allPlaylists || []).filter(p => p && p.id && p.title && typeof p.title === 'string');
+      if (validPlaylists.length === 0) {
         this.elements.listContainer.innerHTML = `
           <div class="py-12 px-4 text-center text-xs font-mono text-stone-brown/70 dark:text-[#8b95a5]">
             No related playlists found for this track.
@@ -545,9 +578,11 @@
         return;
       }
 
-      this.allPlaylists.forEach(playlist => {
+      validPlaylists.forEach(playlist => {
         const card = this.createPlaylistCard(playlist);
-        this.elements.listContainer.appendChild(card);
+        if (card) {
+          this.elements.listContainer.appendChild(card);
+        }
       });
 
       if (window.lucide) window.lucide.createIcons();
@@ -567,7 +602,7 @@
       // Breadcrumb Header inside list container
       const navHeader = document.createElement('div');
       navHeader.className = 'p-2 sm:p-2.5 mb-2 bg-almond-cream/40 dark:bg-[#1a1e27] rounded-xl border border-almond-cream dark:border-[#272f3d] flex items-center justify-between gap-2 select-none';
-      const titleEscaped = (playlist.title || 'Untitled Playlist').replace(/"/g, '&quot;');
+      const titleEscaped = safeEscape(playlist.title || 'Untitled Playlist');
 
       navHeader.innerHTML = `
         <button type="button" id="btn-back-to-playlists" class="inline-flex items-center gap-1.5 text-xs font-semibold text-accent-brown dark:text-[#c6ac8f] hover:underline cursor-pointer py-1">
@@ -576,7 +611,7 @@
         </button>
         <div class="flex items-center gap-2 min-w-0">
           <span class="text-[11px] sm:text-xs font-semibold text-stone-brown dark:text-[#c6ac8f] truncate max-w-[140px] sm:max-w-[240px]" title="${titleEscaped}">
-            ${playlist.title || 'Playlist'}
+            ${titleEscaped}
           </span>
           <button type="button" id="btn-playlist-detail-dl-all" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-jet-black text-white dark:bg-[#f3f4f6] dark:text-[#0e1116] flex items-center gap-1 shadow-xs cursor-pointer shrink-0">
             <i data-lucide="download" class="w-3.5 h-3.5"></i>
@@ -633,7 +668,7 @@
 
       tracks.forEach((track, index) => {
         const trackCard = this.createPlaylistTrackCard(track, playlist, index + 1);
-        tracksContainer.appendChild(trackCard);
+        if (trackCard) tracksContainer.appendChild(trackCard);
       });
 
       this.updateSelectionUI();
@@ -641,30 +676,34 @@
     },
 
     createVideoCard(video) {
+      if (!video || !video.id) return null;
       const card = document.createElement('div');
       card.className = 'p-2 sm:p-2.5 rounded-xl hover:bg-almond-cream/30 dark:hover:bg-[#1e232e] transition flex items-center gap-2.5 sm:gap-3 group select-none relative';
 
-      const thumbUrl = video.thumbnail || (video.thumbnails && video.thumbnails[0]) || `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`;
-      const titleEscaped = (video.title || 'Untitled Track').replace(/"/g, '&quot;');
-      const channelEscaped = (video.channel || 'YouTube').replace(/"/g, '&quot;');
-      const durationText = video.duration || '';
-      const viewCountText = video.view_count || video.views || '';
+      const thumbUrl = video.thumbnail || (video.thumbnails && video.thumbnails[0]) || (video.id ? `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg` : '');
+      const titleEscaped = safeEscape(video.title || 'Untitled Track');
+      const channelEscaped = safeEscape(video.channel || 'YouTube');
+      const durationText = safeEscape(video.duration || '');
+      const viewCountText = safeEscape(video.view_count || video.views || '');
       const isSelected = this.selectedVideos.has(video.id);
 
       card.innerHTML = `
         <!-- Checkbox -->
-        <input type="checkbox" class="related-item-checkbox rounded border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#c6ac8f] shrink-0 cursor-pointer w-4 h-4" data-video-id="${video.id}" ${isSelected ? 'checked' : ''}>
+        <input type="checkbox" class="related-item-checkbox rounded border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#c6ac8f] shrink-0 cursor-pointer w-4 h-4" data-video-id="${safeEscape(video.id)}" ${isSelected ? 'checked' : ''}>
 
         <!-- Thumbnail with duration badge -->
-        <div class="relative w-16 h-12 sm:w-20 sm:h-14 rounded-lg overflow-hidden bg-almond-cream/40 dark:bg-[#12151c] shrink-0 shadow-sm border border-almond-cream/60 dark:border-[#262c38]">
-          <img src="${thumbUrl}" alt="" class="w-full h-full object-cover" loading="lazy">
+        <div class="relative w-16 h-12 sm:w-20 sm:h-14 rounded-lg overflow-hidden bg-almond-cream/40 dark:bg-[#12151c] shrink-0 shadow-sm border border-almond-cream/60 dark:border-[#262c38] flex items-center justify-center">
+          ${thumbUrl ? `<img src="${thumbUrl}" alt="" class="w-full h-full object-cover" loading="lazy" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('hidden');">` : ''}
+          <div class="${thumbUrl ? 'hidden' : ''} text-stone-brown/40 dark:text-[#525d70]">
+            <i data-lucide="music" class="w-5 h-5"></i>
+          </div>
           ${durationText ? `<span class="absolute bottom-0.5 right-0.5 px-1 py-0.5 rounded text-[9px] sm:text-[10px] font-mono font-bold bg-black/85 text-white leading-none shadow-sm">${durationText}</span>` : ''}
         </div>
 
         <!-- Title, Channel & Views (Full width flex) -->
         <div class="card-info flex-1 min-w-0 pr-1 cursor-pointer">
           <div class="text-xs sm:text-sm font-semibold text-black dark:text-[#f3f4f6] truncate group-hover:text-accent-brown dark:group-hover:text-[#c6ac8f] transition" title="${titleEscaped}">
-            ${video.title || 'Untitled'}
+            ${titleEscaped}
           </div>
           <div class="flex items-center gap-1.5 mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] font-mono text-stone-brown/70 dark:text-[#9aa4b2]">
             <span class="truncate max-w-[120px] sm:max-w-[200px]">${channelEscaped}</span>
@@ -672,20 +711,20 @@
           </div>
         </div>
 
-        <!-- Direct 1-Tap Action Buttons (No Popups/Dropdowns) -->
+        <!-- Direct 1-Tap Action Buttons -->
         <div class="flex items-center gap-1 shrink-0">
           <!-- Play Next Button -->
-          <button type="button" class="btn-play-related p-2 rounded-xl text-stone-brown dark:text-[#c6ac8f] hover:text-black dark:hover:text-white hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] transition cursor-pointer" title="Download & Play Next" data-video-id="${video.id}">
+          <button type="button" class="btn-play-related p-2 rounded-xl text-stone-brown dark:text-[#c6ac8f] hover:text-black dark:hover:text-white hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] transition cursor-pointer" title="Download & Play Next" data-video-id="${safeEscape(video.id)}">
             <i data-lucide="play-circle" class="w-5 h-5 text-accent-brown dark:text-[#c6ac8f]"></i>
           </button>
 
           <!-- Download Button -->
-          <button type="button" class="btn-action-download p-2 rounded-xl text-stone-brown dark:text-[#c6ac8f] hover:text-black dark:hover:text-white hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] transition cursor-pointer" title="Download to Vault" data-video-id="${video.id}">
+          <button type="button" class="btn-action-download p-2 rounded-xl text-stone-brown dark:text-[#c6ac8f] hover:text-black dark:hover:text-white hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] transition cursor-pointer" title="Download to Vault" data-video-id="${safeEscape(video.id)}">
             <i data-lucide="download" class="w-4 h-4 sm:w-4.5 sm:h-4.5"></i>
           </button>
 
           <!-- Open in YouTube External Link -->
-          <a href="${video.url || `https://www.youtube.com/watch?v=${video.id}`}" target="_blank" rel="noopener noreferrer" class="p-2 rounded-xl text-stone-brown/60 dark:text-[#8b95a5] hover:text-black dark:hover:text-white hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] transition hidden sm:inline-flex" title="Open on YouTube">
+          <a href="${safeEscape(video.url || `https://www.youtube.com/watch?v=${video.id}`)}" target="_blank" rel="noopener noreferrer" class="p-2 rounded-xl text-stone-brown/60 dark:text-[#8b95a5] hover:text-black dark:hover:text-white hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] transition hidden sm:inline-flex" title="Open on YouTube">
             <i data-lucide="external-link" class="w-4 h-4"></i>
           </a>
         </div>
@@ -728,23 +767,29 @@
     },
 
     createPlaylistCard(playlist) {
+      if (!playlist || !playlist.id || !playlist.title || typeof playlist.title !== 'string') return null;
+
       const card = document.createElement('div');
       card.className = 'p-2 sm:p-2.5 rounded-xl hover:bg-almond-cream/30 dark:hover:bg-[#1e232e] transition flex items-center gap-2.5 sm:gap-3 group select-none relative cursor-pointer';
       card.setAttribute('data-playlist-id', playlist.id);
 
       const thumbUrl = playlist.thumbnail || (playlist.thumbnails && playlist.thumbnails[0]) || '';
-      const titleEscaped = (playlist.title || 'Untitled Playlist').replace(/"/g, '&quot;');
-      const channelEscaped = (playlist.channel || 'YouTube').replace(/"/g, '&quot;');
-      const videoCountText = playlist.video_count || '';
+      const titleEscaped = safeEscape(playlist.title || 'Untitled Playlist');
+      const channelEscaped = safeEscape(playlist.channel || 'YouTube');
+      const videoCountText = safeEscape(playlist.video_count || '');
 
       card.innerHTML = `
-        <!-- Stacked Playlist Thumbnail -->
-        <div class="relative w-16 h-12 sm:w-20 sm:h-14 rounded-lg overflow-hidden bg-almond-cream/40 dark:bg-[#12151c] shrink-0 shadow-sm border border-almond-cream/60 dark:border-[#262c38]">
-          ${thumbUrl ? `<img src="${thumbUrl}" alt="" class="w-full h-full object-cover" loading="lazy">` : `<div class="w-full h-full flex items-center justify-center bg-stone-brown/10 text-stone-brown/60"><i data-lucide="list-music" class="w-6 h-6"></i></div>`}
-          <div class="absolute inset-y-0 right-0 w-6 bg-black/75 backdrop-blur-[1px] flex flex-col items-center justify-center text-white/90">
-            <i data-lucide="list-music" class="w-3.5 h-3.5"></i>
+        <!-- Simplified Playlist Thumbnail -->
+        <div class="relative w-16 h-12 sm:w-20 sm:h-14 rounded-lg overflow-hidden bg-almond-cream/40 dark:bg-[#12151c] shrink-0 shadow-sm border border-almond-cream/60 dark:border-[#262c38] flex items-center justify-center">
+          ${thumbUrl ? `<img src="${thumbUrl}" alt="" class="w-full h-full object-cover" loading="lazy" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('hidden');">` : ''}
+          <div class="${thumbUrl ? 'hidden' : ''} text-stone-brown/40 dark:text-[#525d70]">
+            <i data-lucide="list-music" class="w-6 h-6"></i>
           </div>
-          ${videoCountText ? `<span class="absolute bottom-0.5 left-0.5 px-1 py-0.2 rounded text-[9px] font-mono font-bold bg-black/85 text-white leading-tight shadow-sm">${videoCountText}</span>` : ''}
+          <!-- Clean playlist count badge on bottom right -->
+          <div class="absolute bottom-0.5 right-0.5 px-1 py-0.5 rounded text-[9px] font-mono font-bold bg-black/85 text-white flex items-center gap-0.5 leading-none shadow-sm">
+            <i data-lucide="list-music" class="w-2.5 h-2.5"></i>
+            ${videoCountText ? `<span>${videoCountText}</span>` : ''}
+          </div>
         </div>
 
         <!-- Title, Channel & Playlist Badge -->
@@ -752,19 +797,18 @@
           <div class="flex items-center gap-1.5 min-w-0">
             <span class="px-1.5 py-0.5 text-[9px] font-bold rounded bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30 uppercase tracking-wider shrink-0">Playlist</span>
             <div class="text-xs sm:text-sm font-semibold text-black dark:text-[#f3f4f6] truncate group-hover:text-accent-brown dark:group-hover:text-[#c6ac8f] transition" title="${titleEscaped}">
-              ${playlist.title || 'Untitled Playlist'}
+              ${titleEscaped}
             </div>
           </div>
           <div class="flex items-center gap-1.5 mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] font-mono text-stone-brown/70 dark:text-[#9aa4b2]">
             <span class="truncate max-w-[130px] sm:max-w-[220px]">${channelEscaped}</span>
-            ${videoCountText ? `<span class="shrink-0">• ${videoCountText}</span>` : ''}
           </div>
         </div>
 
         <!-- Direct Action Buttons -->
         <div class="flex items-center gap-1 shrink-0">
           <!-- View Tracks Button -->
-          <button type="button" class="btn-view-playlist px-2.5 py-1.5 rounded-lg bg-almond-cream/60 dark:bg-[#222734] hover:bg-almond-cream dark:hover:bg-[#2d3444] text-xs font-semibold text-black dark:text-[#f3f4f6] transition flex items-center gap-1 cursor-pointer shadow-xs">
+          <button type="button" class="btn-view-playlist px-2.5 py-1.5 rounded-lg bg-almond-cream/60 dark:bg-[#222734] hover:bg-almond-cream dark:hover:bg-[#2d3444] text-xs font-semibold text-black dark:text-[#f3f4f6] transition flex items-center gap-1 cursor-pointer shadow-xs" title="View Tracks">
             <i data-lucide="list-music" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">Tracks</span>
           </button>
@@ -775,7 +819,7 @@
           </button>
 
           <!-- Open in YouTube External Link -->
-          <a href="${playlist.url}" target="_blank" rel="noopener noreferrer" class="p-2 rounded-xl text-stone-brown/60 dark:text-[#8b95a5] hover:text-black dark:hover:text-white hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] transition hidden sm:inline-flex" title="Open on YouTube">
+          <a href="${safeEscape(playlist.url || `https://www.youtube.com/playlist?list=${playlist.id}`)}" target="_blank" rel="noopener noreferrer" class="p-2 rounded-xl text-stone-brown/60 dark:text-[#8b95a5] hover:text-black dark:hover:text-white hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] transition hidden sm:inline-flex" title="Open on YouTube">
             <i data-lucide="external-link" class="w-4 h-4"></i>
           </a>
         </div>
@@ -807,32 +851,36 @@
     },
 
     createPlaylistTrackCard(track, playlist, trackNumber) {
+      if (!track || !track.id) return null;
       const card = document.createElement('div');
       card.className = 'p-1.5 sm:p-2 rounded-lg hover:bg-almond-cream/30 dark:hover:bg-[#1e232e] transition flex items-center gap-2 sm:gap-2.5 group select-none relative';
 
-      const thumbUrl = track.thumbnail || (track.thumbnails && track.thumbnails[0]) || `https://i.ytimg.com/vi/${track.id}/hqdefault.jpg`;
-      const titleEscaped = (track.title || 'Untitled Track').replace(/"/g, '&quot;');
-      const channelEscaped = (track.channel || playlist.channel || 'YouTube').replace(/"/g, '&quot;');
-      const durationText = track.duration || '';
+      const thumbUrl = track.thumbnail || (track.thumbnails && track.thumbnails[0]) || (track.id ? `https://i.ytimg.com/vi/${track.id}/hqdefault.jpg` : '');
+      const titleEscaped = safeEscape(track.title || 'Untitled Track');
+      const channelEscaped = safeEscape(track.channel || playlist.channel || 'YouTube');
+      const durationText = safeEscape(track.duration || '');
       const isSelected = this.selectedVideos.has(track.id);
 
       card.innerHTML = `
         <!-- Sub-track Checkbox -->
-        <input type="checkbox" class="related-item-checkbox playlist-track-checkbox rounded border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#c6ac8f] shrink-0 cursor-pointer w-3.5 h-3.5" data-video-id="${track.id}" ${isSelected ? 'checked' : ''}>
+        <input type="checkbox" class="related-item-checkbox playlist-track-checkbox rounded border-khaki-beige dark:border-[#353c4d] text-jet-black dark:text-[#c6ac8f] shrink-0 cursor-pointer w-3.5 h-3.5" data-video-id="${safeEscape(track.id)}" ${isSelected ? 'checked' : ''}>
 
         <!-- Index Number -->
         <span class="w-4 text-center font-mono text-[10px] text-stone-brown/60 dark:text-[#758092] shrink-0">${trackNumber}</span>
 
         <!-- Compact Thumbnail with duration -->
-        <div class="relative w-12 h-9 sm:w-14 sm:h-10 rounded-md overflow-hidden bg-almond-cream/40 dark:bg-[#12151c] shrink-0 shadow-xs border border-almond-cream/60 dark:border-[#262c38]">
-          <img src="${thumbUrl}" alt="" class="w-full h-full object-cover" loading="lazy">
+        <div class="relative w-12 h-9 sm:w-14 sm:h-10 rounded-md overflow-hidden bg-almond-cream/40 dark:bg-[#12151c] shrink-0 shadow-xs border border-almond-cream/60 dark:border-[#262c38] flex items-center justify-center">
+          ${thumbUrl ? `<img src="${thumbUrl}" alt="" class="w-full h-full object-cover" loading="lazy" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('hidden');">` : ''}
+          <div class="${thumbUrl ? 'hidden' : ''} text-stone-brown/40 dark:text-[#525d70]">
+            <i data-lucide="music" class="w-4 h-4"></i>
+          </div>
           ${durationText ? `<span class="absolute bottom-0.5 right-0.5 px-0.5 py-0.2 rounded text-[8px] font-mono font-bold bg-black/85 text-white leading-none">${durationText}</span>` : ''}
         </div>
 
         <!-- Title & Channel -->
         <div class="card-info flex-1 min-w-0 pr-1 cursor-pointer">
           <div class="text-xs font-semibold text-black dark:text-[#f3f4f6] truncate group-hover:text-accent-brown dark:group-hover:text-[#c6ac8f] transition" title="${titleEscaped}">
-            ${track.title || 'Untitled'}
+            ${titleEscaped}
           </div>
           <div class="flex items-center gap-1 text-[10px] font-mono text-stone-brown/70 dark:text-[#9aa4b2]">
             <span class="truncate max-w-[120px] sm:max-w-[200px]">${channelEscaped}</span>
@@ -842,17 +890,17 @@
         <!-- Direct Action Buttons -->
         <div class="flex items-center gap-0.5 shrink-0">
           <!-- Play Next -->
-          <button type="button" class="btn-play-related p-1.5 rounded-lg text-stone-brown dark:text-[#c6ac8f] hover:text-black dark:hover:text-white hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] transition cursor-pointer" title="Download & Play Next" data-video-id="${track.id}">
+          <button type="button" class="btn-play-related p-1.5 rounded-lg text-stone-brown dark:text-[#c6ac8f] hover:text-black dark:hover:text-white hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] transition cursor-pointer" title="Download & Play Next" data-video-id="${safeEscape(track.id)}">
             <i data-lucide="play-circle" class="w-4.5 h-4.5 text-accent-brown dark:text-[#c6ac8f]"></i>
           </button>
 
           <!-- Download -->
-          <button type="button" class="btn-action-download p-1.5 rounded-lg text-stone-brown dark:text-[#c6ac8f] hover:text-black dark:hover:text-white hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] transition cursor-pointer" title="Download to Vault" data-video-id="${track.id}">
+          <button type="button" class="btn-action-download p-1.5 rounded-lg text-stone-brown dark:text-[#c6ac8f] hover:text-black dark:hover:text-white hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] transition cursor-pointer" title="Download to Vault" data-video-id="${safeEscape(track.id)}">
             <i data-lucide="download" class="w-4 h-4"></i>
           </button>
 
           <!-- Open in YouTube -->
-          <a href="${track.url || `https://www.youtube.com/watch?v=${track.id}`}" target="_blank" rel="noopener noreferrer" class="p-1.5 rounded-lg text-stone-brown/60 dark:text-[#8b95a5] hover:text-black dark:hover:text-white hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] transition hidden sm:inline-flex" title="Open on YouTube">
+          <a href="${safeEscape(track.url || `https://www.youtube.com/watch?v=${track.id}`)}" target="_blank" rel="noopener noreferrer" class="p-1.5 rounded-lg text-stone-brown/60 dark:text-[#8b95a5] hover:text-black dark:hover:text-white hover:bg-almond-cream/60 dark:hover:bg-[#282e3b] transition hidden sm:inline-flex" title="Open on YouTube">
             <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
           </a>
         </div>
@@ -965,14 +1013,7 @@
           const uniqueNewVideos = newVideos.filter(v => !existingIds.has(v.id));
 
           this.allVideos.push(...uniqueNewVideos);
-          if (this.elements.countBadge) {
-            const pls = this.allPlaylists || [];
-            if (pls.length > 0) {
-              this.elements.countBadge.innerText = `${this.allVideos.length} tracks • ${pls.length} playlists`;
-            } else {
-              this.elements.countBadge.innerText = `${this.allVideos.length} found`;
-            }
-          }
+          this.updateHeaderBadge();
           if (this.elements.footerStatus) {
             this.elements.footerStatus.innerText = `${this.allVideos.length} tracks ready`;
           }
@@ -983,7 +1024,7 @@
           if (this.currentView === 'tracks') {
             uniqueNewVideos.forEach(v => {
               const card = this.createVideoCard(v);
-              this.elements.listContainer.appendChild(card);
+              if (card) this.elements.listContainer.appendChild(card);
             });
 
             if (this.continuationToken) {

@@ -327,13 +327,21 @@ function extractLegacyVideo(renderer, rendererName, seedVideoId) {
 }
 
 function normalizePlaylist(node, rendererName) {
-  const playlistId =
-    node.playlistId ??
-    getPath(node, "navigationEndpoint", "watchEndpoint", "playlistId");
+  let playlistId = node.playlistId;
+  if (!playlistId || typeof playlistId !== "string") {
+    playlistId = getPath(node, "navigationEndpoint", "watchEndpoint", "playlistId");
+  }
 
-  if (!playlistId || typeof playlistId !== "string") return null;
+  // Reject missing, radio/mix (RD...), or video IDs
+  if (!playlistId || typeof playlistId !== "string" || playlistId.startsWith("RD") || VIDEO_ID_RE.test(playlistId)) {
+    return null;
+  }
 
   const title = firstText(node, "title", "headline");
+  if (!title || typeof title !== "string" || !title.trim()) {
+    return null;
+  }
+
   const channel = firstText(node, "longBylineText", "shortBylineText");
   const videoCount = firstText(node, "videoCountText", "videoCountShortText");
   const thumbs = getThumbnails(node);
@@ -341,8 +349,8 @@ function normalizePlaylist(node, rendererName) {
   return {
     type: "playlist",
     id: playlistId,
-    title: title ?? null,
-    channel: channel ?? null,
+    title: title.trim(),
+    channel: channel ?? "YouTube",
     video_count: videoCount ?? null,
     url: `https://www.youtube.com/playlist?list=${playlistId}`,
     thumbnails: thumbs,
@@ -355,29 +363,48 @@ function normalizePlaylist(node, rendererName) {
 function extractLockupPlaylist(lockup) {
   if (!lockup || typeof lockup !== "object") return null;
 
+  // Videos and Shorts are never playlists
+  if (lockup.contentType === "LOCKUP_CONTENT_TYPE_VIDEO" || lockup.contentType === "LOCKUP_CONTENT_TYPE_SHORTS") {
+    return null;
+  }
+
   let playlistId = lockup.contentId;
-  if (!playlistId || typeof playlistId !== "string" || VIDEO_ID_RE.test(playlistId)) {
+  // If contentId looks like a 11-char video ID, do NOT treat as a playlist
+  if (playlistId && VIDEO_ID_RE.test(playlistId)) {
+    return null;
+  }
+
+  if (!playlistId || typeof playlistId !== "string") {
     playlistId =
-      getPath(lockup, "rendererContext", "commandContext", "onTap", "innertubeCommand", "watchEndpoint", "playlistId") ||
-      getPath(lockup, "rendererContext", "commandContext", "onTap", "innertubeCommand", "browseEndpoint", "browseId");
+      getPath(lockup, "rendererContext", "commandContext", "onTap", "innertubeCommand", "browseEndpoint", "browseId") ||
+      getPath(lockup, "rendererContext", "commandContext", "onTap", "innertubeCommand", "watchEndpoint", "playlistId");
   }
 
   if (typeof playlistId === "string" && playlistId.startsWith("VL")) {
     playlistId = playlistId.slice(2);
   }
 
+  // Radio/Mix "RD..." is dynamic autoplay context for a video, NOT a browsable playlist
+  if (!playlistId || typeof playlistId !== "string" || playlistId.startsWith("RD") || VIDEO_ID_RE.test(playlistId)) {
+    return null;
+  }
+
   const isPlaylistType =
     lockup.contentType === "LOCKUP_CONTENT_TYPE_PLAYLIST" ||
-    (playlistId && (playlistId.startsWith("PL") || playlistId.startsWith("RD") || playlistId.startsWith("OLAK")));
+    playlistId.startsWith("PL") ||
+    playlistId.startsWith("OLAK");
 
-  if (!isPlaylistType || !playlistId || typeof playlistId !== "string") {
+  if (!isPlaylistType) {
     return null;
   }
 
   const title =
     getPath(lockup, "metadata", "lockupMetadataViewModel", "title", "content") ||
-    firstText(lockup.metadata?.lockupMetadataViewModel?.title) ||
-    "Untitled Playlist";
+    firstText(lockup.metadata?.lockupMetadataViewModel?.title);
+
+  if (!title || typeof title !== "string" || !title.trim()) {
+    return null;
+  }
 
   const metaRows = getPath(lockup, "metadata", "lockupMetadataViewModel", "metadata", "contentMetadataViewModel", "metadataRows") || [];
   let channel = null;
@@ -390,7 +417,7 @@ function extractLockupPlaylist(lockup) {
       if (!txt) continue;
       if (!channel) {
         channel = txt;
-      } else if (txt.toLowerCase().includes("video") || txt.toLowerCase().includes("track") || /^\d+/.test(txt)) {
+      } else if (txt.toLowerCase().includes("video") || txt.toLowerCase().includes("track") || /^\d+\s+(video|track)/i.test(txt)) {
         videoCount = txt;
       }
     }
@@ -407,7 +434,7 @@ function extractLockupPlaylist(lockup) {
   return {
     type: "playlist",
     id: playlistId,
-    title,
+    title: title.trim(),
     channel: channel || "YouTube",
     video_count: videoCount || null,
     url: `https://www.youtube.com/playlist?list=${playlistId}`,
@@ -450,17 +477,18 @@ function parseRecommendations(data, seedVideoId) {
 
     // 1. Modern lockupViewModel
     if (item.lockupViewModel) {
-      const p = extractLockupPlaylist(item.lockupViewModel);
-      if (p && !seenIds.has(p.id)) {
-        seenIds.add(p.id);
-        playlists.push(p);
-        continue;
-      }
       const v = extractLockupVideo(item.lockupViewModel, seedVideoId);
       if (v && !seenIds.has(v.id)) {
         seenIds.add(v.id);
         videos.push(v);
         v.tags.forEach((t) => globalTags.set(t, (globalTags.get(t) || 0) + 1));
+        continue;
+      }
+      const p = extractLockupPlaylist(item.lockupViewModel);
+      if (p && !seenIds.has(p.id)) {
+        seenIds.add(p.id);
+        playlists.push(p);
+        continue;
       }
       continue;
     }
@@ -491,17 +519,18 @@ function parseRecommendations(data, seedVideoId) {
     for (const [node] of walk(data)) {
       if (!node || typeof node !== "object") continue;
       if (node.lockupViewModel) {
-        const p = extractLockupPlaylist(node.lockupViewModel);
-        if (p && !seenIds.has(p.id)) {
-          seenIds.add(p.id);
-          playlists.push(p);
-          continue;
-        }
         const v = extractLockupVideo(node.lockupViewModel, seedVideoId);
         if (v && !seenIds.has(v.id)) {
           seenIds.add(v.id);
           videos.push(v);
           v.tags.forEach((t) => globalTags.set(t, (globalTags.get(t) || 0) + 1));
+          continue;
+        }
+        const p = extractLockupPlaylist(node.lockupViewModel);
+        if (p && !seenIds.has(p.id)) {
+          seenIds.add(p.id);
+          playlists.push(p);
+          continue;
         }
       } else {
         for (const [key, val] of Object.entries(node)) {

@@ -372,14 +372,12 @@ code, .font-mono {
 
 #expanded-player {
   touch-action: none;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
+  isolation: isolate;
+  contain: paint;
 }
 
 #expanded-cover-art {
   touch-action: none;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
 }
 
 #pull-refresh-indicator {
