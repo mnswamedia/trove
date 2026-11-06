@@ -610,8 +610,14 @@
       <div class="relative flex flex-col gap-1.5" id="expanded-progress-container">
         <!-- Normal Scrubber Group -->
         <div id="expanded-scrubber-group" class="relative flex flex-col">
-          <!-- Repeat A-B Flow Pill Button (Above progress bar with safe vertical clearance) -->
-          <div class="flex items-center justify-center mb-3 sm:mb-4">
+          <!-- Repeat A-B & Utility Row (Favorite Left, Repeat A-B Center, Sleep Timer Right) -->
+          <div class="flex items-center justify-between mb-3 sm:mb-4 px-1 select-none">
+            <!-- Favorite Track Button -->
+            <button id="btn-expanded-favorite" type="button" class="flex items-center justify-center w-8 h-8 rounded-full border border-almond-cream/80 dark:border-[#2b3240] bg-white/70 dark:bg-[#1a1e27] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition text-stone-brown/60 dark:text-[#9aa4b2]/60 hover:text-rose-500 dark:hover:text-rose-400 select-none shadow-sm cursor-pointer shrink-0" title="Add to Liked Songs">
+              <i data-lucide="heart" class="w-4 h-4"></i>
+            </button>
+
+            <!-- Repeat A-B Flow Pill Button -->
             <div id="repeat-ab-container" class="flex items-center gap-1.5 select-none">
               <button 
                 id="btn-repeat-ab" 
@@ -630,6 +636,41 @@
               >
                 <i data-lucide="x" class="w-3.5 h-3.5"></i>
               </button>
+            </div>
+
+            <!-- Sleep Timer Wrapper & Menu -->
+            <div class="relative shrink-0" id="sleep-timer-wrapper">
+              <button id="btn-sleep-timer" type="button" class="flex items-center justify-center w-8 h-8 rounded-full border border-almond-cream/80 dark:border-[#2b3240] bg-white/70 dark:bg-[#1a1e27] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition text-stone-brown dark:text-[#c6ac8f] select-none shadow-sm cursor-pointer" title="Sleep Timer">
+                <i data-lucide="moon" class="w-4 h-4"></i>
+                <span id="sleep-timer-badge" class="font-mono text-[9px] hidden">Off</span>
+              </button>
+              <div id="sleep-timer-menu" class="absolute bottom-full mb-2.5 right-0 w-44 bg-white dark:bg-[#191d26] border border-almond-cream dark:border-[#2b3240] rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,0.28)] p-2 flex flex-col gap-1 z-50 hidden select-none animate-in fade-in slide-in-from-bottom-2">
+                <div class="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-brown/60 dark:text-[#758092]">Sleep Timer</div>
+                <button type="button" class="sleep-timer-opt w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition flex items-center justify-between" data-minutes="0">
+                  <span>Off</span>
+                  <i data-lucide="check" class="w-3.5 h-3.5 check-icon"></i>
+                </button>
+                <button type="button" class="sleep-timer-opt w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition flex items-center justify-between" data-minutes="15">
+                  <span>15 Minutes</span>
+                  <i data-lucide="check" class="w-3.5 h-3.5 check-icon hidden"></i>
+                </button>
+                <button type="button" class="sleep-timer-opt w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition flex items-center justify-between" data-minutes="30">
+                  <span>30 Minutes</span>
+                  <i data-lucide="check" class="w-3.5 h-3.5 check-icon hidden"></i>
+                </button>
+                <button type="button" class="sleep-timer-opt w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition flex items-center justify-between" data-minutes="45">
+                  <span>45 Minutes</span>
+                  <i data-lucide="check" class="w-3.5 h-3.5 check-icon hidden"></i>
+                </button>
+                <button type="button" class="sleep-timer-opt w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition flex items-center justify-between" data-minutes="60">
+                  <span>60 Minutes</span>
+                  <i data-lucide="check" class="w-3.5 h-3.5 check-icon hidden"></i>
+                </button>
+                <button type="button" class="sleep-timer-opt w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition flex items-center justify-between" data-minutes="track">
+                  <span>End of Track</span>
+                  <i data-lucide="check" class="w-3.5 h-3.5 check-icon hidden"></i>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -717,11 +758,6 @@
 
         <!-- Right Utilities: Add to Playlist, Related Tracks, EQ Button & Vertical Volume Pill -->
         <div class="flex items-center gap-1.5 sm:gap-2">
-          <!-- Favorite Track Button -->
-          <button id="btn-expanded-favorite" type="button" class="flex items-center justify-center p-2 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-white/80 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition text-stone-brown/60 dark:text-[#9aa4b2]/60 hover:text-rose-500 dark:hover:text-rose-400 text-xs font-semibold select-none shadow-sm cursor-pointer" title="Add to Liked Songs">
-            <i data-lucide="heart" class="w-4 h-4"></i>
-          </button>
-
           <!-- Add Current Track to Playlist Button -->
           <button id="btn-player-add-playlist" type="button" class="flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-2 min-h-[36px] min-w-[68px] sm:min-w-[76px] rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-white/80 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition text-stone-brown dark:text-[#c6ac8f] text-xs font-semibold select-none shadow-sm cursor-pointer" title="Add Track to Playlist or Queue">
             <i data-lucide="bookmark-plus" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f]"></i>
@@ -740,41 +776,6 @@
             <span class="hidden xs:inline">EQ</span>
             <span id="eq-badge" class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-almond-cream/60 dark:bg-[#252a36] text-stone-brown dark:text-[#c6ac8f]">Flat</span>
           </button>
-
-          <!-- Sleep Timer Wrapper & Menu -->
-          <div class="relative" id="sleep-timer-wrapper">
-            <button id="btn-sleep-timer" type="button" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-almond-cream/80 dark:border-[#2b3240] bg-white/80 dark:bg-[#1a1e26] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition text-stone-brown dark:text-[#c6ac8f] text-xs font-semibold select-none shadow-sm cursor-pointer" title="Sleep Timer">
-              <i data-lucide="moon" class="w-3.5 h-3.5 text-stone-brown dark:text-[#c6ac8f]"></i>
-              <span id="sleep-timer-badge" class="font-mono text-[10px] hidden">Off</span>
-            </button>
-            <div id="sleep-timer-menu" class="absolute bottom-full mb-2.5 right-0 w-44 bg-white dark:bg-[#191d26] border border-almond-cream dark:border-[#2b3240] rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,0.28)] p-2 flex flex-col gap-1 z-50 hidden select-none animate-in fade-in slide-in-from-bottom-2">
-              <div class="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-brown/60 dark:text-[#758092]">Sleep Timer</div>
-              <button type="button" class="sleep-timer-opt w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition flex items-center justify-between" data-minutes="0">
-                <span>Off</span>
-                <i data-lucide="check" class="w-3.5 h-3.5 check-icon"></i>
-              </button>
-              <button type="button" class="sleep-timer-opt w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition flex items-center justify-between" data-minutes="15">
-                <span>15 Minutes</span>
-                <i data-lucide="check" class="w-3.5 h-3.5 check-icon hidden"></i>
-              </button>
-              <button type="button" class="sleep-timer-opt w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition flex items-center justify-between" data-minutes="30">
-                <span>30 Minutes</span>
-                <i data-lucide="check" class="w-3.5 h-3.5 check-icon hidden"></i>
-              </button>
-              <button type="button" class="sleep-timer-opt w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition flex items-center justify-between" data-minutes="45">
-                <span>45 Minutes</span>
-                <i data-lucide="check" class="w-3.5 h-3.5 check-icon hidden"></i>
-              </button>
-              <button type="button" class="sleep-timer-opt w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition flex items-center justify-between" data-minutes="60">
-                <span>60 Minutes</span>
-                <i data-lucide="check" class="w-3.5 h-3.5 check-icon hidden"></i>
-              </button>
-              <button type="button" class="sleep-timer-opt w-full px-2.5 py-1.5 text-xs text-left rounded-lg text-jet-black dark:text-[#f3f4f6] hover:bg-almond-cream/40 dark:hover:bg-[#222734] transition flex items-center justify-between" data-minutes="track">
-                <span>End of Track</span>
-                <i data-lucide="check" class="w-3.5 h-3.5 check-icon hidden"></i>
-              </button>
-            </div>
-          </div>
 
           <!-- Volume Pill & Vertical Popover -->
           <div class="relative" id="volume-wrapper">
