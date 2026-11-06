@@ -42,6 +42,7 @@
       this.elements = {
         btnToggle: document.getElementById('btn-related-toggle'),
         bottomSheet: document.getElementById('related-bottom-sheet'),
+        sheetContainer: document.getElementById('related-sheet-container'),
         backdrop: document.getElementById('related-backdrop'),
         btnClose: document.getElementById('btn-close-related'),
         btnRefresh: document.getElementById('btn-related-refresh'),
@@ -77,19 +78,29 @@
           this.open();
         });
       }
+      if (this.elements.sheetContainer) {
+        this.elements.sheetContainer.addEventListener('click', (e) => {
+          e.stopPropagation();
+        });
+      }
       if (this.elements.bottomSheet) {
         this.elements.bottomSheet.addEventListener('click', (e) => {
-          const card = this.elements.bottomSheet.querySelector('.relative');
-          if (card && !card.contains(e.target)) {
+          if (e.target === this.elements.bottomSheet || e.target === this.elements.backdrop) {
             this.close();
           }
         });
       }
       if (this.elements.backdrop) {
-        this.elements.backdrop.addEventListener('click', () => this.close());
+        this.elements.backdrop.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.close();
+        });
       }
       if (this.elements.btnClose) {
-        this.elements.btnClose.addEventListener('click', () => this.close());
+        this.elements.btnClose.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.close();
+        });
       }
       if (this.elements.btnRefresh) {
         this.elements.btnRefresh.addEventListener('click', () => {
@@ -593,7 +604,7 @@
       this.elements.listContainer.innerHTML = '';
 
       if (this.elements.toolbarLeft) {
-        this.elements.toolbarLeft.classList.remove('invisible');
+        this.elements.toolbarLeft.classList.remove('hidden', 'invisible');
       }
       if (this.elements.selectAllLabel) {
         this.elements.selectAllLabel.innerText = 'Select All';
@@ -621,12 +632,14 @@
       `;
       this.elements.listContainer.appendChild(navHeader);
 
-      navHeader.querySelector('#btn-back-to-playlists').addEventListener('click', () => {
+      navHeader.querySelector('#btn-back-to-playlists').addEventListener('click', (e) => {
+        e.stopPropagation();
         this.switchView('playlists');
       });
 
       const btnDlAll = navHeader.querySelector('#btn-playlist-detail-dl-all');
-      btnDlAll.addEventListener('click', async () => {
+      btnDlAll.addEventListener('click', async (e) => {
+        e.stopPropagation();
         let tracks = this.playlistTracksCache.get(playlist.id);
         if (!tracks || tracks.length === 0) {
           tracks = await this.fetchPlaylistTracks(playlist.id);
@@ -655,6 +668,8 @@
         tracks = await this.fetchPlaylistTracks(playlist.id);
         tracksContainer.innerHTML = '';
       }
+
+      this.updateHeaderBadge();
 
       if (!tracks || tracks.length === 0) {
         tracksContainer.innerHTML = `
@@ -825,11 +840,21 @@
         </div>
       `;
 
-      // Clicking card or View Tracks button opens playlist details
+      // View Tracks button opens playlist details
+      const btnView = card.querySelector('.btn-view-playlist');
+      if (btnView) {
+        btnView.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.switchView('playlist-detail', playlist);
+        });
+      }
+
+      // Clicking anywhere on card (except download and external link) opens playlist details
       card.addEventListener('click', (e) => {
-        if (e.target.closest('.btn-playlist-dl') || e.target.closest('a')) {
+        if (e.target.closest('.btn-playlist-dl') || e.target.closest('.btn-view-playlist') || e.target.closest('a')) {
           return;
         }
+        e.stopPropagation();
         this.switchView('playlist-detail', playlist);
       });
 
