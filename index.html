@@ -375,14 +375,9 @@
           <div id="col-sort-date" class="hidden"></div>
         </div>
 
-        <!-- Files Container: ONLY THIS SCROLLS (Virtual Windowed) -->
-        <div id="file-list" class="flex-1 overflow-y-auto min-h-0 pb-24 sm:pb-20">
-          <div id="virtual-parent-dir"></div>
-          <div id="virtual-spacer-top" style="height: 0px; pointer-events: none;"></div>
-          <div id="virtual-items-container" class="divide-y divide-almond-cream/60 dark:divide-[#202530]">
-            <!-- Dynamically populated virtual window rows -->
-          </div>
-          <div id="virtual-spacer-bottom" style="height: 0px; pointer-events: none;"></div>
+        <!-- Files Container: ONLY THIS SCROLLS -->
+        <div id="file-list" class="flex-1 overflow-y-auto divide-y divide-almond-cream/60 dark:divide-[#202530] min-h-0 pb-24 sm:pb-20">
+          <!-- Dynamically populated rows -->
         </div>
 
         <!-- Explorer State (Loading / Empty / Error) -->

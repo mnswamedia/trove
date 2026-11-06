@@ -191,24 +191,6 @@
       let isPlaylistHigh = false;
       const SWIPE_THRESHOLD = 75;
 
-      function ensureSwipeReveals(wrapper) {
-        if (!wrapper || wrapper.querySelector('.swipe-queue-reveal')) return;
-        wrapper.insertAdjacentHTML('afterbegin', `
-          <div class="swipe-queue-reveal absolute inset-y-0 left-0 w-full bg-emerald-600 dark:bg-emerald-600 items-center px-4 text-white font-semibold text-xs select-none pointer-events-none transition-colors" style="display: none;">
-            <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs transition-transform duration-150">
-              <span class="w-4 h-4 shrink-0 text-white flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M11 12H3"/><path d="M16 6H3"/><path d="M16 18H3"/><path d="M18 9v6"/><path d="M21 12h-6"/></svg></span>
-              <span class="tracking-wider text-[11px] font-bold uppercase text-white">Add to Queue</span>
-            </div>
-          </div>
-          <div class="swipe-playlist-reveal absolute inset-y-0 right-0 w-full bg-amber-600 dark:bg-amber-600 items-center justify-end px-4 text-white font-semibold text-xs select-none pointer-events-none transition-colors" style="display: none;">
-            <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs transition-transform duration-150">
-              <span class="tracking-wider text-[11px] font-bold uppercase text-white">Add to Playlist</span>
-              <span class="w-4 h-4 shrink-0 text-white flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><line x1="12" x2="12" y1="10" y2="16"/><line x1="9" x2="15" y1="13" y2="13"/></svg></span>
-            </div>
-          </div>
-        `);
-      }
-
       fileList.addEventListener('touchstart', (e) => {
         const row = e.target.closest('.file-row');
         if (!row || row.dataset.isDir === 'true') {
@@ -221,10 +203,10 @@
 
         activeRow = row;
         activeWrapper = row.closest('.file-row-wrapper');
-        revealQueue = null;
-        revealPlaylist = null;
-        queueBadge = null;
-        playlistBadge = null;
+        revealQueue = activeWrapper ? activeWrapper.querySelector('.swipe-queue-reveal') : null;
+        revealPlaylist = activeWrapper ? activeWrapper.querySelector('.swipe-playlist-reveal') : null;
+        queueBadge = revealQueue ? revealQueue.querySelector('div') : null;
+        playlistBadge = revealPlaylist ? revealPlaylist.querySelector('div') : null;
 
         startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
@@ -278,12 +260,6 @@
             activeRow.classList.add('select-none');
             activeRow.style.willChange = 'transform';
             activeRow.style.transition = 'none';
-
-            ensureSwipeReveals(activeWrapper);
-            revealQueue = activeWrapper ? activeWrapper.querySelector('.swipe-queue-reveal') : null;
-            revealPlaylist = activeWrapper ? activeWrapper.querySelector('.swipe-playlist-reveal') : null;
-            queueBadge = revealQueue ? revealQueue.querySelector('div') : null;
-            playlistBadge = revealPlaylist ? revealPlaylist.querySelector('div') : null;
           } else {
             isHorizontal = false;
             activeRow = null;
@@ -413,14 +389,16 @@
           row.classList.remove('select-none');
 
           if (qReveal) {
-            qReveal.remove();
-            revealQueue = null;
-            queueBadge = null;
+            qReveal.style.display = 'none';
+            qReveal.classList.add('bg-emerald-600', 'dark:bg-emerald-600');
+            qReveal.classList.remove('bg-emerald-500', 'dark:bg-emerald-500');
+            if (qBadge) { qBadge.style.transform = ''; qBadge.classList.remove('bg-white/30'); }
           }
           if (pReveal) {
-            pReveal.remove();
-            revealPlaylist = null;
-            playlistBadge = null;
+            pReveal.style.display = 'none';
+            pReveal.classList.add('bg-amber-600', 'dark:bg-amber-600');
+            pReveal.classList.remove('bg-amber-500', 'dark:bg-amber-500');
+            if (pBadge) { pBadge.style.transform = ''; pBadge.classList.remove('bg-white/30'); }
           }
 
           setTimeout(() => {
