@@ -46,39 +46,41 @@
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous">
 
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Tailwind CSS (Self-hosted for Offline Support) -->
+  <script src="./assets/vendor/tailwindcss.js"></script>
   <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            'black': '#0a0908',
-            'jet-black': '#22333b',
-            'almond-cream': '#eae0d5',
-            'khaki-beige': '#c6ac8f',
-            'stone-brown': '#5e503f',
-          },
-          fontFamily: {
-            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
-            mono: ['"JetBrains Mono"', 'monospace'],
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              'black': '#0a0908',
+              'jet-black': '#22333b',
+              'almond-cream': '#eae0d5',
+              'khaki-beige': '#c6ac8f',
+              'stone-brown': '#5e503f',
+            },
+            fontFamily: {
+              sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+              mono: ['"JetBrains Mono"', 'monospace'],
+            }
           }
         }
-      }
-    };
+      };
+    }
   </script>
 
-  <!-- Lucide Icons CDN -->
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Lucide Icons (Self-hosted for Offline Support) -->
+  <script src="./assets/vendor/lucide.min.js"></script>
 
-  <!-- jsmediatags for Embedded ID3 Album Art extraction -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+  <!-- jsmediatags for Embedded ID3 Album Art extraction (Self-hosted) -->
+  <script src="./assets/vendor/jsmediatags.min.js"></script>
 
-  <!-- Motion Animation Engine CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/motion@latest/dist/motion.js"></script>
+  <!-- Motion Animation Engine (Self-hosted) -->
+  <script src="./assets/vendor/motion.js"></script>
 
   <!-- Minimal Style Overrides & Variables -->
   <link rel="stylesheet" href="./style.css">

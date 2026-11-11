@@ -46,6 +46,7 @@
 
     const themeToggleIcon = document.getElementById('theme-toggle-icon');
     const themeToggleBtn = document.getElementById('theme-toggle-btn');
+    const mobileThemeToggle = document.getElementById('mobile-theme-btn');
     const mobileThemeIcon = document.getElementById('mobile-theme-icon');
     const mobileThemeLabel = document.getElementById('mobile-theme-label');
     const mobileThemeBadge = document.getElementById('mobile-theme-badge');
@@ -64,7 +65,8 @@
     }
 
     if (window.lucide) {
-      window.lucide.createIcons();
+      if (themeToggleBtn) window.lucide.createIcons({ root: themeToggleBtn });
+      if (mobileThemeToggle) window.lucide.createIcons({ root: mobileThemeToggle });
     }
 
     const metaTheme = document.querySelector('meta[name="theme-color"]');
@@ -364,22 +366,38 @@
 
     // Register Service Worker for PWA
     if ('serviceWorker' in navigator) {
+      let lastSwUpdateCheck = 0;
+
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!isUpdateInProgress) {
-          isUpdateInProgress = true;
-          window.location.reload();
+        if (isUpdateInProgress) return;
+        const player = window.Trove.player;
+        // Never interrupt active playback or an active track session with a sudden page reload
+        if (player && (player.isPlaying || player.currentTrack)) {
+          if (window.Trove.utils?.showToast) {
+            window.Trove.utils.showToast('App updated in background — reload when idle to apply');
+          }
+          return;
         }
+        isUpdateInProgress = true;
+        window.location.reload();
       });
 
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js', { scope: './', updateViaCache: 'none' })
           .then((reg) => {
             console.log('Trove ServiceWorker active with scope:', reg.scope);
-            reg.update();
+            if (navigator.onLine !== false) {
+              lastSwUpdateCheck = Date.now();
+              reg.update().catch(() => {});
+            }
 
             document.addEventListener('visibilitychange', () => {
-              if (document.visibilityState === 'visible') {
-                reg.update();
+              if (document.visibilityState === 'visible' && navigator.onLine !== false) {
+                const now = Date.now();
+                if (now - lastSwUpdateCheck > 5 * 60 * 1000) {
+                  lastSwUpdateCheck = now;
+                  reg.update().catch(() => {});
+                }
               }
             });
           })

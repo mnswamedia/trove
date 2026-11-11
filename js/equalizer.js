@@ -19,7 +19,23 @@
     leftGainCross: null,
     rightGainDirect: null,
     rightGainCross: null,
+    // 3D Binaural Wrap & Haas Depth Nodes
+    spatialHighPass: null,
+    spatialAirShelf: null,
+    spatialDecorrSplitter: null,
+    spatialAllpassL1: null,
+    spatialAllpassL2: null,
+    spatialDelayRightITD: null,
+    spatialAllpassR1: null,
+    spatialAllpassR2: null,
+    spatialWrapLeftGain: null,
+    spatialWrapRightGain: null,
+    spatialDelayLeftCross: null,
+    spatialDelayRightCross: null,
+    spatialCrossLeftGain: null,
+    spatialCrossRightGain: null,
     convolver: null,
+    _convolverConnected: false,
     reverbDryGain: null,
     reverbWetGain: null,
     compressor: null,
@@ -82,7 +98,23 @@
       try {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         if (!AudioCtx) return;
-        this.ctx = new AudioCtx();
+        try {
+          // Optimize audio render buffer for glitch-free background playback
+          this.ctx = new AudioCtx({ latencyHint: 'playback' });
+        } catch (_) {
+          this.ctx = new AudioCtx();
+        }
+
+        // Recover smoothly if OS interrupts or suspends the audio context while playing
+        this.ctx.onstatechange = () => {
+          const player = window.Trove?.player;
+          const activeEl = player?.getActiveElement?.();
+          if (this.ctx && (this.ctx.state === 'suspended' || this.ctx.state === 'interrupted')) {
+            if (player?.isPlaying || (activeEl && !activeEl.paused)) {
+              this.ctx.resume().catch(() => {});
+            }
+          }
+        };
 
         // 1. Build 8-band filter chain
         this.filters = this.frequencies.map((f, idx) => {
@@ -101,7 +133,7 @@
         }
         const lastFilter = this.filters[this.filters.length - 1];
 
-        // 2. 3D Spatial Virtualizer Stage (Mid-Side Stereo Widener)
+        // 2. 3D Holographic Spatializer Stage (Mid-Side Widener + Binaural Haas/Allpass Wrap)
         this.splitter = this.ctx.createChannelSplitter(2);
         this.merger = this.ctx.createChannelMerger(2);
         this.leftGainDirect = this.ctx.createGain();
@@ -123,16 +155,86 @@
         this.splitter.connect(this.rightGainCross, 0);
         this.rightGainCross.connect(this.merger, 0, 1);
 
+        // 2B. Binaural 3D Phase/Haas Depth Stage (High-passed > 220Hz to keep bass laser-tight & punchy)
+        this.spatialHighPass = this.ctx.createBiquadFilter();
+        this.spatialHighPass.type = 'highpass';
+        this.spatialHighPass.frequency.value = 220;
+        this.spatialHighPass.Q.value = 0.7;
+
+        this.spatialAirShelf = this.ctx.createBiquadFilter();
+        this.spatialAirShelf.type = 'highshelf';
+        this.spatialAirShelf.frequency.value = 5500;
+        this.spatialAirShelf.gain.value = 0;
+
+        this.spatialDecorrSplitter = this.ctx.createChannelSplitter(2);
+
+        this.spatialAllpassL1 = this.ctx.createBiquadFilter();
+        this.spatialAllpassL1.type = 'allpass';
+        this.spatialAllpassL1.frequency.value = 380;
+        this.spatialAllpassL1.Q.value = 0.8;
+
+        this.spatialAllpassL2 = this.ctx.createBiquadFilter();
+        this.spatialAllpassL2.type = 'allpass';
+        this.spatialAllpassL2.frequency.value = 1650;
+        this.spatialAllpassL2.Q.value = 0.8;
+
+        this.spatialDelayRightITD = this.ctx.createDelay(0.05);
+        this.spatialDelayRightITD.delayTime.value = 0.00065; // ~0.65ms Binaural ITD cue
+
+        this.spatialAllpassR1 = this.ctx.createBiquadFilter();
+        this.spatialAllpassR1.type = 'allpass';
+        this.spatialAllpassR1.frequency.value = 820;
+        this.spatialAllpassR1.Q.value = 0.8;
+
+        this.spatialAllpassR2 = this.ctx.createBiquadFilter();
+        this.spatialAllpassR2.type = 'allpass';
+        this.spatialAllpassR2.frequency.value = 3200;
+        this.spatialAllpassR2.Q.value = 0.8;
+
+        this.spatialWrapLeftGain = this.ctx.createGain();
+        this.spatialWrapRightGain = this.ctx.createGain();
+
+        this.spatialDelayLeftCross = this.ctx.createDelay(0.05);
+        this.spatialDelayLeftCross.delayTime.value = 0.011; // 11ms early ear reflection
+        this.spatialDelayRightCross = this.ctx.createDelay(0.05);
+        this.spatialDelayRightCross.delayTime.value = 0.017; // 17ms asymmetric reflection
+        this.spatialCrossLeftGain = this.ctx.createGain();
+        this.spatialCrossRightGain = this.ctx.createGain();
+
+        lastFilter.connect(this.spatialHighPass);
+        this.spatialHighPass.connect(this.spatialAirShelf);
+        this.spatialAirShelf.connect(this.spatialDecorrSplitter);
+
+        // Left Binaural Path -> Left direct + 11ms cross to Right
+        this.spatialDecorrSplitter.connect(this.spatialAllpassL1, 0);
+        this.spatialAllpassL1.connect(this.spatialAllpassL2);
+        this.spatialAllpassL2.connect(this.spatialWrapLeftGain);
+        this.spatialWrapLeftGain.connect(this.merger, 0, 0);
+
+        this.spatialAllpassL2.connect(this.spatialDelayLeftCross);
+        this.spatialDelayLeftCross.connect(this.spatialCrossLeftGain);
+        this.spatialCrossLeftGain.connect(this.merger, 0, 1);
+
+        // Right Binaural Path -> Right direct + 17ms cross to Left
+        this.spatialDecorrSplitter.connect(this.spatialDelayRightITD, 1);
+        this.spatialDelayRightITD.connect(this.spatialAllpassR1);
+        this.spatialAllpassR1.connect(this.spatialAllpassR2);
+        this.spatialAllpassR2.connect(this.spatialWrapRightGain);
+        this.spatialWrapRightGain.connect(this.merger, 0, 1);
+
+        this.spatialAllpassR2.connect(this.spatialDelayRightCross);
+        this.spatialDelayRightCross.connect(this.spatialCrossRightGain);
+        this.spatialCrossRightGain.connect(this.merger, 0, 0);
+
         this.applySpatialWidth();
 
-        // 3. Acoustic Environment (Reverb Convolver Node)
+        // 3. Acoustic Environment (Reverb Convolver Node - dynamically bypassed when Off)
         this.convolver = this.ctx.createConvolver();
         this.reverbDryGain = this.ctx.createGain();
         this.reverbWetGain = this.ctx.createGain();
 
         this.merger.connect(this.reverbDryGain);
-        this.merger.connect(this.convolver);
-        this.convolver.connect(this.reverbWetGain);
+        this._convolverConnected = false;
 
         // 4. Output Stage: DynamicsCompressor (protective limiter & volume normalizer) -> Destination
         this.compressor = this.ctx.createDynamicsCompressor();
@@ -170,9 +272,12 @@
       }
     },
 
-    resume() {
-      if (this.ctx && this.ctx.state === 'suspended') {
-        this.ctx.resume().catch(() => {});
+    async resume() {
+      if (!this.ctx) return;
+      if (this.ctx.state === 'suspended' || this.ctx.state === 'interrupted') {
+        try {
+          await this.ctx.resume();
+        } catch (_) {}
       }
     },
 
@@ -187,14 +292,30 @@
     applySpatialWidth() {
       if (!this.leftGainDirect || !this.ctx) return;
       const pct = this.enabled ? (this.spatialWidth / 100) : 0;
-      const w = 1.0 + pct * 1.0;
-      const direct = (1 + w) / 2;
-      const cross = (1 - w) / 2;
+      const intensity = pct > 0 ? Math.pow(pct, 0.85) : 0;
 
-      this.leftGainDirect.gain.setTargetAtTime(direct, this.ctx.currentTime, 0.02);
-      this.leftGainCross.gain.setTargetAtTime(cross, this.ctx.currentTime, 0.02);
-      this.rightGainDirect.gain.setTargetAtTime(direct, this.ctx.currentTime, 0.02);
-      this.rightGainCross.gain.setTargetAtTime(cross, this.ctx.currentTime, 0.02);
+      // Aggressive M/S widening (Side up to 4.4x) while anchoring center Mid
+      const midScale = 1.0 - 0.16 * intensity;
+      const sideScale = 1.0 + 3.4 * intensity;
+      const direct = (midScale + sideScale) / 2;
+      const cross = (midScale - sideScale) / 2;
+
+      const t = this.ctx.currentTime;
+      this.leftGainDirect.gain.setTargetAtTime(direct, t, 0.02);
+      this.leftGainCross.gain.setTargetAtTime(cross, t, 0.02);
+      this.rightGainDirect.gain.setTargetAtTime(direct, t, 0.02);
+      this.rightGainCross.gain.setTargetAtTime(cross, t, 0.02);
+
+      // 3D Binaural Wrap & Out-of-Head HRTF Air Stage
+      const wrapGain = intensity * 0.44;
+      const crossWrapGain = -intensity * 0.16;
+      const airGainDb = intensity * 3.5;
+
+      if (this.spatialWrapLeftGain) this.spatialWrapLeftGain.gain.setTargetAtTime(wrapGain, t, 0.02);
+      if (this.spatialWrapRightGain) this.spatialWrapRightGain.gain.setTargetAtTime(wrapGain, t, 0.02);
+      if (this.spatialCrossLeftGain) this.spatialCrossLeftGain.gain.setTargetAtTime(crossWrapGain, t, 0.02);
+      if (this.spatialCrossRightGain) this.spatialCrossRightGain.gain.setTargetAtTime(crossWrapGain, t, 0.02);
+      if (this.spatialAirShelf) this.spatialAirShelf.gain.setTargetAtTime(airGainDb, t, 0.02);
     },
 
     applyRoomMode() {
@@ -202,7 +323,22 @@
       if (!this.enabled || this.roomMode === 'off') {
         this.reverbDryGain.gain.setTargetAtTime(1.0, this.ctx.currentTime, 0.02);
         this.reverbWetGain.gain.setTargetAtTime(0.0, this.ctx.currentTime, 0.02);
+        if (this._convolverConnected) {
+          try {
+            this.merger.disconnect(this.convolver);
+            this.convolver.disconnect(this.reverbWetGain);
+          } catch (_) {}
+          this._convolverConnected = false;
+        }
         return;
+      }
+
+      if (!this._convolverConnected) {
+        try {
+          this.merger.connect(this.convolver);
+          this.convolver.connect(this.reverbWetGain);
+          this._convolverConnected = true;
+        } catch (_) {}
       }
 
       if (this.roomMode === 'studio') {
@@ -220,15 +356,20 @@
 
     applyNormalization() {
       if (!this.compressor || !this.ctx) return;
+      const t = this.ctx.currentTime;
       if (this.enabled && this.volumeNormalization) {
-        this.compressor.threshold.setTargetAtTime(-24, this.ctx.currentTime, 0.02);
-        this.compressor.ratio.setTargetAtTime(10, this.ctx.currentTime, 0.02);
-        this.compressor.knee.setTargetAtTime(30, this.ctx.currentTime, 0.02);
-        this.compressor.attack.setTargetAtTime(0.005, this.ctx.currentTime, 0.02);
-        this.compressor.release.setTargetAtTime(0.25, this.ctx.currentTime, 0.02);
+        this.compressor.threshold.setTargetAtTime(-24, t, 0.02);
+        this.compressor.ratio.setTargetAtTime(10, t, 0.02);
+        this.compressor.knee.setTargetAtTime(30, t, 0.02);
+        this.compressor.attack.setTargetAtTime(0.005, t, 0.02);
+        this.compressor.release.setTargetAtTime(0.25, t, 0.02);
       } else {
-        this.compressor.threshold.setTargetAtTime(0, this.ctx.currentTime, 0.02);
-        this.compressor.ratio.setTargetAtTime(1, this.ctx.currentTime, 0.02);
+        // Gentle transparent safety peak limiter to prevent clipping at high EQ/3D Spatial gain
+        this.compressor.threshold.setTargetAtTime(-1.5, t, 0.02);
+        this.compressor.ratio.setTargetAtTime(12, t, 0.02);
+        this.compressor.knee.setTargetAtTime(3, t, 0.02);
+        this.compressor.attack.setTargetAtTime(0.002, t, 0.02);
+        this.compressor.release.setTargetAtTime(0.1, t, 0.02);
       }
     },
 
@@ -400,7 +541,7 @@
       const sheet = document.getElementById('eq-bottom-sheet');
       if (sheet) {
         sheet.style.display = 'flex';
-        if (window.lucide) window.lucide.createIcons();
+        if (window.lucide) window.lucide.createIcons({ root: sheet });
         if (MotionAnim) MotionAnim.animateSheetIn(sheet);
       }
     },
@@ -452,14 +593,16 @@
       }
       if (sheet) {
         sheet.addEventListener('click', (e) => {
-          const card = sheet.querySelector('.relative');
-          if (card && !card.contains(e.target)) {
+          if (e.target === sheet || e.target === backdrop) {
             this.hide();
           }
         });
       }
       if (backdrop) {
-        backdrop.addEventListener('click', () => this.hide());
+        backdrop.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.hide();
+        });
       }
       if (btnBypass) {
         btnBypass.addEventListener('click', () => this.toggleBypass());
@@ -498,6 +641,22 @@
           this.setBand(band, e.target.value);
         });
       });
+
+      // Keep AudioContext alive across minimize / notification resume transitions
+      const ensureAudioAlive = () => {
+        if (!this.ctx) return;
+        const player = window.Trove?.player;
+        const activeEl = player?.getActiveElement?.();
+        if (player?.isPlaying || (activeEl && !activeEl.paused)) {
+          this.resume();
+        }
+      };
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          ensureAudioAlive();
+        }
+      });
+      window.addEventListener('focus', ensureAudioAlive);
     }
   };
 

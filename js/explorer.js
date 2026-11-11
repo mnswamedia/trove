@@ -310,6 +310,34 @@
       return [];
     },
 
+    applyCachedFSTree(cached, statusTag = 'cached') {
+      const state = window.Trove.state || {};
+      const player = window.Trove.player || {};
+      const cachedItems = cached ? (Array.isArray(cached) ? cached : cached.items) : null;
+      if (!cachedItems || !Array.isArray(cachedItems) || cachedItems.length === 0) return false;
+
+      const cachedManifest = (cached && cached.manifest) ? cached.manifest : [];
+      state.downloadsManifest = cachedManifest;
+      state.downloadsMap = new Map();
+      if (Array.isArray(cachedManifest)) {
+        cachedManifest.forEach(entry => {
+          if (!entry) return;
+          if (entry.filename) state.downloadsMap.set(entry.filename, entry);
+          if (entry.path) state.downloadsMap.set(entry.path, entry);
+          if (entry.id) state.downloadsMap.set(entry.id, entry);
+        });
+      }
+
+      state.allItems = this.normalizeFileEntries(cachedItems);
+      this.updateStats();
+      const fileCount = state.allItems.filter(i => !i.isDir).length;
+      this.updateFooterStatus(`Loaded ${fileCount} files (${statusTag})`);
+      if (player.currentTrack && typeof player.updateQueue === 'function') {
+        player.updateQueue(player.currentTrack);
+      }
+      return true;
+    },
+
     async loadRepository(forceRefresh = false) {
       const state = window.Trove.state || {};
       const player = window.Trove.player || {};
@@ -322,31 +350,19 @@
       }
 
       if (!forceRefresh && window.Trove.store) {
-        const cached = window.Trove.store.getCachedFSTree();
-        const cachedItems = cached ? (Array.isArray(cached) ? cached : cached.items) : null;
-        if (cachedItems && Array.isArray(cachedItems) && cachedItems.length > 0) {
-          const cachedManifest = (cached && cached.manifest) ? cached.manifest : [];
-          state.downloadsManifest = cachedManifest;
-          state.downloadsMap = new Map();
-          if (Array.isArray(cachedManifest)) {
-            cachedManifest.forEach(entry => {
-              if (!entry) return;
-              if (entry.filename) state.downloadsMap.set(entry.filename, entry);
-              if (entry.path) state.downloadsMap.set(entry.path, entry);
-              if (entry.id) state.downloadsMap.set(entry.id, entry);
-            });
-          }
-
-          state.allItems = this.normalizeFileEntries(cachedItems);
-          this.updateStats();
-          const fileCount = state.allItems.filter(i => !i.isDir).length;
-          this.updateFooterStatus(`Loaded ${fileCount} files (cached)`);
-          if (player.currentTrack && typeof player.updateQueue === 'function') {
-            player.updateQueue(player.currentTrack);
-          }
+        const cached = window.Trove.store.getCachedFSTree(false);
+        if (cached && this.applyCachedFSTree(cached, 'cached')) {
           this.setLoading(false);
           this.render();
           return;
+        }
+        if (navigator.onLine === false) {
+          const offlineCached = window.Trove.store.getCachedFSTree(true);
+          if (offlineCached && this.applyCachedFSTree(offlineCached, 'offline cache')) {
+            this.setLoading(false);
+            this.render();
+            return;
+          }
         }
       }
 
@@ -416,13 +432,21 @@
         if (err.message === 'AUTH_ERROR') {
           state.error = `Unauthorized (401/403): Invalid token or insufficient permissions for ${repo.id}.`;
           if (window.Trove.settings) window.Trove.settings.open(state.error);
-        } else if (err.message === 'NOT_FOUND' || err.message.includes('404')) {
+          this.updateFooterStatus('Error loading repository');
+        } else if (err.message === 'NOT_FOUND' || (err.message && err.message.includes('404'))) {
           state.error = `Bucket not found (404). For private buckets, Hugging Face returns 404 if your token lacks access to ${repo.id}.`;
           if (window.Trove.settings) window.Trove.settings.open(state.error);
+          this.updateFooterStatus('Error loading repository');
         } else {
-          state.error = err.message || 'Failed to fetch repository files.';
+          // Network/offline failure: fall back to stale cached FS tree if available so cached tracks stay playable
+          const staleCached = window.Trove.store ? window.Trove.store.getCachedFSTree(true) : null;
+          if (staleCached && this.applyCachedFSTree(staleCached, 'offline cache')) {
+            state.error = null;
+          } else {
+            state.error = err.message || 'Failed to fetch repository files.';
+            this.updateFooterStatus('Error loading repository');
+          }
         }
-        this.updateFooterStatus('Error loading repository');
       } finally {
         this.setLoading(false);
         this.render();
@@ -889,7 +913,11 @@
       const state = window.Trove.state || {};
       const config = FILTER_CONFIG[state.filterType] || { label: state.filterType, fullLabel: state.filterType, icon: 'filter' };
       if (this.elements.filterActiveLabel) this.elements.filterActiveLabel.innerText = config.label;
-      if (this.elements.filterActiveIcon) this.elements.filterActiveIcon.setAttribute('data-lucide', config.icon);
+      const liveFilterIcon = document.getElementById('filter-active-icon');
+      if (liveFilterIcon) {
+        liveFilterIcon.setAttribute('data-lucide', config.icon);
+        this.elements.filterActiveIcon = liveFilterIcon;
+      }
 
       if (this.elements.filterDropdownMenu) {
         this.elements.filterDropdownMenu.querySelectorAll('.filter-option').forEach(opt => {
@@ -906,7 +934,10 @@
           }
         });
       }
-      if (window.lucide) window.lucide.createIcons();
+      if (window.lucide) {
+        if (this.elements.filterDropdownBtn) window.lucide.createIcons({ root: this.elements.filterDropdownBtn });
+        if (this.elements.filterDropdownMenu) window.lucide.createIcons({ root: this.elements.filterDropdownMenu });
+      }
     },
 
     initListThumbnailObserver() {
