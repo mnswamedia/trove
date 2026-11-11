@@ -77,7 +77,9 @@
       if (!localStorage.getItem('trove_queue_v2_migrated')) {
         localStorage.removeItem('trove_active_queue');
         localStorage.setItem('trove_queue_v2_migrated', 'true');
-        this.syncPlaylistToD1('_queue', 'Active Queue', []);
+        if (this.getWorkerUrl() && this.getWorkerToken()) {
+          this.syncPlaylistToD1('_queue', 'Active Queue', []);
+        }
       }
 
       this.elements = {
@@ -127,6 +129,7 @@
 
       this.setupEventListeners();
       this.loadLocalCache();
+      this.updateSyncBadgeForConfig();
       this.fetchFromD1();
       // If local cache is empty, attempt silent background restore from Hugging Face backup
       if (this.playlists.length === 0) {
@@ -806,11 +809,18 @@
       this.renderPlaylists();
 
       const workerUrl = this.getWorkerUrl();
-      if (workerUrl) {
+      const workerToken = this.getWorkerToken();
+      if (workerUrl && workerToken) {
         const cleanBase = workerUrl.replace(/\/+$/, '');
         const targetUrl = cleanBase.endsWith('/playlists') ? `${cleanBase}/${encodeURIComponent(id)}` : `${cleanBase}/playlists/${encodeURIComponent(id)}`;
         const headers = this.getAuthHeaders();
-        fetch(targetUrl, { method: 'DELETE', headers }).catch(console.warn);
+        fetch(targetUrl, { method: 'DELETE', headers })
+          .then((res) => {
+            if (!res.ok) this.handleWorkerErrorStatus(res.status);
+          })
+          .catch(console.warn);
+      } else if (workerUrl && !workerToken) {
+        this.setSyncBadge('Key Required', 'warn');
       }
 
       if (showToast) showToast('Playlist deleted');
@@ -899,14 +909,65 @@
       );
     },
 
+    getWorkerToken() {
+      return CONFIG.getWorkerToken ? CONFIG.getWorkerToken() : (localStorage.getItem(storage.workerTokenKey) || '').trim();
+    },
+
     getAuthHeaders() {
-      const workerToken = localStorage.getItem(storage.workerTokenKey) || '';
+      if (CONFIG.getWorkerAuthHeaders) {
+        return CONFIG.getWorkerAuthHeaders({ 'Content-Type': 'application/json' });
+      }
+      const workerToken = this.getWorkerToken();
       const h = { 'Content-Type': 'application/json' };
       if (workerToken) {
         h['Authorization'] = `Bearer ${workerToken}`;
         h['X-API-Key'] = workerToken;
       }
       return h;
+    },
+
+    setSyncBadge(text, variant = 'idle') {
+      if (!this.elements.syncBadge) return;
+      this.elements.syncBadge.innerText = text;
+      if (variant === 'ok') {
+        this.elements.syncBadge.className = 'px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-800 dark:text-emerald-300';
+      } else if (variant === 'error') {
+        this.elements.syncBadge.className = 'px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-400';
+      } else if (variant === 'warn') {
+        this.elements.syncBadge.className = 'px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-amber-500/10 text-amber-800 dark:text-amber-300';
+      } else {
+        this.elements.syncBadge.className = 'px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-almond-cream/60 dark:bg-[#232936] text-stone-brown dark:text-[#9aa4b2]';
+      }
+    },
+
+    updateSyncBadgeForConfig() {
+      const workerUrl = this.getWorkerUrl();
+      const workerToken = this.getWorkerToken();
+      if (!workerUrl) {
+        this.setSyncBadge('Local Only', 'idle');
+      } else if (!workerToken) {
+        this.setSyncBadge('Key Required', 'warn');
+      } else {
+        this.setSyncBadge('D1 Ready', 'ok');
+      }
+    },
+
+    handleWorkerErrorStatus(status) {
+      if (status === 401) {
+        this.setSyncBadge('Unauthorized (401)', 'error');
+        if (!this._authWarned && showToast) {
+          this._authWarned = true;
+          showToast('Worker D1 auth failed (401) — check API Secret in Settings');
+        }
+      } else if (status === 503) {
+        this.setSyncBadge('Server Key Missing', 'error');
+        if (!this._authWarned && showToast) {
+          this._authWarned = true;
+          showToast('Cloudflare Worker API_KEY secret is not configured');
+        }
+      } else {
+        this.setSyncBadge(`Sync Error (${status})`, 'warn');
+      }
     },
 
     syncQueueToD1() {
@@ -930,6 +991,11 @@
     async syncPlaylistToD1(id, customName = null, customItems = null) {
       const workerUrl = this.getWorkerUrl();
       if (!workerUrl) return;
+      const workerToken = this.getWorkerToken();
+      if (!workerToken) {
+        this.setSyncBadge('Key Required', 'warn');
+        return;
+      }
 
       const pl = this.playlists.find(p => p.id === id);
       const name = customName || (pl ? pl.name : id);
@@ -944,10 +1010,10 @@
           body: JSON.stringify({ id, name, items })
         });
         if (res.ok) {
-          if (this.elements.syncBadge) {
-            this.elements.syncBadge.innerText = 'D1 Synced';
-            this.elements.syncBadge.className = 'px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-800 dark:text-emerald-300';
-          }
+          this._authWarned = false;
+          this.setSyncBadge('D1 Synced', 'ok');
+        } else {
+          this.handleWorkerErrorStatus(res.status);
         }
       } catch (err) {
         console.warn('D1 playlist sync notice:', err);
@@ -956,16 +1022,26 @@
 
     async fetchFromD1() {
       const workerUrl = this.getWorkerUrl();
-      if (!workerUrl) return;
+      if (!workerUrl) {
+        this.setSyncBadge('Local Only', 'idle');
+        return;
+      }
+      const workerToken = this.getWorkerToken();
+      if (!workerToken) {
+        this.setSyncBadge('Key Required', 'warn');
+        return;
+      }
 
       try {
         const cleanBase = workerUrl.replace(/\/+$/, '');
         const targetUrl = cleanBase.endsWith('/playlists') ? cleanBase : `${cleanBase}/playlists`;
         const res = await fetch(targetUrl, {
-          headers: this.getAuthHeaders()
+          headers: this.getAuthHeaders(),
+          cache: 'no-store'
         });
 
         if (res.ok) {
+          this._authWarned = false;
           const json = await res.json();
           if (json && json.success && Array.isArray(json.playlists)) {
             // Reconcile custom playlists
@@ -1000,16 +1076,15 @@
               }
             }
 
-            if (this.elements.syncBadge) {
-              this.elements.syncBadge.innerText = 'D1 Synced';
-              this.elements.syncBadge.className = 'px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-800 dark:text-emerald-300';
-            }
+            this.setSyncBadge('D1 Synced', 'ok');
 
             if (this.isOpen) {
               if (this.activeTab === 'queue') this.renderQueue();
               else this.renderPlaylists();
             }
           }
+        } else {
+          this.handleWorkerErrorStatus(res.status);
         }
       } catch (err) {
         console.warn('D1 fetch notice:', err);

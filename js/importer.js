@@ -168,18 +168,23 @@
 
       const state = window.Trove.state || {};
       const workerUrl = CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/ingest') : null;
-      const workerToken = localStorage.getItem(storage.workerTokenKey) || '';
+      const workerToken = CONFIG.getWorkerToken ? CONFIG.getWorkerToken() : (localStorage.getItem(storage.workerTokenKey) || '').trim();
 
       try {
         let currentJobId = null;
 
         if (workerUrl) {
-          if (this.elements.statusText) this.elements.statusText.innerText = 'Dispatching via Cloudflare Worker...';
-          const headers = { 'Content-Type': 'application/json' };
-          if (workerToken) {
-            headers['Authorization'] = `Bearer ${workerToken}`;
-            headers['X-API-Key'] = workerToken;
+          if (!workerToken) {
+            throw new Error('Worker API Secret is required in Settings when Cloudflare Worker URL is configured.');
           }
+          if (this.elements.statusText) this.elements.statusText.innerText = 'Dispatching via Cloudflare Worker...';
+          const headers = CONFIG.getWorkerAuthHeaders
+            ? CONFIG.getWorkerAuthHeaders({ 'Content-Type': 'application/json' })
+            : {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${workerToken}`,
+                'X-API-Key': workerToken
+              };
 
           const response = await fetch(`${workerUrl.replace(/\/+$/, '')}/dispatch`, {
             method: 'POST',

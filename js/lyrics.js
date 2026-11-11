@@ -237,35 +237,51 @@
           localStorage.getItem(storage.workerLyricsUrlKey) ||
           localStorage.getItem(storage.workerBaseUrlKey) ||
           '';
-        const workerToken = localStorage.getItem(storage.workerTokenKey) || '';
+        const workerToken = CONFIG.getWorkerToken ? CONFIG.getWorkerToken() : (localStorage.getItem(storage.workerTokenKey) || '').trim();
 
         let lyricsData = null;
 
-        if (workerUrl) {
+        if (workerUrl && workerToken) {
           try {
-            const u = new URL(workerUrl);
+            const normalizedUrl = workerUrl.replace(/\/+$/, '');
+            const lyricsEndpoint = /\/lyrics$/i.test(normalizedUrl) ? normalizedUrl : `${normalizedUrl}/lyrics`;
+            const u = new URL(lyricsEndpoint);
             if (videoId) {
               u.searchParams.set('videoId', videoId);
             }
             if (trackTitle) u.searchParams.set('title', trackTitle);
             if (artistName) u.searchParams.set('artist', artistName);
+            if (forceRefresh) u.searchParams.set('fresh', '1');
 
-            const headers = {};
-            if (workerToken) {
-              headers['Authorization'] = `Bearer ${workerToken}`;
-              headers['X-API-Key'] = workerToken;
-            }
+            const headers = CONFIG.getWorkerAuthHeaders
+              ? CONFIG.getWorkerAuthHeaders({ 'Accept': 'application/json' })
+              : {
+                  'Accept': 'application/json',
+                  'Authorization': `Bearer ${workerToken}`,
+                  'X-API-Key': workerToken
+                };
 
-            const res = await fetch(u.toString(), { headers });
+            const res = await fetch(u.toString(), {
+              headers,
+              cache: forceRefresh ? 'no-store' : 'default'
+            });
             if (res.ok) {
+              this._authWarned = false;
               const json = await res.json();
               if (json && json.success && json.lyrics) {
                 lyricsData = json;
               }
+            } else if ((res.status === 401 || res.status === 503) && !this._authWarned) {
+              this._authWarned = true;
+              console.warn(`Lyrics Worker auth failed (${res.status}); falling back to LRCLIB.`);
+              if (showToast) showToast('Worker Lyrics auth failed — check API Secret in Settings');
             }
           } catch (workerErr) {
             console.warn('Lyrics Worker fetch note:', workerErr);
           }
+        } else if (workerUrl && !workerToken && !this._authWarned) {
+          this._authWarned = true;
+          console.warn('Cloudflare Worker URL set without API Secret; skipping Worker for lyrics.');
         }
 
         // 6. Zero-config direct LRCLIB fallback if worker is unset or returned no lyrics

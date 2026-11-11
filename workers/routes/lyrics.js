@@ -2,7 +2,7 @@
  * Route Handler: Music Lyrics Extractor (/lyrics/*)
  */
 
-import { jsonResponse } from "../common.js";
+import { jsonResponse, getAuthorizedEdgeCache, putAuthorizedEdgeCache } from "../common.js";
 
 const YTM_BASE = "https://music.youtube.com/youtubei/v1";
 const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
@@ -275,11 +275,12 @@ function extractVideoId(raw) {
   return null;
 }
 
-export async function handleLyrics(request, env, url) {
+export async function handleLyrics(request, env, url, ctx = null) {
   let videoId = null;
   let title = null;
   let artist = null;
   let duration = null;
+  const isFresh = url.searchParams.get("nocache") === "1" || url.searchParams.get("fresh") === "1";
 
   if (request.method === "POST") {
     try {
@@ -327,10 +328,30 @@ export async function handleLyrics(request, env, url) {
     );
   }
 
+  const edgeCachePath =
+    `/lyrics?videoId=${encodeURIComponent(videoId || "")}` +
+    `&title=${encodeURIComponent(String(title || "").trim().toLowerCase())}` +
+    `&artist=${encodeURIComponent(String(artist || "").trim().toLowerCase())}`;
+
+  if (request.method === "GET" && !isFresh) {
+    const cached = await getAuthorizedEdgeCache(edgeCachePath, env, url.origin);
+    if (cached && cached.success) {
+      return jsonResponse(cached, 200, 24, { "X-Trove-Cache": "HIT" });
+    }
+  }
+
   try {
     const result = await resolveLyrics({ videoId, title, artist, duration });
-    const cacheHours = result.success ? 24 : 0;
-    return jsonResponse(result, result.success ? 200 : 404, cacheHours);
+    if (result.success) {
+      if (request.method === "GET") {
+        putAuthorizedEdgeCache(edgeCachePath, result, 86400, ctx, env, url.origin);
+      }
+      const cachePolicy = request.method === "GET" && !isFresh ? 24 : "no-store";
+      return jsonResponse(result, 200, cachePolicy, {
+        "X-Trove-Cache": request.method === "GET" ? (isFresh ? "BYPASS" : "MISS") : "BYPASS"
+      });
+    }
+    return jsonResponse(result, 404, "no-store");
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return jsonResponse({ success: false, error: message }, 502);

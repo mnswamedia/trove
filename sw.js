@@ -1,5 +1,5 @@
 // Trove PWA Service Worker
-const CACHE_NAME = 'trove-pwa-v75';
+const CACHE_NAME = 'trove-pwa-v76';
 const CDN_CACHE_NAME = 'trove-cdn-v1';
 
 const GOOGLE_FONTS_CSS_URL = 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap';
@@ -199,6 +199,12 @@ self.addEventListener('fetch', (event) => {
         });
       })
     );
+    return;
+  }
+
+  // 4.9. Never intercept or store cross-origin API calls (e.g. Cloudflare Workers, LRCLIB)
+  // inside the PWA App Shell cache; preserve native HTTP Authorization / Vary behavior.
+  if (url.origin !== self.location.origin) {
     return;
   }
 

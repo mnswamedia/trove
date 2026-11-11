@@ -3,7 +3,7 @@
  * All dynamic parameters, bucket/dataset paths, extensions, and storage keys are defined here.
  */
 window.APP_CONFIG = {
-  version: 'v75',
+  version: 'v76',
   repo: {
     id: 'mnswa/trove_dataset',
     owner: 'mnswa',
@@ -58,7 +58,7 @@ window.APP_CONFIG = {
     }
 
     if (baseUrl) {
-      baseUrl = baseUrl.replace(/\/(?:lyrics|playlists|metrics|recommendations|recs|ingest)$/i, '');
+      baseUrl = baseUrl.replace(/\/(?:lyrics|playlists|metrics|recommendations|recs|ingest|health)$/i, '');
       const cleanSub = subpath ? (subpath.startsWith('/') ? subpath : '/' + subpath) : '';
       return `${baseUrl}${cleanSub}`;
     }
@@ -82,6 +82,19 @@ window.APP_CONFIG = {
       if (u) return u.endsWith('/recommendations') ? u : `${u}/recommendations`;
     }
     return null;
+  },
+  getWorkerToken() {
+    const s = this.storage || {};
+    return (localStorage.getItem(s.workerTokenKey || 'trove_worker_token') || '').trim();
+  },
+  getWorkerAuthHeaders(extraHeaders = {}) {
+    const token = this.getWorkerToken();
+    const headers = { ...extraHeaders };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      headers['X-API-Key'] = token;
+    }
+    return headers;
   },
   api: {
     bucketsBase: 'https://huggingface.co/api/buckets',

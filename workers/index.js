@@ -10,11 +10,12 @@
  * D1 Database Binding:
  *   Bind your D1 database (`trove-db`) with variable name `DB`.
  *
- * Environment Secrets (Optional):
- *   `API_KEY` or `TOKEN` (Checks Authorization: Bearer, X-API-Key, or ?token=)
+ * Environment Secrets (Required — Fail-Closed):
+ *   `API_KEY` (or `CF_WORKER_TOKEN` / `WORKER_TOKEN` / `TOKEN`)
+ *   Checked strictly via `Authorization: Bearer <key>` or `X-API-Key: <key>` headers.
  */
 
-import { handleCors, jsonResponse, checkAuth } from "./common.js";
+import { handleCors, jsonResponse, verifyAuth } from "./common.js";
 import { ensureSchema } from "./db.js";
 import { handlePlaylists } from "./routes/playlists.js";
 import { handleMetrics } from "./routes/metrics.js";
@@ -23,16 +24,41 @@ import { handleRecommendations } from "./routes/recommendations.js";
 import { handleIngest } from "./routes/ingest.js";
 
 export default {
-  async fetch(request, env) {
-    // 1. CORS Preflight
+  async fetch(request, env, ctx) {
+    // 1. CORS Preflight (required by browsers before sending auth headers)
     if (request.method === "OPTIONS") {
       return handleCors();
+    }
+
+    // 2. Mandatory Authentication Check across ALL endpoints (zero public exemptions)
+    const auth = await verifyAuth(request, env);
+    if (!auth.ok) {
+      if (auth.misconfigured) {
+        return jsonResponse(
+          {
+            success: false,
+            error: auth.reason
+          },
+          503,
+          "no-store"
+        );
+      }
+
+      return jsonResponse(
+        {
+          success: false,
+          error: auth.reason || "Unauthorized. Provide a valid Bearer token or X-API-Key header."
+        },
+        401,
+        "no-store",
+        { "WWW-Authenticate": 'Bearer realm="Trove API"' }
+      );
     }
 
     const url = new URL(request.url);
     const pathname = url.pathname.replace(/\/+$/, "") || "/";
 
-    // 2. Global Health Check
+    // 3. Authenticated Health Check
     if (pathname === "/health") {
       const hasDb = Boolean(env && env.DB);
       let dbReady = false;
@@ -45,8 +71,9 @@ export default {
 
       return jsonResponse({
         ok: true,
+        authenticated: true,
         service: "trove-unified-api",
-        version: "2.0.0",
+        version: "2.1.0",
         d1Configured: hasDb,
         databaseReady: dbReady,
         routes: [
@@ -59,23 +86,6 @@ export default {
         ],
         timestamp: Date.now()
       });
-    }
-
-    // 3. Optional Authentication Check (exempt /health, ingest status, and ingest runner telemetry)
-    const isPublic =
-      pathname === "/health" ||
-      pathname === "/ingest/status" ||
-      pathname === "/ingest/history" ||
-      pathname === "/ingest/update" ||
-      pathname === "/ingest/progress" ||
-      pathname === "/ingest/event" ||
-      (request.method === "GET" && (pathname === "/ingest" || pathname.startsWith("/ingest/")));
-
-    if (!isPublic && !checkAuth(request, env)) {
-      return jsonResponse({
-        success: false,
-        error: "Unauthorized. Provide a valid Bearer token, X-API-Key header, or ?token= parameter."
-      }, 401);
     }
 
     // 4. Route Dispatch
@@ -96,7 +106,7 @@ export default {
 
     // Music Lyrics
     if (pathname === "/lyrics" || pathname.startsWith("/lyrics/")) {
-      return handleLyrics(request, env, url);
+      return handleLyrics(request, env, url, ctx);
     }
 
     // Recommendations & Related Content
@@ -107,7 +117,7 @@ export default {
       pathname.startsWith("/recs/") ||
       pathname === "/extract"
     ) {
-      return handleRecommendations(request, env, url);
+      return handleRecommendations(request, env, url, ctx);
     }
 
     // Ingestion Telemetry & Workflow Dispatch
@@ -120,9 +130,9 @@ export default {
     if (pathname === "/" && url.searchParams.has("videoId")) {
       // If title or lyrics parameter exists, route to lyrics, else recommendations
       if (url.searchParams.has("title") || url.searchParams.has("lyrics")) {
-        return handleLyrics(request, env, url);
+        return handleLyrics(request, env, url, ctx);
       }
-      return handleRecommendations(request, env, url);
+      return handleRecommendations(request, env, url, ctx);
     }
 
     return jsonResponse({

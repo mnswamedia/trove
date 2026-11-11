@@ -283,14 +283,18 @@
         const storage = config.storage || {};
         const endpoint = (config.getWorkerEndpoint ? config.getWorkerEndpoint('/metrics/play') : null) ||
           (localStorage.getItem(storage.workerMetricsUrlKey) ? localStorage.getItem(storage.workerMetricsUrlKey).replace(/\/+$/, '') + '/play' : null);
-        if (!endpoint) return;
+        const workerToken = config.getWorkerToken
+          ? config.getWorkerToken()
+          : (localStorage.getItem(storage.workerTokenKey || 'trove_worker_token') || '').trim();
+        if (!endpoint || !workerToken) return;
 
-        const workerToken = localStorage.getItem(storage.workerTokenKey || 'trove_worker_token') || '';
-        const headers = { 'Content-Type': 'application/json' };
-        if (workerToken) {
-          headers['Authorization'] = `Bearer ${workerToken}`;
-          headers['X-API-Key'] = workerToken;
-        }
+        const headers = config.getWorkerAuthHeaders
+          ? config.getWorkerAuthHeaders({ 'Content-Type': 'application/json' })
+          : {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${workerToken}`,
+              'X-API-Key': workerToken
+            };
 
         fetch(endpoint, {
           method: 'POST',
@@ -312,14 +316,18 @@
         const storage = config.storage || {};
         const endpoint = (config.getWorkerEndpoint ? config.getWorkerEndpoint('/metrics/complete') : null) ||
           (localStorage.getItem(storage.workerMetricsUrlKey) ? localStorage.getItem(storage.workerMetricsUrlKey).replace(/\/+$/, '') + '/complete' : null);
-        if (!endpoint) return;
+        const workerToken = config.getWorkerToken
+          ? config.getWorkerToken()
+          : (localStorage.getItem(storage.workerTokenKey || 'trove_worker_token') || '').trim();
+        if (!endpoint || !workerToken) return;
 
-        const workerToken = localStorage.getItem(storage.workerTokenKey || 'trove_worker_token') || '';
-        const headers = { 'Content-Type': 'application/json' };
-        if (workerToken) {
-          headers['Authorization'] = `Bearer ${workerToken}`;
-          headers['X-API-Key'] = workerToken;
-        }
+        const headers = config.getWorkerAuthHeaders
+          ? config.getWorkerAuthHeaders({ 'Content-Type': 'application/json' })
+          : {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${workerToken}`,
+              'X-API-Key': workerToken
+            };
 
         fetch(endpoint, {
           method: 'POST',

@@ -273,11 +273,14 @@
       }
 
       const workerUrl = (CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/recommendations') : null) || localStorage.getItem(storage.workerRecsUrlKey) || '';
-      const workerToken = localStorage.getItem(storage.workerTokenKey) || '';
+      const workerToken = CONFIG.getWorkerToken ? CONFIG.getWorkerToken() : (localStorage.getItem(storage.workerTokenKey) || '').trim();
 
       if (!workerUrl) {
-        this.renderEmpty('Cloudflare Worker Needed', 'Please configure your Trove Worker URL in Settings.');
-        if (this.elements.btnEmptyOpenSettings) this.elements.btnEmptyOpenSettings.classList.remove('hidden');
+        this.renderEmpty('Cloudflare Worker Needed', 'Please configure your Trove Worker URL in Settings.', true);
+        return;
+      }
+      if (!workerToken) {
+        this.renderEmpty('Worker API Secret Needed', 'Please configure your 256-bit Worker API Secret in Settings to authenticate requests.', true);
         return;
       }
 
@@ -318,27 +321,31 @@
         const cleanBase = workerUrl.replace(/\/+$/, '');
         const sep = cleanBase.includes('?') ? '&' : (cleanBase.endsWith('/recommendations') ? '?' : '/?');
         let targetUrl = `${cleanBase}${sep}videoId=${encodeURIComponent(videoId)}&excludeShorts=true`;
-        if (workerToken) {
-          targetUrl += `&token=${encodeURIComponent(workerToken)}`;
-        }
         if (forceFresh) {
           targetUrl += '&fresh=1';
         }
 
-        const headers = { 'Accept': 'application/json' };
-        if (workerToken) {
-          headers['Authorization'] = `Bearer ${workerToken}`;
-          headers['X-API-Key'] = workerToken;
-        }
+        const headers = CONFIG.getWorkerAuthHeaders
+          ? CONFIG.getWorkerAuthHeaders({ 'Accept': 'application/json' })
+          : {
+              'Accept': 'application/json',
+              'Authorization': `Bearer ${workerToken}`,
+              'X-API-Key': workerToken
+            };
 
-        const res = await fetch(targetUrl, { headers });
+        const res = await fetch(targetUrl, {
+          headers,
+          cache: forceFresh ? 'no-store' : 'default'
+        });
         if (!res.ok) {
           let errText = `Worker returned status ${res.status}`;
           try {
             const errData = await res.json();
             errText = errData.error || errText;
           } catch (_) {}
-          throw new Error(errText);
+          const apiErr = new Error(errText);
+          apiErr.status = res.status;
+          throw apiErr;
         }
 
         const data = await res.json();
@@ -361,25 +368,33 @@
       } catch (err) {
         console.error('Recommendations fetch error:', err);
         this.setLoading(false);
+        const isAuthErr = err.status === 401 || err.status === 503;
         this.renderEmpty(
-          'Failed to load recommendations',
-          err.message || 'Check your Cloudflare Worker URL, network connection, or API token.'
+          err.status === 401 ? 'Unauthorized (401)' : (err.status === 503 ? 'Worker Secret Not Configured' : 'Failed to load recommendations'),
+          err.message || 'Check your Cloudflare Worker URL, network connection, or API secret.',
+          isAuthErr
         );
       }
     },
 
     async fetchPlaylistTracks(playlistId) {
+      this.lastPlaylistError = null;
       if (!playlistId) return [];
       if (this.playlistTracksCache.has(playlistId)) {
         return this.playlistTracksCache.get(playlistId);
       }
 
-      const storage = CONFIG.storage || {};
       const workerUrl = (CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/recommendations') : null) || localStorage.getItem(storage.workerRecsUrlKey) || '';
-      const workerToken = localStorage.getItem(storage.workerTokenKey) || '';
+      const workerToken = CONFIG.getWorkerToken ? CONFIG.getWorkerToken() : (localStorage.getItem(storage.workerTokenKey) || '').trim();
 
       if (!workerUrl) {
+        this.lastPlaylistError = 'Cloudflare Worker URL required in Settings.';
         if (showToast) showToast('Cloudflare Worker URL required');
+        return [];
+      }
+      if (!workerToken) {
+        this.lastPlaylistError = 'Worker API Secret required in Settings.';
+        if (showToast) showToast('Worker API Secret required in Settings');
         return [];
       }
 
@@ -387,20 +402,24 @@
       try {
         const cleanBase = workerUrl.replace(/\/+$/, '');
         const sep = cleanBase.includes('?') ? '&' : (cleanBase.endsWith('/recommendations') ? '?' : '/?');
-        let targetUrl = `${cleanBase}${sep}playlistId=${encodeURIComponent(playlistId)}`;
-        if (workerToken) {
-          targetUrl += `&token=${encodeURIComponent(workerToken)}`;
-        }
+        const targetUrl = `${cleanBase}${sep}playlistId=${encodeURIComponent(playlistId)}`;
 
-        const headers = { 'Accept': 'application/json' };
-        if (workerToken) {
-          headers['Authorization'] = `Bearer ${workerToken}`;
-          headers['X-API-Key'] = workerToken;
-        }
+        const headers = CONFIG.getWorkerAuthHeaders
+          ? CONFIG.getWorkerAuthHeaders({ 'Accept': 'application/json' })
+          : {
+              'Accept': 'application/json',
+              'Authorization': `Bearer ${workerToken}`,
+              'X-API-Key': workerToken
+            };
 
         const res = await fetch(targetUrl, { headers });
         if (!res.ok) {
-          throw new Error(`Worker returned status ${res.status}`);
+          let errText = `Worker returned status ${res.status}`;
+          try {
+            const errData = await res.json();
+            errText = errData.error || errText;
+          } catch (_) {}
+          throw new Error(errText);
         }
 
         const data = await res.json();
@@ -409,7 +428,8 @@
         return tracks;
       } catch (err) {
         console.error(`Failed to fetch playlist tracks for ${playlistId}:`, err);
-        if (showToast) showToast('Could not load playlist tracks.');
+        this.lastPlaylistError = err.message || 'Could not load playlist tracks.';
+        if (showToast) showToast(this.lastPlaylistError);
         return [];
       } finally {
         this.playlistTracksLoading.delete(playlistId);
@@ -439,7 +459,7 @@
       }
     },
 
-    renderEmpty(title, subtext) {
+    renderEmpty(title, subtext, showSettingsBtn = false) {
       if (this.elements.loadingState) this.elements.loadingState.classList.add('hidden');
       if (this.elements.toolbar) this.elements.toolbar.classList.add('hidden');
       if (this.elements.listContainer) {
@@ -450,6 +470,9 @@
         this.elements.emptyState.classList.remove('hidden');
         if (this.elements.emptyText) this.elements.emptyText.innerText = title;
         if (this.elements.emptySubtext) this.elements.emptySubtext.innerText = subtext;
+      }
+      if (this.elements.btnEmptyOpenSettings) {
+        this.elements.btnEmptyOpenSettings.classList.toggle('hidden', !showSettingsBtn);
       }
       if (this.elements.countBadge) this.elements.countBadge.innerText = '0 found';
       if (this.elements.footerStatus) this.elements.footerStatus.innerText = 'Idle';
@@ -672,9 +695,10 @@
       this.updateHeaderBadge();
 
       if (!tracks || tracks.length === 0) {
+        const errMsg = this.lastPlaylistError || 'No playable tracks found in this playlist.';
         tracksContainer.innerHTML = `
           <div class="py-8 text-center text-xs font-mono text-stone-brown/60 dark:text-[#758092]">
-            No playable tracks found in this playlist.
+            ${safeEscape(errMsg)}
           </div>
         `;
         if (window.lucide) window.lucide.createIcons();
@@ -1003,30 +1027,36 @@
         if (window.lucide) window.lucide.createIcons();
       }
 
-      const storage = CONFIG.storage || {};
       const workerUrl = (CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/recommendations') : null) || localStorage.getItem(storage.workerRecsUrlKey) || '';
-      const workerToken = localStorage.getItem(storage.workerTokenKey) || '';
+      const workerToken = CONFIG.getWorkerToken ? CONFIG.getWorkerToken() : (localStorage.getItem(storage.workerTokenKey) || '').trim();
 
       try {
-        const cleanBase = workerUrl ? workerUrl.replace(/\/+$/, '') : '';
+        if (!workerUrl || !workerToken) {
+          throw new Error(!workerUrl ? 'Cloudflare Worker URL required in Settings.' : 'Worker API Secret required in Settings.');
+        }
+        const cleanBase = workerUrl.replace(/\/+$/, '');
         const sep = cleanBase.includes('?') ? '&' : (cleanBase.endsWith('/recommendations') ? '?' : '/?');
         let targetUrl = `${cleanBase}${sep}continuation=${encodeURIComponent(this.continuationToken)}&excludeShorts=true`;
         if (this.currentVideoId) {
           targetUrl += `&videoId=${encodeURIComponent(this.currentVideoId)}`;
         }
-        if (workerToken) {
-          targetUrl += `&token=${encodeURIComponent(workerToken)}`;
-        }
 
-        const headers = { 'Accept': 'application/json' };
-        if (workerToken) {
-          headers['Authorization'] = `Bearer ${workerToken}`;
-          headers['X-API-Key'] = workerToken;
-        }
+        const headers = CONFIG.getWorkerAuthHeaders
+          ? CONFIG.getWorkerAuthHeaders({ 'Accept': 'application/json' })
+          : {
+              'Accept': 'application/json',
+              'Authorization': `Bearer ${workerToken}`,
+              'X-API-Key': workerToken
+            };
 
         const res = await fetch(targetUrl, { headers });
         if (!res.ok) {
-          throw new Error(`Worker returned status ${res.status}`);
+          let errText = `Worker returned status ${res.status}`;
+          try {
+            const errData = await res.json();
+            errText = errData.error || errText;
+          } catch (_) {}
+          throw new Error(errText);
         }
 
         const data = await res.json();
@@ -1217,17 +1247,22 @@
       const state = window.Trove.state || {};
       const bucketId = CONFIG.repo?.id || 'mnswa/trove_dataset';
       const workerUrl = CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/ingest') : null;
-      const workerToken = localStorage.getItem(storage.workerTokenKey) || '';
+      const workerToken = CONFIG.getWorkerToken ? CONFIG.getWorkerToken() : (localStorage.getItem(storage.workerTokenKey) || '').trim();
 
       try {
         let currentJobId = null;
 
         if (workerUrl) {
-          const headers = { 'Content-Type': 'application/json' };
-          if (workerToken) {
-            headers['Authorization'] = `Bearer ${workerToken}`;
-            headers['X-API-Key'] = workerToken;
+          if (!workerToken) {
+            throw new Error('Worker API Secret is required in Settings when Cloudflare Worker URL is configured.');
           }
+          const headers = CONFIG.getWorkerAuthHeaders
+            ? CONFIG.getWorkerAuthHeaders({ 'Content-Type': 'application/json' })
+            : {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${workerToken}`,
+                'X-API-Key': workerToken
+              };
 
           const response = await fetch(`${workerUrl.replace(/\/+$/, '')}/dispatch`, {
             method: 'POST',

@@ -31,6 +31,8 @@
         ghRepoInput: document.getElementById('gh-repo-input'),
         workerBaseUrlInput: document.getElementById('worker-base-url-input'),
         workerTokenInput: document.getElementById('worker-token-input'),
+        btnVerifyWorker: document.getElementById('btn-verify-worker'),
+        workerVerifyStatus: document.getElementById('worker-verify-status'),
         authSettingsBtn: document.getElementById('auth-settings-btn'),
         authBtnLabel: document.getElementById('auth-btn-label'),
         mobileAuthBtn: document.getElementById('mobile-auth-btn'),
@@ -129,6 +131,8 @@
         if (this.elements.errorMsg) this.elements.errorMsg.classList.add('hidden');
       }
 
+      this.setWorkerVerifyStatus('Sent via Authorization Bearer & X-API-Key headers on every request.', 'neutral');
+
       this.elements.drawer.style.display = 'flex';
       if (window.lucide) window.lucide.createIcons();
       if (MotionAnim) MotionAnim.animateTopDrawerIn(this.elements.drawer);
@@ -136,6 +140,105 @@
       setTimeout(() => {
         if (!state.token && this.elements.hfTokenInput) this.elements.hfTokenInput.focus();
       }, 100);
+    },
+
+    setWorkerVerifyStatus(text, tone = 'neutral') {
+      const el = this.elements.workerVerifyStatus;
+      if (!el) return;
+      el.innerText = text;
+      if (tone === 'ok') {
+        el.className = 'text-[10px] font-medium text-emerald-700 dark:text-emerald-400';
+      } else if (tone === 'error') {
+        el.className = 'text-[10px] font-medium text-rose-600 dark:text-rose-400';
+      } else if (tone === 'warn') {
+        el.className = 'text-[10px] font-medium text-amber-700 dark:text-amber-400';
+      } else {
+        el.className = 'text-[10px] text-stone-brown/60 dark:text-[#758092]';
+      }
+    },
+
+    invalidateWorkerCaches() {
+      if (window.Trove.recommendations) {
+        window.Trove.recommendations.cache?.clear();
+        window.Trove.recommendations.playlistTracksCache?.clear();
+      }
+      if (window.Trove.lyrics) {
+        window.Trove.lyrics.cache?.clear();
+        window.Trove.lyrics._authWarned = false;
+      }
+      if (window.Trove.playlists) {
+        window.Trove.playlists._authWarned = false;
+      }
+    },
+
+    async verifyWorkerConnection() {
+      const rawUrl = (this.elements.workerBaseUrlInput?.value || '').trim();
+      const workerToken = (this.elements.workerTokenInput?.value || '').trim();
+
+      if (!rawUrl) {
+        this.setWorkerVerifyStatus('Enter a Trove Worker API URL first.', 'warn');
+        if (this.elements.workerBaseUrlInput) this.elements.workerBaseUrlInput.focus();
+        return;
+      }
+      if (!workerToken) {
+        this.setWorkerVerifyStatus('Enter your 256-bit Worker API Secret first.', 'warn');
+        if (this.elements.workerTokenInput) this.elements.workerTokenInput.focus();
+        return;
+      }
+
+      const normalizedUrl = (/^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`)
+        .replace(/\/+$/, '')
+        .replace(/\/(?:lyrics|playlists|metrics|recommendations|recs|ingest|health)$/i, '');
+
+      const btn = this.elements.btnVerifyWorker;
+      let origHtml = null;
+      if (btn) {
+        origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.classList.add('opacity-75', 'pointer-events-none');
+        btn.innerHTML = '<i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i><span>Testing...</span>';
+        if (window.lucide) window.lucide.createIcons();
+      }
+      this.setWorkerVerifyStatus('Checking /health with key headers...', 'neutral');
+
+      try {
+        const res = await fetch(`${normalizedUrl}/health`, {
+          method: 'GET',
+          cache: 'no-store',
+          headers: {
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${workerToken}`,
+            'X-API-Key': workerToken
+          }
+        });
+
+        let data = null;
+        try { data = await res.json(); } catch (_) {}
+
+        if (res.ok && data && data.ok) {
+          const d1Info = data.d1Configured
+            ? (data.databaseReady ? 'D1 connected' : 'D1 schema pending')
+            : 'no D1 binding';
+          this.setWorkerVerifyStatus(`Authenticated (200 OK) • ${d1Info}`, 'ok');
+          if (showToast) showToast('Cloudflare Worker key verified!');
+        } else if (res.status === 401) {
+          this.setWorkerVerifyStatus('401 Unauthorized — secret does not match Cloudflare API_KEY.', 'error');
+        } else if (res.status === 503) {
+          this.setWorkerVerifyStatus('503 Server Misconfigured — set API_KEY in Cloudflare Worker secrets.', 'warn');
+        } else {
+          const errMsg = data?.error || `HTTP ${res.status}`;
+          this.setWorkerVerifyStatus(`Verification failed: ${errMsg}`, 'error');
+        }
+      } catch (err) {
+        this.setWorkerVerifyStatus(`Connection error: ${err.message || 'Unreachable'}`, 'error');
+      } finally {
+        if (btn && origHtml !== null) {
+          btn.disabled = false;
+          btn.classList.remove('opacity-75', 'pointer-events-none');
+          btn.innerHTML = origHtml;
+          if (window.lucide) window.lucide.createIcons();
+        }
+      }
     },
 
     close() {
@@ -157,8 +260,28 @@
       const hfRepo = (this.elements.hfRepoInput?.value || '').trim();
       const ghToken = (this.elements.ghTokenInput?.value || '').trim();
       const ghRepo = (this.elements.ghRepoInput?.value || '').trim();
-      const workerBaseUrl = (this.elements.workerBaseUrlInput?.value || '').trim();
+      const rawWorkerBaseUrl = (this.elements.workerBaseUrlInput?.value || '').trim();
+      const workerBaseUrl = rawWorkerBaseUrl
+        ? (/^https?:\/\//i.test(rawWorkerBaseUrl) ? rawWorkerBaseUrl : `https://${rawWorkerBaseUrl}`).replace(/\/+$/, '')
+        : '';
       const workerToken = (this.elements.workerTokenInput?.value || '').trim();
+
+      // Validate before mutating storage: Worker URL requires API Secret
+      if (workerBaseUrl && !workerToken) {
+        const errText = 'Worker API Secret is required when Cloudflare Worker URL is set.';
+        if (this.elements.errorMsg) {
+          this.elements.errorMsg.innerText = errText;
+          this.elements.errorMsg.classList.remove('hidden');
+        }
+        this.setWorkerVerifyStatus('Missing API Secret — enter your 256-bit key to save Worker URL.', 'error');
+        if (this.elements.workerTokenInput) this.elements.workerTokenInput.focus();
+        return;
+      }
+      if (this.elements.errorMsg) this.elements.errorMsg.classList.add('hidden');
+
+      const oldWorkerBaseUrl = (localStorage.getItem(storage.workerBaseUrlKey) || '').trim();
+      const oldWorkerToken = (localStorage.getItem(storage.workerTokenKey) || '').trim();
+      const workerConfigChanged = (workerBaseUrl !== oldWorkerBaseUrl) || (workerToken !== oldWorkerToken);
 
       // 1. HF Token & Dataset Repo
       const oldHfToken = state.token;
@@ -213,16 +336,30 @@
         localStorage.removeItem(storage.ghRepoKey);
       }
 
-      // 3. Cloudflare Worker URL & Secret
+      // 3. Cloudflare Worker URL & Secret (clear legacy individual route keys so they cannot override)
       if (workerBaseUrl) {
         localStorage.setItem(storage.workerBaseUrlKey, workerBaseUrl);
       } else {
         localStorage.removeItem(storage.workerBaseUrlKey);
       }
+      localStorage.removeItem(storage.workerRecsUrlKey);
+      localStorage.removeItem(storage.workerPlaylistsUrlKey);
+      localStorage.removeItem(storage.workerLyricsUrlKey);
+      localStorage.removeItem(storage.workerMetricsUrlKey);
+
       if (workerToken) {
         localStorage.setItem(storage.workerTokenKey, workerToken);
       } else {
         localStorage.removeItem(storage.workerTokenKey);
+      }
+
+      if (workerConfigChanged) {
+        this.invalidateWorkerCaches();
+        if (workerBaseUrl && workerToken) {
+          window.Trove.playlists?.fetchFromD1?.();
+        } else {
+          window.Trove.playlists?.updateSyncBadgeForConfig?.();
+        }
       }
 
       // 4. Audio & Device Storage Settings
@@ -357,12 +494,17 @@
           localStorage.removeItem(storage.workerTokenKey);
           localStorage.removeItem(storage.workerRecsUrlKey);
           localStorage.removeItem(storage.workerPlaylistsUrlKey);
+          localStorage.removeItem(storage.workerLyricsUrlKey);
+          localStorage.removeItem(storage.workerMetricsUrlKey);
 
           state.token = null;
           if (this.elements.hfTokenInput) this.elements.hfTokenInput.value = '';
           if (this.elements.ghTokenInput) this.elements.ghTokenInput.value = '';
           if (this.elements.workerBaseUrlInput) this.elements.workerBaseUrlInput.value = '';
           if (this.elements.workerTokenInput) this.elements.workerTokenInput.value = '';
+          this.setWorkerVerifyStatus('Sent via Authorization Bearer & X-API-Key headers on every request.', 'neutral');
+          this.invalidateWorkerCaches();
+          window.Trove.playlists?.updateSyncBadgeForConfig?.();
           this.updateHeaderBadge();
           clearedList.push('Tokens');
         }
@@ -469,6 +611,13 @@
       if (this.elements.hfRepoInput && this.elements.modalRepoId) {
         this.elements.hfRepoInput.addEventListener('input', (e) => {
           this.elements.modalRepoId.innerText = (e.target.value || '').trim() || '--';
+        });
+      }
+
+      if (this.elements.btnVerifyWorker) {
+        this.elements.btnVerifyWorker.addEventListener('click', (e) => {
+          e.preventDefault();
+          this.verifyWorkerConnection();
         });
       }
 

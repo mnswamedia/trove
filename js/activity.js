@@ -136,7 +136,7 @@
       }
 
       const workerUrl = CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/ingest') : null;
-      const workerToken = localStorage.getItem(storage.workerTokenKey) || '';
+      const workerToken = CONFIG.getWorkerToken ? CONFIG.getWorkerToken() : (localStorage.getItem(storage.workerTokenKey) || '').trim();
 
       if (!workerUrl) {
         this.renderEmpty('Cloudflare Worker endpoint not configured in settings.');
@@ -144,14 +144,22 @@
         return;
       }
 
+      if (!workerToken) {
+        this.renderEmpty('Worker API Secret (256-bit key) is required in Settings to view activity.');
+        this._finishLoading();
+        return;
+      }
+
       try {
         const reqRunId = this.currentRunId || '';
         const fetchUrl = `${workerUrl.replace(/\/+$/, '')}/status${reqRunId ? '?run_id=' + encodeURIComponent(reqRunId) : ''}`;
-        const headers = {};
-        if (workerToken) {
-          headers['Authorization'] = `Bearer ${workerToken}`;
-          headers['X-API-Key'] = workerToken;
-        }
+        const headers = CONFIG.getWorkerAuthHeaders
+          ? CONFIG.getWorkerAuthHeaders({ 'Accept': 'application/json' })
+          : {
+              'Accept': 'application/json',
+              'Authorization': `Bearer ${workerToken}`,
+              'X-API-Key': workerToken
+            };
 
         const res = await fetch(fetchUrl, { headers, cache: 'no-store' });
         if (res.ok) {
@@ -162,7 +170,15 @@
             this.renderEmpty(data.message || 'No ingestion runs recorded yet.');
           }
         } else {
-          this.renderEmpty(`Worker returned status ${res.status}.`);
+          let errDetail = `Worker returned status ${res.status}.`;
+          try {
+            const errJson = await res.json();
+            if (errJson && errJson.error) errDetail = errJson.error;
+          } catch (_) {}
+          if (res.status === 401) {
+            errDetail = 'Unauthorized (401): Verify your 256-bit Worker API Secret in Settings.';
+          }
+          this.renderEmpty(errDetail);
         }
       } catch (err) {
         console.warn('Activity fetch note:', err);

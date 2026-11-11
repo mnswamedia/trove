@@ -3,7 +3,7 @@
  * Supports modern InnerTube `lockupViewModel`, `shortsLockupViewModel`, and legacy renderers.
  */
 
-import { jsonResponse } from "../common.js";
+import { jsonResponse, getAuthorizedEdgeCache, putAuthorizedEdgeCache } from "../common.js";
 
 const API_URL = "https://www.youtube.com/youtubei/v1/next?prettyPrint=false";
 const BROWSE_API_URL = "https://www.youtube.com/youtubei/v1/browse?prettyPrint=false";
@@ -838,13 +838,14 @@ function extractVideoId(raw) {
   return null;
 }
 
-export async function handleRecommendations(request, env, url) {
+export async function handleRecommendations(request, env, url, ctx = null) {
   let rawInput = null;
   let playlistInput = null;
   let pages = 0;
   let includeRaw = false;
   let excludeShorts = false;
   let continuation = null;
+  const isFresh = url.searchParams.get("nocache") === "1" || url.searchParams.get("fresh") === "1";
 
   if (request.method === "GET") {
     playlistInput =
@@ -894,12 +895,24 @@ export async function handleRecommendations(request, env, url) {
       );
     }
     try {
+      const playlistCachePath = `/recommendations/playlist?playlistId=${encodeURIComponent(playlistId)}`;
+      if (request.method === "GET" && !isFresh) {
+        const cached = await getAuthorizedEdgeCache(playlistCachePath, env, url.origin);
+        if (cached && cached.success) {
+          return jsonResponse(cached, 200, "private, max-age=1800, must-revalidate", { "X-Trove-Cache": "HIT" });
+        }
+      }
+
       const result = await fetchPlaylistTracks(playlistId);
-      const isFresh = url.searchParams.get("nocache") === "1" || url.searchParams.get("fresh") === "1";
+      if (request.method === "GET" && result?.success) {
+        putAuthorizedEdgeCache(playlistCachePath, result, 3600, ctx, env, url.origin);
+      }
       const cacheControl = (request.method === "GET" && !isFresh)
-        ? "public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400"
+        ? "private, max-age=1800, must-revalidate"
         : "no-store";
-      return jsonResponse(result, 200, cacheControl);
+      return jsonResponse(result, 200, cacheControl, {
+        "X-Trove-Cache": request.method === "GET" ? (isFresh ? "BYPASS" : "MISS") : "BYPASS"
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return jsonResponse({ success: false, error: message }, 502);
@@ -962,13 +975,29 @@ export async function handleRecommendations(request, env, url) {
   }
 
   try {
+    const safePages = Number.isFinite(pages) ? Math.max(0, pages) : 0;
+    const videoCachePath =
+      `/recommendations/video?videoId=${encodeURIComponent(videoId)}` +
+      `&pages=${safePages}&excludeShorts=${excludeShorts ? "1" : "0"}&includeRaw=${includeRaw ? "1" : "0"}`;
+
+    if (request.method === "GET" && !isFresh) {
+      const cached = await getAuthorizedEdgeCache(videoCachePath, env, url.origin);
+      if (cached && cached.success) {
+        return jsonResponse(cached, 200, "private, max-age=900, must-revalidate", { "X-Trove-Cache": "HIT" });
+      }
+    }
+
     const result = await runExtractor(videoId, pages, includeRaw, { excludeShorts });
-    const isFresh = url.searchParams.get("nocache") === "1" || url.searchParams.get("fresh") === "1";
+    if (request.method === "GET" && result?.success) {
+      putAuthorizedEdgeCache(videoCachePath, result, 3600, ctx, env, url.origin);
+    }
     const cacheControl = (request.method === "GET" && !isFresh)
-      ? "public, max-age=900, s-maxage=3600, stale-while-revalidate=86400"
+      ? "private, max-age=900, must-revalidate"
       : "no-store";
 
-    return jsonResponse(result, 200, cacheControl);
+    return jsonResponse(result, 200, cacheControl, {
+      "X-Trove-Cache": request.method === "GET" ? (isFresh ? "BYPASS" : "MISS") : "BYPASS"
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return jsonResponse({ success: false, error: message }, 502);
