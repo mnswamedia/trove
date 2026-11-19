@@ -417,6 +417,11 @@
     } else {
       if (window.Trove.settings) window.Trove.settings.open();
     }
+
+    // Process incoming Web Share Target (e.g. YouTube video shared from Android)
+    if (window.Trove.importer && typeof window.Trove.importer.handleShareTarget === 'function') {
+      window.Trove.importer.handleShareTarget();
+    }
   }
 
   // Start application once DOM is loaded
@@ -425,6 +430,13 @@
   } else {
     init();
   }
+
+  // Handle share target when PWA is already open and brought to front (pageshow)
+  window.addEventListener('pageshow', () => {
+    if (window.Trove.importer && typeof window.Trove.importer.handleShareTarget === 'function') {
+      window.Trove.importer.handleShareTarget();
+    }
+  });
 
   window.Trove.app = { init, toggleTheme, applyTheme };
 })();

@@ -57,7 +57,8 @@
       if (this.elements.errorMsg) this.elements.errorMsg.classList.add('hidden');
       if (this.elements.startBtn) {
         this.elements.startBtn.disabled = false;
-        this.elements.startBtn.classList.remove('opacity-50', 'pointer-events-none');
+        this.elements.startBtn.classList.remove('opacity-50', 'opacity-75', 'pointer-events-none');
+        this.elements.startBtn.innerHTML = '<i data-lucide="download" class="w-3.5 h-3.5"></i><span>Start Download</span>';
       }
 
       if (prefillUrl && this.elements.urlsInput) {
@@ -82,6 +83,112 @@
         });
       } else {
         this.elements.modal.style.display = 'none';
+      }
+    },
+
+    setFormat(format = 'm4a') {
+      const radio = document.querySelector(`input[name="import-format"][value="${format}"]`);
+      if (radio) {
+        radio.checked = true;
+        radio.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    },
+
+    handleShareTarget() {
+      try {
+        const search = window.location.search;
+        if (!search) return false;
+
+        const params = new URLSearchParams(search);
+        const sharedTitle = (params.get('title') || '').trim();
+        const sharedText = (params.get('text') || '').trim();
+        const sharedUrl = (params.get('url') || '').trim();
+
+        // Check if any share param is present
+        if (!sharedTitle && !sharedText && !sharedUrl) {
+          return false;
+        }
+
+        // Clean query parameters from URL bar immediately so refreshing doesn't re-trigger
+        const cleanUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState({}, document.title, cleanUrl);
+
+        const extractFn = window.Trove.utils?.extractYouTubeUrls;
+        const urls = extractFn ? extractFn([sharedUrl, sharedText, sharedTitle]) : [];
+
+        if (urls.length === 0) {
+          // If no YouTube links found but text or URL was shared, open importer with fallback
+          const fallback = (sharedUrl || sharedText).trim();
+          if (fallback) {
+            this.open(fallback);
+            this.setFormat('m4a');
+            const toastFn = showToast || window.Trove.utils?.showToast;
+            if (toastFn) {
+              toastFn('Received shared link. Review before downloading.');
+            }
+          }
+          return true;
+        }
+
+        const targetUrls = urls.join('\n');
+        const state = window.Trove.state || {};
+        const ghToken = localStorage.getItem(storage.ghTokenKey) || '';
+        const workerUrl = CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/ingest') : null;
+        const workerToken = CONFIG.getWorkerToken ? CONFIG.getWorkerToken() : (localStorage.getItem(storage.workerTokenKey) || '').trim();
+        const toastFn = showToast || window.Trove.utils?.showToast;
+
+        const hasHfToken = Boolean(state.token);
+        const hasGhToken = Boolean(ghToken);
+        const hasWorkerAuth = !workerUrl || Boolean(workerToken);
+
+        if (!hasHfToken) {
+          if (window.Trove.settings) {
+            window.Trove.settings.open('Please connect your Hugging Face Token in Settings before downloading.');
+          }
+          if (toastFn) {
+            toastFn('Hugging Face Token is required in Settings to download.', 4000);
+          }
+          return true;
+        }
+
+        this.open(targetUrls);
+        this.setFormat('m4a');
+
+        if (!hasGhToken) {
+          if (toastFn) {
+            toastFn('GitHub Personal Access Token is required to download.', 4000);
+          }
+          if (this.showError) {
+            this.showError('GitHub Personal Access Token is required to dispatch ingestion. Open Settings to configure it.');
+          }
+          return true;
+        }
+
+        if (workerUrl && !hasWorkerAuth) {
+          if (toastFn) {
+            toastFn('Worker API Secret is required to download.', 4000);
+          }
+          if (this.showError) {
+            this.showError('Worker API Secret is required in Settings when Cloudflare Worker is configured.');
+          }
+          return true;
+        }
+
+        // Credentials present: Automatically trigger download as music!
+        const songName = sharedTitle || (urls.length === 1 ? 'YouTube track' : `${urls.length} YouTube tracks`);
+        if (toastFn) {
+          toastFn(`Auto-downloading "${songName}" as music...`, 3000);
+        }
+
+        // Delay slightly for modal mount and animation before submitting
+        setTimeout(() => {
+          this.handleSubmit();
+        }, 350);
+
+        return true;
+      } catch (err) {
+        console.error('Error handling share target:', err);
+        return false;
       }
     },
 

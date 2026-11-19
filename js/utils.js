@@ -172,6 +172,50 @@
     return match ? match[1] : null;
   }
 
+  // Extract and clean all YouTube URLs from text, URL strings, or an array of inputs (supports Android share intents)
+  function extractYouTubeUrls(input) {
+    if (!input) return [];
+    const inputs = Array.isArray(input) ? input : [input];
+    const found = [];
+    const seen = new Set();
+
+    const addIfValid = (candidate) => {
+      if (!candidate) return;
+      const cleanCand = candidate.trim().replace(/[.,;:!?)\]]+$/, '');
+      const cleaned = cleanYouTubeUrl(cleanCand);
+      if (cleaned && (cleaned.includes('youtube.com') || cleaned.includes('youtu.be')) && !seen.has(cleaned)) {
+        seen.add(cleaned);
+        found.push(cleaned);
+      }
+    };
+
+    for (const item of inputs) {
+      if (!item || typeof item !== 'string') continue;
+      const text = item.trim();
+      if (!text) continue;
+
+      // 1. Direct URL regex match
+      const urlMatches = text.match(/https?:\/\/[^\s"'<>]+/gi);
+      if (urlMatches) {
+        for (const m of urlMatches) {
+          addIfValid(m);
+        }
+      }
+
+      // 2. Tokenized match (for youtu.be/xxx or www.youtube.com/xxx without https, or bare 11-char IDs)
+      const tokens = text.split(/\s+/);
+      for (const token of tokens) {
+        if (/^(?:https?:\/\/)?(?:www\.|m\.|music\.)?(?:youtube\.com|youtu\.be)\/[^\s]+/i.test(token)) {
+          addIfValid(token);
+        } else if (/^[a-zA-Z0-9_-]{11}$/.test(token)) {
+          addIfValid(token);
+        }
+      }
+    }
+
+    return found;
+  }
+
   // Toast Notification
   let toastTimer = null;
   function showToast(message, duration = 3000) {
@@ -755,6 +799,7 @@
     cleanYouTubeUrl,
     cleanAllInputUrls,
     extractYouTubeId,
+    extractYouTubeUrls,
     showToast,
     showExitToast,
     MotionAnim,

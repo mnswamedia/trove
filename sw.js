@@ -1,5 +1,5 @@
 // Trove PWA Service Worker
-const CACHE_NAME = 'trove-pwa-v76';
+const CACHE_NAME = 'trove-pwa-v77';
 const CDN_CACHE_NAME = 'trove-cdn-v1';
 
 const GOOGLE_FONTS_CSS_URL = 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap';
@@ -220,8 +220,12 @@ self.addEventListener('fetch', (event) => {
     fetch(new Request(req, fetchOptions))
       .then((networkRes) => {
         if (networkRes && networkRes.status === 200) {
-          const clone = networkRes.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
+          // Do not pollute app shell cache with one-off share target queries
+          const isShareTarget = url.searchParams.has('title') || url.searchParams.has('text') || url.searchParams.has('url');
+          if (!isShareTarget) {
+            const clone = networkRes.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
+          }
         }
         return networkRes;
       })
