@@ -627,7 +627,7 @@
       return `
         <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f] select-none">
           <div class="grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 hover:bg-almond-cream/20 dark:hover:bg-[#1a1f28] cursor-pointer transition text-sm" data-action="go-parent">
-            <div class="col-span-8 md:col-span-8 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-1">
+            <div class="col-span-9 sm:col-span-8 md:col-span-8 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-1">
               <div class="w-9 h-9 rounded-lg bg-almond-cream/60 dark:bg-[#202532] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0">
                 <i data-lucide="corner-left-up" class="w-4 h-4"></i>
               </div>
@@ -636,7 +636,7 @@
                 <span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">Parent Directory</span>
               </div>
             </div>
-            <div class="col-span-4 md:col-span-4 flex items-center justify-end pr-1 sm:pr-2">
+            <div class="col-span-3 sm:col-span-4 md:col-span-4 flex items-center justify-end pr-1 sm:pr-2">
               <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">UP</span>
             </div>
           </div>
@@ -700,19 +700,6 @@
         `;
       }
 
-      const statusText = isFolder 
-        ? 'Folder' 
-        : (isPlayable ? (isCurrentActive ? 'Playing Now' : 'Click to Play') : 'Click to Open ↗');
-
-      let displayStatus = statusText;
-      let dateTooltip = '';
-      if (isCurrentActive && isPlayable) {
-        displayStatus = 'Playing Now';
-      } else if (!isFolder && item.ingestedAt) {
-        displayStatus = formatRelativeTime(item.ingestedAt);
-        dateTooltip = `Downloaded: ${item.ingestedAtIso || new Date(item.ingestedAt).toLocaleString()}`;
-      }
-
       const isFav = isPlayable && window.Trove.utils?.isFavorite ? window.Trove.utils.isFavorite(item.path) : false;
       const favBtnHtml = isPlayable ? `
         <button type="button" class="btn-row-favorite p-1.5 sm:p-2 rounded-xl hover:bg-almond-cream/60 dark:hover:bg-[#252b37] ${isFav ? 'text-rose-500 dark:text-rose-400' : 'text-stone-brown/40 dark:text-[#758092] hover:text-rose-500'} transition shrink-0 min-w-[34px] min-h-[34px] flex items-center justify-center select-none" title="${isFav ? 'Remove from Liked Songs' : 'Add to Liked Songs'}" data-path="${escapeHtml(item.path)}">
@@ -726,6 +713,27 @@
           <i data-lucide="list-plus" class="w-4 h-4"></i>
         </button>
       ` : '';
+
+      // Subtitle info: On mobile, size is shifted below the title with slightly shorter font (text-[10px])
+      let subInfoHtml = '';
+      if (!isFolder) {
+        const sizeStr = formatBytes(item.size);
+        subInfoHtml = `
+          <div class="flex items-center gap-1.5 min-w-0 truncate leading-tight mt-0.5">
+            <span class="sm:hidden font-mono text-[10px] text-stone-brown/70 dark:text-[#9aa4b2] shrink-0">${sizeStr}</span>
+            ${pathSub ? `
+              <span class="sm:hidden text-stone-brown/30 dark:text-[#555f70] text-[9px] select-none">•</span>
+              <span class="font-mono text-[10px] sm:text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">${escapeHtml(pathSub)}</span>
+            ` : ''}
+          </div>
+        `;
+      } else if (pathSub) {
+        subInfoHtml = `
+          <div class="flex items-center min-w-0 truncate leading-tight mt-0.5">
+            <span class="font-mono text-[10px] sm:text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">${escapeHtml(pathSub)}</span>
+          </div>
+        `;
+      }
 
       return `
         <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f] select-none ${isCurrentActive ? 'is-playing-active' : ''}">
@@ -744,18 +752,18 @@
           </div>
           ` : ''}
           <div class="file-row relative bg-white dark:bg-[#15181f] grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 transition text-sm cursor-pointer select-none ${activeRowClass}" data-path="${escapeHtml(item.path)}" data-is-dir="${isFolder}" title="${escapeHtml(item.name)} (${isFolder ? 'Folder' : (isPlayable ? 'Click to play' : 'Click to open in new tab')})">
-            <div class="col-span-8 md:col-span-8 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-1">
+            <div class="col-span-9 sm:col-span-8 md:col-span-8 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-1">
               ${thumbSlotHtml}
               <div class="flex flex-col min-w-0 flex-1">
                 <span class="file-name-span font-semibold text-black dark:text-[#f3f4f6] truncate ${isCurrentActive ? 'text-jet-black dark:text-white' : ''}">${escapeHtml(item.name)}</span>
-                ${pathSub ? `<span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">${escapeHtml(pathSub)}</span>` : ''}
+                ${subInfoHtml}
               </div>
             </div>
-            <div class="col-span-4 md:col-span-4 flex items-center justify-end gap-1.5 sm:gap-2 min-w-0">
-              <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase ${badgeClasses} shrink-0">
+            <div class="col-span-3 sm:col-span-4 md:col-span-4 flex items-center justify-end gap-1.5 sm:gap-2 min-w-0">
+              <span class="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase ${badgeClasses} shrink-0">
                 ${escapeHtml(item.label)}
               </span>
-              ${!isFolder ? `<span class="font-mono text-xs text-stone-brown dark:text-[#9aa4b2] shrink-0 whitespace-nowrap">${formatBytes(item.size)}</span>` : ''}
+              ${!isFolder ? `<span class="hidden sm:inline-block font-mono text-xs text-stone-brown dark:text-[#9aa4b2] shrink-0 whitespace-nowrap">${formatBytes(item.size)}</span>` : ''}
               ${actionBtnHtml}
             </div>
           </div>
