@@ -417,8 +417,14 @@
     }
 
     if (isShareLaunch) {
-      // Prioritize instant share ingest! Skip heavy repository loading and intro transitions
+      // Prioritize instant share ingest!
       window.Trove.importer.handleShareTarget();
+
+      // Load repository in background so if the user stays in Trove, the vault is fully populated
+      const state = window.Trove.state || {};
+      if (state.token && window.Trove.explorer) {
+        window.Trove.explorer.loadRepository(false);
+      }
     } else {
       const state = window.Trove.state || {};
       if (state.token) {

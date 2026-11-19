@@ -153,14 +153,15 @@
             <span id="trove-share-hud-msg" class="text-stone-200 font-medium truncate min-w-0">Dispatching to vault runner...</span>
           </div>
 
-          <div id="trove-share-hud-actions" class="flex items-center gap-2 pt-0.5">
-            <button type="button" id="trove-share-hud-return" class="flex-1 py-2.5 px-3 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 active:scale-95">
+          <div id="trove-share-hud-actions" class="flex flex-col gap-2 pt-0.5">
+            <button type="button" id="trove-share-hud-return" class="w-full py-2.5 px-3 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 active:scale-95">
               <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
-              <span id="trove-share-hud-return-text">Return to YouTube</span>
+              <span id="trove-share-hud-return-text">Back to YouTube</span>
             </button>
-            <button type="button" id="trove-share-hud-open" class="py-2.5 px-3 bg-white/10 hover:bg-white/15 text-stone-200 font-semibold text-xs rounded-xl border border-white/10 transition text-center shrink-0 active:scale-95">
-              Open Trove
+            <button type="button" id="trove-share-hud-open" class="w-full py-2 px-3 text-stone-400 hover:text-stone-200 font-medium text-xs rounded-xl transition text-center active:scale-95">
+              Stay & Browse Trove Vault
             </button>
+            <p class="text-[10px] text-stone-400/80 text-center select-none">Swipe back from screen edge anytime to resume video</p>
           </div>
         </div>
       `;
@@ -173,10 +174,6 @@
       }
 
       const dismissHud = (openVault = false) => {
-        if (this._shareAutoReturnTimer) {
-          clearInterval(this._shareAutoReturnTimer);
-          this._shareAutoReturnTimer = null;
-        }
         hud.classList.add('opacity-0', 'pointer-events-none');
         setTimeout(() => {
           try { hud.remove(); } catch (_) {}
@@ -190,8 +187,9 @@
       hud.querySelector('#trove-share-hud-close')?.addEventListener('click', () => dismissHud(false));
       hud.querySelector('#trove-share-hud-open')?.addEventListener('click', () => dismissHud(true));
       hud.querySelector('#trove-share-hud-return')?.addEventListener('click', () => {
-        dismissHud(false);
         this.returnToSource();
+        const msgEl = hud.querySelector('#trove-share-hud-msg');
+        if (msgEl) msgEl.innerText = 'Swipe back from screen edge to resume video';
       });
 
       return {
@@ -211,24 +209,6 @@
               window.lucide.createIcons();
             }
           }
-        },
-        startCountdown: (seconds = 2) => {
-          let remaining = seconds;
-          const returnBtnText = hud.querySelector('#trove-share-hud-return-text');
-          if (returnBtnText) returnBtnText.innerText = `Return to YouTube (${remaining}s)`;
-
-          if (this._shareAutoReturnTimer) clearInterval(this._shareAutoReturnTimer);
-          this._shareAutoReturnTimer = setInterval(() => {
-            remaining -= 1;
-            if (remaining > 0) {
-              if (returnBtnText) returnBtnText.innerText = `Return to YouTube (${remaining}s)`;
-            } else {
-              clearInterval(this._shareAutoReturnTimer);
-              this._shareAutoReturnTimer = null;
-              dismissHud(false);
-              this.returnToSource();
-            }
-          }, 1000);
         },
         setError: (errText) => {
           const msgEl = hud.querySelector('#trove-share-hud-msg');
@@ -402,7 +382,6 @@
         try {
           await this.dispatchIngest({ targets: targetUrls, format: 'm4a' });
           hud.setStatus('Queued for download! Sent to runner.', 'success');
-          hud.startCountdown(2);
         } catch (dispatchErr) {
           hud.setError(dispatchErr.message || 'Dispatch failed. Check Settings.');
         }

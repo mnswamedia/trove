@@ -1,5 +1,5 @@
 // Trove PWA Service Worker
-const CACHE_NAME = 'trove-pwa-v79';
+const CACHE_NAME = 'trove-pwa-v80';
 const CDN_CACHE_NAME = 'trove-cdn-v1';
 
 const GOOGLE_FONTS_CSS_URL = 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap';
