@@ -67,7 +67,6 @@
       this.updateFilterDropdownUI();
       this.updateSortUI();
       this.setupEventListeners();
-      this.loadStoredThumbnails();
     },
 
     updateSortUI() {
@@ -349,26 +348,27 @@
         return;
       }
 
-      if (!forceRefresh && window.Trove.store) {
-        const cached = window.Trove.store.getCachedFSTree(false);
-        if (cached && this.applyCachedFSTree(cached, 'cached')) {
-          this.setLoading(false);
-          this.render();
+      // 1. Instant Cache-First (Stale-While-Revalidate): Render local cache immediately in 0ms!
+      const cached = window.Trove.store ? window.Trove.store.getCachedFSTree(true) : null;
+      let hasRenderedCached = false;
+
+      if (!forceRefresh && cached && this.applyCachedFSTree(cached, cached._isStale ? 'cached · updating...' : 'cached')) {
+        this.setLoading(false);
+        this.render();
+        hasRenderedCached = true;
+
+        // If cache is fresh (< 1 hour) and user didn't request a hard refresh, we're done
+        if (!cached._isStale && navigator.onLine !== false) {
           return;
-        }
-        if (navigator.onLine === false) {
-          const offlineCached = window.Trove.store.getCachedFSTree(true);
-          if (offlineCached && this.applyCachedFSTree(offlineCached, 'offline cache')) {
-            this.setLoading(false);
-            this.render();
-            return;
-          }
         }
       }
 
-      this.setLoading(true);
-      state.error = null;
-      this.render();
+      // If no cached data exists at all (brand new install), show the loader
+      if (!hasRenderedCached) {
+        this.setLoading(true);
+        state.error = null;
+        this.render();
+      }
 
       try {
         const manifestPromise = this.fetchDownloadsManifest(state.token);
@@ -400,7 +400,7 @@
 
         this.updateStats();
         const fileCount = state.allItems.filter(i => !i.isDir).length;
-        this.updateFooterStatus(`Loaded ${fileCount} files${forceRefresh ? ' (refreshed)' : ''}`);
+        this.updateFooterStatus(`Loaded ${fileCount} files${forceRefresh ? ' (refreshed)' : (hasRenderedCached ? ' (synced)' : '')}`);
 
         if (player.currentTrack && typeof player.updateQueue === 'function') {
           player.updateQueue(player.currentTrack);
@@ -438,13 +438,17 @@
           if (window.Trove.settings) window.Trove.settings.open(state.error);
           this.updateFooterStatus('Error loading repository');
         } else {
-          // Network/offline failure: fall back to stale cached FS tree if available so cached tracks stay playable
-          const staleCached = window.Trove.store ? window.Trove.store.getCachedFSTree(true) : null;
-          if (staleCached && this.applyCachedFSTree(staleCached, 'offline cache')) {
-            state.error = null;
+          // If we already rendered cached files, keep them on screen without crashing view
+          if (hasRenderedCached) {
+            this.updateFooterStatus('Offline / sync deferred (using cache)');
           } else {
-            state.error = err.message || 'Failed to fetch repository files.';
-            this.updateFooterStatus('Error loading repository');
+            const staleCached = window.Trove.store ? window.Trove.store.getCachedFSTree(true) : null;
+            if (staleCached && this.applyCachedFSTree(staleCached, 'offline cache')) {
+              state.error = null;
+            } else {
+              state.error = err.message || 'Failed to fetch repository files.';
+              this.updateFooterStatus('Error loading repository');
+            }
           }
         }
       } finally {
@@ -619,6 +623,146 @@
       return this.sortItems(filteredChildren);
     },
 
+    buildParentDirRowHtml() {
+      return `
+        <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f] select-none">
+          <div class="grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 hover:bg-almond-cream/20 dark:hover:bg-[#1a1f28] cursor-pointer transition text-sm" data-action="go-parent">
+            <div class="col-span-8 md:col-span-8 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-1">
+              <div class="w-9 h-9 rounded-lg bg-almond-cream/60 dark:bg-[#202532] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0">
+                <i data-lucide="corner-left-up" class="w-4 h-4"></i>
+              </div>
+              <div class="flex flex-col min-w-0 flex-1">
+                <span class="font-semibold text-black dark:text-[#f3f4f6] truncate">..</span>
+                <span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">Parent Directory</span>
+              </div>
+            </div>
+            <div class="col-span-4 md:col-span-4 flex items-center justify-end pr-1 sm:pr-2">
+              <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">UP</span>
+            </div>
+          </div>
+        </div>
+      `;
+    },
+
+    buildItemRowHtml(item) {
+      const state = window.Trove.state || {};
+      const player = window.Trove.player || {};
+      const isFolder = item.isDir;
+      const isPlayable = !isFolder && (item.category === 'music' || item.category === 'video');
+      const isCurrentActive = player.currentTrack && player.currentTrack.path === item.path;
+
+      const pathSub = state.viewMode === 'flat' || state.searchQuery 
+        ? item.path 
+        : (item.isDir ? 'Folder' : '');
+
+      let badgeClasses = 'bg-gray-100 text-stone-brown dark:bg-[#242a38] dark:text-[#9aa4b2]';
+      let iconColor = 'bg-almond-cream/40 text-stone-brown dark:bg-[#202532] dark:text-[#c6ac8f]';
+
+      if (item.category === 'music') {
+        badgeClasses = 'bg-almond-cream text-stone-brown dark:bg-[#242a38] dark:text-[#c6ac8f]';
+        iconColor = isCurrentActive 
+          ? 'bg-jet-black text-almond-cream dark:bg-[#c6ac8f] dark:text-[#0e1116]' 
+          : 'bg-almond-cream text-stone-brown dark:bg-[#202532] dark:text-[#c6ac8f]';
+      } else if (item.category === 'video') {
+        badgeClasses = 'bg-jet-black text-almond-cream dark:bg-[#323846] dark:text-[#f3f4f6]';
+        iconColor = 'bg-jet-black text-almond-cream dark:bg-[#323846] dark:text-[#f3f4f6]';
+      } else if (item.category === 'folder') {
+        badgeClasses = 'bg-almond-cream/60 text-stone-brown dark:bg-[#202532] dark:text-[#9aa4b2]';
+        iconColor = 'bg-almond-cream/60 text-stone-brown dark:bg-[#202532] dark:text-[#c6ac8f]';
+      } else if (item.category === 'document') {
+        badgeClasses = 'bg-khaki-beige/35 text-jet-black font-semibold dark:bg-[#2a303e] dark:text-[#d4bfa6]';
+        iconColor = 'bg-khaki-beige/25 text-stone-brown dark:bg-[#242a38] dark:text-[#c6ac8f]';
+      } else if (item.category === 'image') {
+        badgeClasses = 'bg-amber-100 text-amber-900 font-semibold dark:bg-[#382d1c] dark:text-[#fbbf24]';
+        iconColor = 'bg-amber-50 text-amber-800 dark:bg-[#2d2516] dark:text-[#fbbf24]';
+      }
+
+      const activeRowClass = isCurrentActive 
+        ? 'bg-almond-cream/40 dark:bg-[#202736] border-l-4 border-l-jet-black dark:border-l-[#c6ac8f] font-medium' 
+        : 'bg-white dark:bg-[#15181f] hover:bg-almond-cream/15 dark:hover:bg-[#1a1f28]';
+
+      let thumbSlotHtml = '';
+      if (isPlayable) {
+        const cachedThumb = player.thumbnailCache?.get(item.path);
+        thumbSlotHtml = `
+          <div class="w-9 h-9 rounded-lg ${iconColor} flex items-center justify-center shrink-0 relative overflow-hidden list-thumb-slot shadow-sm" data-file-path="${escapeHtml(item.path)}">
+            <img class="w-full h-full object-contain list-thumb-img ${cachedThumb ? '' : 'hidden'}" ${cachedThumb ? `src="${cachedThumb}"` : ''} alt="Thumbnail">
+            <div class="list-thumb-icon-wrapper flex items-center justify-center ${cachedThumb ? 'hidden' : ''}">
+              <i data-lucide="${isCurrentActive && player.isPlaying ? 'volume-2' : item.icon}" class="w-4 h-4"></i>
+            </div>
+          </div>
+        `;
+      } else {
+        thumbSlotHtml = `
+          <div class="w-9 h-9 rounded-lg ${iconColor} flex items-center justify-center shrink-0 relative overflow-hidden shadow-sm">
+            <i data-lucide="${item.icon}" class="w-4 h-4"></i>
+          </div>
+        `;
+      }
+
+      const statusText = isFolder 
+        ? 'Folder' 
+        : (isPlayable ? (isCurrentActive ? 'Playing Now' : 'Click to Play') : 'Click to Open ↗');
+
+      let displayStatus = statusText;
+      let dateTooltip = '';
+      if (isCurrentActive && isPlayable) {
+        displayStatus = 'Playing Now';
+      } else if (!isFolder && item.ingestedAt) {
+        displayStatus = formatRelativeTime(item.ingestedAt);
+        dateTooltip = `Downloaded: ${item.ingestedAtIso || new Date(item.ingestedAt).toLocaleString()}`;
+      }
+
+      const isFav = isPlayable && window.Trove.utils?.isFavorite ? window.Trove.utils.isFavorite(item.path) : false;
+      const favBtnHtml = isPlayable ? `
+        <button type="button" class="btn-row-favorite p-1.5 sm:p-2 rounded-xl hover:bg-almond-cream/60 dark:hover:bg-[#252b37] ${isFav ? 'text-rose-500 dark:text-rose-400' : 'text-stone-brown/40 dark:text-[#758092] hover:text-rose-500'} transition shrink-0 min-w-[34px] min-h-[34px] flex items-center justify-center select-none" title="${isFav ? 'Remove from Liked Songs' : 'Add to Liked Songs'}" data-path="${escapeHtml(item.path)}">
+          <i data-lucide="heart" class="w-4 h-4" ${isFav ? 'fill="currentColor"' : ''}></i>
+        </button>
+      ` : '';
+
+      const actionBtnHtml = isPlayable ? `
+        ${favBtnHtml}
+        <button type="button" class="btn-add-to-playlist p-1.5 sm:p-2 rounded-xl hover:bg-almond-cream/60 dark:hover:bg-[#252b37] text-stone-brown/70 hover:text-jet-black dark:text-[#9aa4b2] dark:hover:text-[#f3f4f6] transition shrink-0 min-w-[34px] min-h-[34px] flex items-center justify-center select-none" title="Add to Playlist or Queue" data-path="${escapeHtml(item.path)}">
+          <i data-lucide="list-plus" class="w-4 h-4"></i>
+        </button>
+      ` : '';
+
+      return `
+        <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f] select-none ${isCurrentActive ? 'is-playing-active' : ''}">
+          ${isPlayable ? `
+          <div class="swipe-queue-reveal absolute inset-y-0 left-0 w-full bg-emerald-600 dark:bg-emerald-600 items-center px-4 text-white font-semibold text-xs select-none pointer-events-none transition-colors" style="display: none;">
+            <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs transition-transform duration-150">
+              <i data-lucide="list-plus" class="w-4 h-4 shrink-0 text-white"></i>
+              <span class="tracking-wider text-[11px] font-bold uppercase text-white">Add to Queue</span>
+            </div>
+          </div>
+          <div class="swipe-playlist-reveal absolute inset-y-0 right-0 w-full bg-amber-600 dark:bg-amber-600 items-center justify-end px-4 text-white font-semibold text-xs select-none pointer-events-none transition-colors" style="display: none;">
+            <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs transition-transform duration-150">
+              <span class="tracking-wider text-[11px] font-bold uppercase text-white">Add to Playlist</span>
+              <i data-lucide="folder-plus" class="w-4 h-4 shrink-0 text-white"></i>
+            </div>
+          </div>
+          ` : ''}
+          <div class="file-row relative bg-white dark:bg-[#15181f] grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 transition text-sm cursor-pointer select-none ${activeRowClass}" data-path="${escapeHtml(item.path)}" data-is-dir="${isFolder}" title="${escapeHtml(item.name)} (${isFolder ? 'Folder' : (isPlayable ? 'Click to play' : 'Click to open in new tab')})">
+            <div class="col-span-8 md:col-span-8 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-1">
+              ${thumbSlotHtml}
+              <div class="flex flex-col min-w-0 flex-1">
+                <span class="file-name-span font-semibold text-black dark:text-[#f3f4f6] truncate ${isCurrentActive ? 'text-jet-black dark:text-white' : ''}">${escapeHtml(item.name)}</span>
+                ${pathSub ? `<span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">${escapeHtml(pathSub)}</span>` : ''}
+              </div>
+            </div>
+            <div class="col-span-4 md:col-span-4 flex items-center justify-end gap-1.5 sm:gap-2 min-w-0">
+              <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase ${badgeClasses} shrink-0">
+                ${escapeHtml(item.label)}
+              </span>
+              ${!isFolder ? `<span class="font-mono text-xs text-stone-brown dark:text-[#9aa4b2] shrink-0 whitespace-nowrap">${formatBytes(item.size)}</span>` : ''}
+              ${actionBtnHtml}
+            </div>
+          </div>
+        </div>
+      `;
+    },
+
     render() {
       const state = window.Trove.state || {};
       const player = window.Trove.player || {};
@@ -663,150 +807,48 @@
       let html = '';
 
       if (state.viewMode === 'tree' && state.currentDirectory !== '' && !state.searchQuery) {
-        html += `
-          <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f] select-none">
-            <div class="grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 hover:bg-almond-cream/20 dark:hover:bg-[#1a1f28] cursor-pointer transition text-sm" data-action="go-parent">
-              <div class="col-span-8 md:col-span-8 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-1">
-                <div class="w-9 h-9 rounded-lg bg-almond-cream/60 dark:bg-[#202532] text-stone-brown dark:text-[#c6ac8f] flex items-center justify-center shrink-0">
-                  <i data-lucide="corner-left-up" class="w-4 h-4"></i>
-                </div>
-                <div class="flex flex-col min-w-0 flex-1">
-                  <span class="font-semibold text-black dark:text-[#f3f4f6] truncate">..</span>
-                  <span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">Parent Directory</span>
-                </div>
-              </div>
-              <div class="col-span-4 md:col-span-4 flex items-center justify-end pr-1 sm:pr-2">
-                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-almond-cream/60 dark:bg-[#242a38] text-stone-brown dark:text-[#c6ac8f]">UP</span>
-              </div>
-            </div>
-          </div>
-        `;
+        html += this.buildParentDirRowHtml();
       }
 
-      items.forEach(item => {
-        const isFolder = item.isDir;
-        const isPlayable = !isFolder && (item.category === 'music' || item.category === 'video');
-        const isCurrentActive = player.currentTrack && player.currentTrack.path === item.path;
-
-        const pathSub = state.viewMode === 'flat' || state.searchQuery 
-          ? item.path 
-          : (item.isDir ? 'Folder' : '');
-
-        let badgeClasses = 'bg-gray-100 text-stone-brown dark:bg-[#242a38] dark:text-[#9aa4b2]';
-        let iconColor = 'bg-almond-cream/40 text-stone-brown dark:bg-[#202532] dark:text-[#c6ac8f]';
-
-        if (item.category === 'music') {
-          badgeClasses = 'bg-almond-cream text-stone-brown dark:bg-[#242a38] dark:text-[#c6ac8f]';
-          iconColor = isCurrentActive 
-            ? 'bg-jet-black text-almond-cream dark:bg-[#c6ac8f] dark:text-[#0e1116]' 
-            : 'bg-almond-cream text-stone-brown dark:bg-[#202532] dark:text-[#c6ac8f]';
-        } else if (item.category === 'video') {
-          badgeClasses = 'bg-jet-black text-almond-cream dark:bg-[#323846] dark:text-[#f3f4f6]';
-          iconColor = 'bg-jet-black text-almond-cream dark:bg-[#323846] dark:text-[#f3f4f6]';
-        } else if (item.category === 'folder') {
-          badgeClasses = 'bg-almond-cream/60 text-stone-brown dark:bg-[#202532] dark:text-[#9aa4b2]';
-          iconColor = 'bg-almond-cream/60 text-stone-brown dark:bg-[#202532] dark:text-[#c6ac8f]';
-        } else if (item.category === 'document') {
-          badgeClasses = 'bg-khaki-beige/35 text-jet-black font-semibold dark:bg-[#2a303e] dark:text-[#d4bfa6]';
-          iconColor = 'bg-khaki-beige/25 text-stone-brown dark:bg-[#242a38] dark:text-[#c6ac8f]';
-        } else if (item.category === 'image') {
-          badgeClasses = 'bg-amber-100 text-amber-900 font-semibold dark:bg-[#382d1c] dark:text-[#fbbf24]';
-          iconColor = 'bg-amber-50 text-amber-800 dark:bg-[#2d2516] dark:text-[#fbbf24]';
-        }
-
-        const activeRowClass = isCurrentActive 
-          ? 'bg-almond-cream/40 dark:bg-[#202736] border-l-4 border-l-jet-black dark:border-l-[#c6ac8f] font-medium' 
-          : 'bg-white dark:bg-[#15181f] hover:bg-almond-cream/15 dark:hover:bg-[#1a1f28]';
-
-        let thumbSlotHtml = '';
-        if (isPlayable) {
-          const cachedThumb = player.thumbnailCache?.get(item.path);
-          thumbSlotHtml = `
-            <div class="w-9 h-9 rounded-lg ${iconColor} flex items-center justify-center shrink-0 relative overflow-hidden list-thumb-slot shadow-sm" data-file-path="${escapeHtml(item.path)}">
-              <img class="w-full h-full object-contain list-thumb-img ${cachedThumb ? '' : 'hidden'}" ${cachedThumb ? `src="${cachedThumb}"` : ''} alt="Thumbnail">
-              <div class="list-thumb-icon-wrapper flex items-center justify-center ${cachedThumb ? 'hidden' : ''}">
-                <i data-lucide="${isCurrentActive && player.isPlaying ? 'volume-2' : item.icon}" class="w-4 h-4"></i>
-              </div>
-            </div>
-          `;
-        } else {
-          thumbSlotHtml = `
-            <div class="w-9 h-9 rounded-lg ${iconColor} flex items-center justify-center shrink-0 relative overflow-hidden shadow-sm">
-              <i data-lucide="${item.icon}" class="w-4 h-4"></i>
-            </div>
-          `;
-        }
-
-        const statusText = isFolder 
-          ? 'Folder' 
-          : (isPlayable ? (isCurrentActive ? 'Playing Now' : 'Click to Play') : 'Click to Open ↗');
-
-        let displayStatus = statusText;
-        let dateTooltip = '';
-        if (isCurrentActive && isPlayable) {
-          displayStatus = 'Playing Now';
-        } else if (!isFolder && item.ingestedAt) {
-          displayStatus = formatRelativeTime(item.ingestedAt);
-          dateTooltip = `Downloaded: ${item.ingestedAtIso || new Date(item.ingestedAt).toLocaleString()}`;
-        }
-
-        const isFav = isPlayable && window.Trove.utils?.isFavorite ? window.Trove.utils.isFavorite(item.path) : false;
-        const favBtnHtml = isPlayable ? `
-          <button type="button" class="btn-row-favorite p-1.5 sm:p-2 rounded-xl hover:bg-almond-cream/60 dark:hover:bg-[#252b37] ${isFav ? 'text-rose-500 dark:text-rose-400' : 'text-stone-brown/40 dark:text-[#758092] hover:text-rose-500'} transition shrink-0 min-w-[34px] min-h-[34px] flex items-center justify-center select-none" title="${isFav ? 'Remove from Liked Songs' : 'Add to Liked Songs'}" data-path="${escapeHtml(item.path)}">
-            <i data-lucide="heart" class="w-4 h-4" ${isFav ? 'fill="currentColor"' : ''}></i>
-          </button>
-        ` : '';
-
-        const actionBtnHtml = isPlayable ? `
-          ${favBtnHtml}
-          <button type="button" class="btn-add-to-playlist p-1.5 sm:p-2 rounded-xl hover:bg-almond-cream/60 dark:hover:bg-[#252b37] text-stone-brown/70 hover:text-jet-black dark:text-[#9aa4b2] dark:hover:text-[#f3f4f6] transition shrink-0 min-w-[34px] min-h-[34px] flex items-center justify-center select-none" title="Add to Playlist or Queue" data-path="${escapeHtml(item.path)}">
-            <i data-lucide="list-plus" class="w-4 h-4"></i>
-          </button>
-        ` : '';
-
-        html += `
-          <div class="file-row-wrapper relative overflow-hidden bg-white dark:bg-[#15181f] select-none ${isCurrentActive ? 'is-playing-active' : ''}">
-            ${isPlayable ? `
-            <div class="swipe-queue-reveal absolute inset-y-0 left-0 w-full bg-emerald-600 dark:bg-emerald-600 items-center px-4 text-white font-semibold text-xs select-none pointer-events-none transition-colors" style="display: none;">
-              <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs transition-transform duration-150">
-                <i data-lucide="list-plus" class="w-4 h-4 shrink-0 text-white"></i>
-                <span class="tracking-wider text-[11px] font-bold uppercase text-white">Add to Queue</span>
-              </div>
-            </div>
-            <div class="swipe-playlist-reveal absolute inset-y-0 right-0 w-full bg-amber-600 dark:bg-amber-600 items-center justify-end px-4 text-white font-semibold text-xs select-none pointer-events-none transition-colors" style="display: none;">
-              <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs shadow-xs transition-transform duration-150">
-                <span class="tracking-wider text-[11px] font-bold uppercase text-white">Add to Playlist</span>
-                <i data-lucide="folder-plus" class="w-4 h-4 shrink-0 text-white"></i>
-              </div>
-            </div>
-            ` : ''}
-            <div class="file-row relative bg-white dark:bg-[#15181f] grid grid-cols-12 items-center px-3 py-2.5 sm:px-4 sm:py-3 transition text-sm cursor-pointer select-none ${activeRowClass}" data-path="${escapeHtml(item.path)}" data-is-dir="${isFolder}" title="${escapeHtml(item.name)} (${isFolder ? 'Folder' : (isPlayable ? 'Click to play' : 'Click to open in new tab')})">
-              <div class="col-span-8 md:col-span-8 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-1">
-                ${thumbSlotHtml}
-                <div class="flex flex-col min-w-0 flex-1">
-                  <span class="file-name-span font-semibold text-black dark:text-[#f3f4f6] truncate ${isCurrentActive ? 'text-jet-black dark:text-white' : ''}">${escapeHtml(item.name)}</span>
-                  ${pathSub ? `<span class="font-mono text-[11px] text-stone-brown/60 dark:text-[#758092] truncate">${escapeHtml(pathSub)}</span>` : ''}
-                </div>
-              </div>
-              <div class="col-span-4 md:col-span-4 flex items-center justify-end gap-1.5 sm:gap-2 min-w-0">
-                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase ${badgeClasses} shrink-0">
-                  ${escapeHtml(item.label)}
-                </span>
-                ${!isFolder ? `<span class="font-mono text-xs text-stone-brown dark:text-[#9aa4b2] shrink-0 whitespace-nowrap">${formatBytes(item.size)}</span>` : ''}
-                ${actionBtnHtml}
-              </div>
-            </div>
-          </div>
-        `;
-      });
+      // Progressive rendering: render first 35 items immediately (<16ms FCP), append the rest next frame
+      const CHUNK_SIZE = 35;
+      const initialSlice = items.slice(0, CHUNK_SIZE);
+      for (let i = 0; i < initialSlice.length; i++) {
+        html += this.buildItemRowHtml(initialSlice[i]);
+      }
 
       if (this.elements.fileList) {
         this.elements.fileList.innerHTML = html;
       }
 
-      if (window.lucide) window.lucide.createIcons();
+      if (window.lucide && this.elements.fileList) {
+        window.lucide.createIcons({ root: this.elements.fileList });
+      }
       if (MotionAnim) MotionAnim.animateFileList(this.elements.fileList);
       this.initListThumbnailObserver();
+
+      // Hydrate remaining items progressively without blocking first paint
+      if (items.length > CHUNK_SIZE && this.elements.fileList) {
+        if (this._remainingRenderTimer) cancelAnimationFrame(this._remainingRenderTimer);
+        this._remainingRenderTimer = requestAnimationFrame(() => {
+          this._remainingRenderTimer = null;
+          const container = this.elements.fileList;
+          if (!container) return;
+          let remainingHtml = '';
+          for (let i = CHUNK_SIZE; i < items.length; i++) {
+            remainingHtml += this.buildItemRowHtml(items[i]);
+          }
+          const temp = document.createElement('div');
+          temp.innerHTML = remainingHtml;
+          const fragment = document.createDocumentFragment();
+          while (temp.firstChild) {
+            fragment.appendChild(temp.firstChild);
+          }
+          container.appendChild(fragment);
+          if (window.lucide) window.lucide.createIcons({ root: container });
+          this.initListThumbnailObserver();
+        });
+      }
     },
 
     updateActiveTrackHighlight(newTrack) {

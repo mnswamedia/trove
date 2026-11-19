@@ -130,10 +130,18 @@
       this.setupEventListeners();
       this.loadLocalCache();
       this.updateSyncBadgeForConfig();
-      this.fetchFromD1();
-      // If local cache is empty, attempt silent background restore from Hugging Face backup
-      if (this.playlists.length === 0) {
-        this.restoreFromHuggingFace(true);
+
+      // Defer background cloud sync so it does not compete for bandwidth/CPU during initial app boot
+      const runDeferredSync = () => {
+        this.fetchFromD1();
+        if (this.playlists.length === 0) {
+          this.restoreFromHuggingFace(true);
+        }
+      };
+      if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(runDeferredSync, { timeout: 4000 });
+      } else {
+        setTimeout(runDeferredSync, 3000);
       }
     },
 

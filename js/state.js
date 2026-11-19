@@ -64,13 +64,17 @@
   }
   const FS_CACHE_TTL = storage.fsCacheTTL || (60 * 60 * 1000); // 1 hour in ms
 
-  function getCachedFSTree(allowStale = false) {
+  function getCachedFSTree(allowStale = true) {
     try {
       const raw = localStorage.getItem(getFsCacheKey());
       if (!raw) return null;
       const data = JSON.parse(raw);
-      if (data && Array.isArray(data.items) && (allowStale || (data.timestamp && (Date.now() - data.timestamp < FS_CACHE_TTL)))) {
-        return data;
+      if (data && Array.isArray(data.items)) {
+        const isFresh = Boolean(data.timestamp && (Date.now() - data.timestamp < FS_CACHE_TTL));
+        data._isStale = !isFresh;
+        if (allowStale || isFresh) {
+          return data;
+        }
       }
     } catch (e) {
       console.warn('Could not read cached FS tree:', e);

@@ -412,8 +412,15 @@
       });
     }
 
-    if (window.lucide) {
-      window.lucide.createIcons();
+    // Scope initial icon creation strictly to visible viewport elements (header, controls, play bar)
+    // Hidden drawers & modals render their own icons on demand when opened.
+    if (window.lucide && typeof window.lucide.createIcons === 'function') {
+      const header = document.querySelector('header');
+      const mainControls = document.querySelector('main > div:first-child');
+      const bottomBar = document.getElementById('bottom-play-bar');
+      if (header) window.lucide.createIcons({ root: header });
+      if (mainControls) window.lucide.createIcons({ root: mainControls });
+      if (bottomBar) window.lucide.createIcons({ root: bottomBar });
     }
 
     if (isShareLaunch) {

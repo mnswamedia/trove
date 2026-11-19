@@ -1879,10 +1879,10 @@
     Press back again to exit
   </div>
 
-  <!-- Self-hosted Vendor Libraries -->
+  <!-- Self-hosted Vendor Libraries (Deferred to eliminate main-thread startup blockage) -->
   <script src="./assets/vendor/lucide.min.js"></script>
-  <script src="./assets/vendor/jsmediatags.min.js"></script>
-  <script src="./assets/vendor/motion.js"></script>
+  <script src="./assets/vendor/jsmediatags.min.js" defer></script>
+  <script src="./assets/vendor/motion.js" defer></script>
 
   <!-- Application Configuration & Modular Logic -->
   <script src="./config.js"></script>
