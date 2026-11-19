@@ -186,7 +186,7 @@
 
     async fetchHFTree(token) {
       const isBucket = repo.isBucket !== false;
-      const candidateUrls = isBucket ? [
+      const candidateUrls = this._workingTreeUrl ? [this._workingTreeUrl] : (isBucket ? [
         `${api.bucketsBase}/${repo.id}/tree?recursive=true`,
         `${api.bucketsBase}/${repo.id}/tree/?recursive=true`,
         `${api.bucketsBase}/${repo.id}/tree`,
@@ -194,7 +194,7 @@
       ] : [
         `${api.datasetsBase}/${repo.id}/tree/${repo.branch || 'main'}?recursive=true`,
         `${api.datasetsBase}/${repo.id}`
-      ];
+      ]);
 
       let lastError = null;
 
@@ -240,6 +240,7 @@
           }
 
           if (results.length > 0 || baseUrl === candidateUrls[0]) {
+            this._workingTreeUrl = baseUrl;
             return results;
           }
         } catch (err) {
@@ -281,8 +282,9 @@
     },
 
     async fetchDownloadsManifest(token) {
+      if (this._workingManifestUrl === null) return []; // Checked previously and confirmed not present
       const isBucket = repo.isBucket !== false;
-      const candidateUrls = isBucket ? [
+      const candidateUrls = this._workingManifestUrl ? [this._workingManifestUrl] : (isBucket ? [
         `https://huggingface.co/buckets/${repo.id}/raw/downloads.json`,
         `https://huggingface.co/buckets/${repo.id}/resolve/downloads.json`,
         `${api.bucketsBase}/${repo.id}/raw/downloads.json`,
@@ -292,7 +294,7 @@
         `https://huggingface.co/datasets/${repo.id}/raw/${repo.branch || 'main'}/downloads.json`,
         `https://huggingface.co/datasets/${repo.id}/resolve/${repo.branch || 'main'}/downloads.json`,
         `${api.datasetsBase}/${repo.id}/raw/${repo.branch || 'main'}/downloads.json`
-      ];
+      ]);
 
       for (const url of candidateUrls) {
         try {
@@ -300,12 +302,14 @@
             headers: token ? { 'Authorization': `Bearer ${token}` } : {}
           });
           if (res.ok) {
+            this._workingManifestUrl = url;
             const data = await res.json();
             if (Array.isArray(data)) return data;
             if (data && Array.isArray(data.downloads)) return data.downloads;
           }
         } catch (_) {}
       }
+      if (!this._workingManifestUrl) this._workingManifestUrl = null;
       return [];
     },
 
@@ -337,6 +341,49 @@
       return true;
     },
 
+    async syncRepositoryBackground(token) {
+      const state = window.Trove.state || {};
+      const player = window.Trove.player || {};
+      try {
+        const manifestPromise = this.fetchDownloadsManifest(token);
+        let rawItems = [];
+        try {
+          rawItems = await this.fetchHFTree(token);
+        } catch (treeErr) {
+          if (treeErr.message === 'AUTH_ERROR') return;
+          rawItems = await this.fetchHFSiblingsFallback(token);
+        }
+
+        const manifest = await manifestPromise;
+        state.downloadsManifest = manifest;
+        state.downloadsMap = new Map();
+        if (Array.isArray(manifest)) {
+          manifest.forEach(entry => {
+            if (!entry) return;
+            if (entry.filename) state.downloadsMap.set(entry.filename, entry);
+            if (entry.path) state.downloadsMap.set(entry.path, entry);
+            if (entry.id) state.downloadsMap.set(entry.id, entry);
+          });
+        }
+
+        state.allItems = this.normalizeFileEntries(rawItems);
+        if (window.Trove.store) {
+          window.Trove.store.setCachedFSTree(rawItems, manifest);
+        }
+
+        this.updateStats();
+        const fileCount = state.allItems.filter(i => !i.isDir).length;
+        this.updateFooterStatus(`Loaded ${fileCount} files (synced)`);
+
+        if (player.currentTrack && typeof player.updateQueue === 'function') {
+          player.updateQueue(player.currentTrack);
+        }
+        this.render();
+      } catch (err) {
+        console.warn('Background vault sync deferred:', err);
+      }
+    },
+
     async loadRepository(forceRefresh = false) {
       const state = window.Trove.state || {};
       const player = window.Trove.player || {};
@@ -348,27 +395,27 @@
         return;
       }
 
-      // 1. Instant Cache-First (Stale-While-Revalidate): Render local cache immediately in 0ms!
+      // 1. Instant Cache-First: Render local cache immediately in 0ms with ZERO network requests!
       const cached = window.Trove.store ? window.Trove.store.getCachedFSTree(true) : null;
-      let hasRenderedCached = false;
-
-      if (!forceRefresh && cached && this.applyCachedFSTree(cached, cached._isStale ? 'cached · updating...' : 'cached')) {
+      if (!forceRefresh && cached && this.applyCachedFSTree(cached, 'cached')) {
         this.setLoading(false);
         this.render();
-        hasRenderedCached = true;
 
-        // If cache is fresh (< 1 hour) and user didn't request a hard refresh, we're done
-        if (!cached._isStale && navigator.onLine !== false) {
-          return;
+        // Defer silent background check by 12s if cache is older than 1 hour, so startup remains 100% network-free
+        if (cached._isStale && navigator.onLine !== false) {
+          if (this._backgroundSyncTimer) clearTimeout(this._backgroundSyncTimer);
+          this._backgroundSyncTimer = setTimeout(() => {
+            this._backgroundSyncTimer = null;
+            this.syncRepositoryBackground(state.token);
+          }, 12000);
         }
+        return;
       }
 
-      // If no cached data exists at all (brand new install), show the loader
-      if (!hasRenderedCached) {
-        this.setLoading(true);
-        state.error = null;
-        this.render();
-      }
+      // 2. Cold load or Explicit Refresh (e.g. Pull-to-refresh or no cache)
+      this.setLoading(true);
+      state.error = null;
+      this.render();
 
       try {
         const manifestPromise = this.fetchDownloadsManifest(state.token);

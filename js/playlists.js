@@ -139,9 +139,9 @@
         }
       };
       if (typeof window.requestIdleCallback === 'function') {
-        window.requestIdleCallback(runDeferredSync, { timeout: 4000 });
+        window.requestIdleCallback(runDeferredSync, { timeout: 15000 });
       } else {
-        setTimeout(runDeferredSync, 3000);
+        setTimeout(runDeferredSync, 12000);
       }
     },
 

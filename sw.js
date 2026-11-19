@@ -1,5 +1,5 @@
 // Trove PWA Service Worker
-const CACHE_NAME = 'trove-pwa-v82';
+const CACHE_NAME = 'trove-pwa-v83';
 const CDN_CACHE_NAME = 'trove-cdn-v1';
 
 const GOOGLE_FONTS_CSS_URL = 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap';
@@ -208,8 +208,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 5. App Shell assets (HTML, CSS, JS, manifest): Stale-While-Revalidate
-  // Instant local launch (<150ms) from device CacheStorage with non-blocking background revalidation
+  // 5. App Shell assets (HTML, CSS, JS, manifest): Pure Cache-First for instant 0ms offline launch
+  // Version updates are handled cleanly by ServiceWorker install precaching, eliminating startup network bursts.
   const isNavOrHtml = req.mode === 'navigate' ||
     url.pathname.endsWith('/') ||
     url.pathname.endsWith('index.html');
@@ -221,32 +221,24 @@ self.addEventListener('fetch', (event) => {
         cached = (await cache.match('./index.html')) || (await cache.match('./'));
       }
 
-      // Non-blocking background revalidation fetch
-      const fetchPromise = fetch(new Request(req, isNavOrHtml ? { cache: 'no-cache' } : {}))
-        .then((networkRes) => {
-          if (networkRes && networkRes.status === 200) {
-            // Do not pollute app shell cache with one-off share target queries
-            const isShareTarget = url.searchParams.has('title') || url.searchParams.has('text') || url.searchParams.has('url');
-            if (!isShareTarget) {
-              cache.put(req, networkRes.clone());
-            }
-          }
-          return networkRes;
-        })
-        .catch(() => null);
-
-      // Return cached version immediately for 0ms startup!
+      // Return cached version immediately with ZERO network traffic!
       if (cached) {
         return cached;
       }
 
-      // If not in cache yet (initial install before precache finishes), await network
-      const freshRes = await fetchPromise;
-      if (freshRes) {
-        return freshRes;
+      // If not in cache yet (initial install before precache finishes), fetch from network and cache
+      try {
+        const networkRes = await fetch(new Request(req, isNavOrHtml ? { cache: 'no-cache' } : {}));
+        if (networkRes && networkRes.status === 200) {
+          const isShareTarget = url.searchParams.has('title') || url.searchParams.has('text') || url.searchParams.has('url');
+          if (!isShareTarget) {
+            cache.put(req, networkRes.clone());
+          }
+        }
+        return networkRes;
+      } catch (err) {
+        return Response.error();
       }
-
-      return Response.error();
     })
   );
 });

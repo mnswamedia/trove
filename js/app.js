@@ -388,13 +388,18 @@
       });
 
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js', { scope: './', updateViaCache: 'none' })
+        navigator.serviceWorker.register('./sw.js', { scope: './' })
           .then((reg) => {
             console.log('Trove ServiceWorker active with scope:', reg.scope);
-            if (navigator.onLine !== false) {
-              lastSwUpdateCheck = Date.now();
-              reg.update().catch(() => {});
-            }
+            const triggerUpdate = () => {
+              if (navigator.onLine !== false) {
+                lastSwUpdateCheck = Date.now();
+                reg.update().catch(() => {});
+              }
+            };
+
+            // Defer SW update check by 10s so startup has ZERO network contention
+            setTimeout(triggerUpdate, 10000);
 
             document.addEventListener('visibilitychange', () => {
               if (document.visibilityState === 'visible' && navigator.onLine !== false) {
