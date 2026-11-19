@@ -362,7 +362,12 @@
     if (window.Trove.playlists) window.Trove.playlists.init();
     if (window.Trove.explorer) window.Trove.explorer.init();
 
-    if (MotionAnim) MotionAnim.playAppIntro();
+    // Check if launched via Web Share Target (e.g. shared video from YouTube)
+    const isShareLaunch = window.Trove.importer && typeof window.Trove.importer.hasSharePayload === 'function' && window.Trove.importer.hasSharePayload();
+
+    if (!isShareLaunch && MotionAnim) {
+      MotionAnim.playAppIntro();
+    }
 
     // Register Service Worker for PWA
     if ('serviceWorker' in navigator) {
@@ -411,16 +416,16 @@
       window.lucide.createIcons();
     }
 
-    const state = window.Trove.state || {};
-    if (state.token) {
-      if (window.Trove.explorer) window.Trove.explorer.loadRepository(false);
-    } else {
-      if (window.Trove.settings) window.Trove.settings.open();
-    }
-
-    // Process incoming Web Share Target (e.g. YouTube video shared from Android)
-    if (window.Trove.importer && typeof window.Trove.importer.handleShareTarget === 'function') {
+    if (isShareLaunch) {
+      // Prioritize instant share ingest! Skip heavy repository loading and intro transitions
       window.Trove.importer.handleShareTarget();
+    } else {
+      const state = window.Trove.state || {};
+      if (state.token) {
+        if (window.Trove.explorer) window.Trove.explorer.loadRepository(false);
+      } else {
+        if (window.Trove.settings) window.Trove.settings.open();
+      }
     }
   }
 

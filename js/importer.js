@@ -94,7 +94,267 @@
       }
     },
 
-    handleShareTarget() {
+    hasSharePayload() {
+      try {
+        const search = window.location.search;
+        if (!search) return false;
+        const params = new URLSearchParams(search);
+        return Boolean(params.get('title') || params.get('text') || params.get('url'));
+      } catch (_) {
+        return false;
+      }
+    },
+
+    returnToSource() {
+      try {
+        if (window.history.length > 1) {
+          window.history.back();
+        }
+      } catch (_) {}
+      try {
+        window.close();
+      } catch (_) {}
+    },
+
+    showQuickShareHud({ title, targetUrls }) {
+      let hud = document.getElementById('trove-share-hud');
+      if (!hud) {
+        hud = document.createElement('div');
+        hud.id = 'trove-share-hud';
+        document.body.appendChild(hud);
+      }
+
+      hud.className = 'fixed inset-0 z-[250] flex items-end sm:items-center justify-center p-4 bg-black/75 backdrop-blur-md transition-opacity duration-200 select-none';
+      hud.innerHTML = `
+        <div class="w-full max-w-sm bg-jet-black dark:bg-[#15181f] border border-stone-brown/40 dark:border-[#353c4d] rounded-2xl p-4 sm:p-5 shadow-2xl flex flex-col gap-3.5 text-white">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 shadow-sm">
+                <i data-lucide="zap" class="w-5 h-5"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="text-[10px] font-semibold tracking-wider uppercase text-amber-400 flex items-center gap-1.5">
+                  <span>Quick Ingest</span>
+                  <span class="w-1 h-1 rounded-full bg-amber-400/60"></span>
+                  <span class="text-stone-300 dark:text-[#9aa4b2]">Audio (.m4a)</span>
+                </div>
+                <h3 id="trove-share-hud-title" class="text-sm font-bold text-white truncate mt-0.5"></h3>
+              </div>
+            </div>
+            <button type="button" id="trove-share-hud-close" class="p-1.5 text-stone-400 hover:text-white rounded-lg transition" title="Dismiss">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <div id="trove-share-hud-status" class="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10 text-xs">
+            <div id="trove-share-hud-icon" class="w-4 h-4 shrink-0 flex items-center justify-center">
+              <i data-lucide="loader-2" class="w-4 h-4 text-amber-400 animate-spin"></i>
+            </div>
+            <span id="trove-share-hud-msg" class="text-stone-200 font-medium truncate min-w-0">Dispatching to vault runner...</span>
+          </div>
+
+          <div id="trove-share-hud-actions" class="flex items-center gap-2 pt-0.5">
+            <button type="button" id="trove-share-hud-return" class="flex-1 py-2.5 px-3 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 active:scale-95">
+              <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+              <span id="trove-share-hud-return-text">Return to YouTube</span>
+            </button>
+            <button type="button" id="trove-share-hud-open" class="py-2.5 px-3 bg-white/10 hover:bg-white/15 text-stone-200 font-semibold text-xs rounded-xl border border-white/10 transition text-center shrink-0 active:scale-95">
+              Open Trove
+            </button>
+          </div>
+        </div>
+      `;
+
+      const titleEl = hud.querySelector('#trove-share-hud-title');
+      if (titleEl) titleEl.innerText = title || 'Shared YouTube Track';
+
+      if (window.lucide && typeof window.lucide.createIcons === 'function') {
+        window.lucide.createIcons();
+      }
+
+      const dismissHud = (openVault = false) => {
+        if (this._shareAutoReturnTimer) {
+          clearInterval(this._shareAutoReturnTimer);
+          this._shareAutoReturnTimer = null;
+        }
+        hud.classList.add('opacity-0', 'pointer-events-none');
+        setTimeout(() => {
+          try { hud.remove(); } catch (_) {}
+        }, 200);
+
+        if (openVault && window.Trove.explorer && !window.Trove.state?.allItems?.length) {
+          window.Trove.explorer.loadRepository(false);
+        }
+      };
+
+      hud.querySelector('#trove-share-hud-close')?.addEventListener('click', () => dismissHud(false));
+      hud.querySelector('#trove-share-hud-open')?.addEventListener('click', () => dismissHud(true));
+      hud.querySelector('#trove-share-hud-return')?.addEventListener('click', () => {
+        dismissHud(false);
+        this.returnToSource();
+      });
+
+      return {
+        setStatus: (text, type = 'loading') => {
+          const msgEl = hud.querySelector('#trove-share-hud-msg');
+          const iconEl = hud.querySelector('#trove-share-hud-icon');
+          if (msgEl) msgEl.innerText = text;
+          if (iconEl) {
+            if (type === 'loading') {
+              iconEl.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 text-amber-400 animate-spin"></i>';
+            } else if (type === 'success') {
+              iconEl.innerHTML = '<i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>';
+            } else if (type === 'error') {
+              iconEl.innerHTML = '<i data-lucide="alert-circle" class="w-4 h-4 text-rose-400"></i>';
+            }
+            if (window.lucide && typeof window.lucide.createIcons === 'function') {
+              window.lucide.createIcons();
+            }
+          }
+        },
+        startCountdown: (seconds = 2) => {
+          let remaining = seconds;
+          const returnBtnText = hud.querySelector('#trove-share-hud-return-text');
+          if (returnBtnText) returnBtnText.innerText = `Return to YouTube (${remaining}s)`;
+
+          if (this._shareAutoReturnTimer) clearInterval(this._shareAutoReturnTimer);
+          this._shareAutoReturnTimer = setInterval(() => {
+            remaining -= 1;
+            if (remaining > 0) {
+              if (returnBtnText) returnBtnText.innerText = `Return to YouTube (${remaining}s)`;
+            } else {
+              clearInterval(this._shareAutoReturnTimer);
+              this._shareAutoReturnTimer = null;
+              dismissHud(false);
+              this.returnToSource();
+            }
+          }, 1000);
+        },
+        setError: (errText) => {
+          const msgEl = hud.querySelector('#trove-share-hud-msg');
+          const iconEl = hud.querySelector('#trove-share-hud-icon');
+          if (msgEl) msgEl.innerText = errText;
+          if (iconEl) {
+            iconEl.innerHTML = '<i data-lucide="alert-circle" class="w-4 h-4 text-rose-400"></i>';
+          }
+          const returnBtn = hud.querySelector('#trove-share-hud-return');
+          if (returnBtn) {
+            returnBtn.innerHTML = '<i data-lucide="settings" class="w-3.5 h-3.5"></i><span>Open Settings</span>';
+            returnBtn.onclick = () => {
+              dismissHud(true);
+              if (window.Trove.settings) window.Trove.settings.open(errText);
+            };
+          }
+          if (window.lucide && typeof window.lucide.createIcons === 'function') {
+            window.lucide.createIcons();
+          }
+        }
+      };
+    },
+
+    async dispatchIngest({ targets, format = 'm4a' }) {
+      const state = window.Trove.state || {};
+      const ghToken = localStorage.getItem(storage.ghTokenKey) || '';
+      if (!ghToken) {
+        throw new Error('GitHub Personal Access Token is required in Settings.');
+      }
+
+      const defaultRepo = (CONFIG.github?.owner && CONFIG.github?.repo) ? `${CONFIG.github.owner}/${CONFIG.github.repo}` : 'mnswamedia/trove';
+      const rawRepo = localStorage.getItem(storage.ghRepoKey) || defaultRepo;
+      const repoParts = rawRepo.split('/').map(s => s.trim());
+      if (repoParts.length !== 2 || !repoParts[0] || !repoParts[1]) {
+        throw new Error('Invalid GitHub repository in Settings (expected "owner/repo").');
+      }
+      const [owner, repoName] = repoParts;
+      const workflowFile = CONFIG.github?.workflowFile || 'ingest.yml';
+
+      const workerUrl = CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/ingest') : null;
+      const workerToken = CONFIG.getWorkerToken ? CONFIG.getWorkerToken() : (localStorage.getItem(storage.workerTokenKey) || '').trim();
+
+      if (workerUrl) {
+        if (!workerToken) {
+          throw new Error('Worker API Secret is required in Settings when Cloudflare Worker URL is configured.');
+        }
+        const headers = CONFIG.getWorkerAuthHeaders
+          ? CONFIG.getWorkerAuthHeaders({ 'Content-Type': 'application/json' })
+          : {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${workerToken}`,
+              'X-API-Key': workerToken
+            };
+
+        const response = await fetch(`${workerUrl.replace(/\/+$/, '')}/dispatch`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            targets,
+            format,
+            bucket_id: repo.id,
+            hf_token: state.token || '',
+            gh_token: ghToken,
+            owner: owner,
+            repo: repoName,
+            ref: CONFIG.github?.ref || 'main',
+            workflow: workflowFile
+          })
+        });
+
+        if (!response.ok) {
+          let errDetail = `Worker request failed with status ${response.status}`;
+          try {
+            const errData = await response.json();
+            errDetail = errData.error || errDetail;
+          } catch (_) {}
+          throw new Error(errDetail);
+        }
+
+        const resData = await response.json();
+        const currentJobId = resData.run_id || resData.job_id;
+        if (currentJobId) {
+          sessionStorage.setItem('trove_current_run_id', currentJobId);
+          sessionStorage.setItem('trove_current_job_id', currentJobId);
+        }
+        return { success: true, jobId: currentJobId, via: 'worker' };
+      } else {
+        // Direct GitHub API
+        const dispatchUrl = `https://api.github.com/repos/${owner}/${repoName}/actions/workflows/${workflowFile}/dispatches`;
+        const response = await fetch(dispatchUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${ghToken}`,
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            ref: CONFIG.github?.ref || 'main',
+            inputs: {
+              targets,
+              format,
+              bucket_id: repo.id,
+              hf_token: state.token || ''
+            }
+          })
+        });
+
+        if (!response.ok) {
+          let errDetail = `GitHub API request failed with status ${response.status}`;
+          try {
+            const errData = await response.json();
+            errDetail = errData.message || errDetail;
+          } catch (_) {}
+          if (response.status === 404) {
+            errDetail = `Workflow '${workflowFile}' not found in repository ${owner}/${repoName}.`;
+          } else if (response.status === 401 || response.status === 403) {
+            errDetail = `GitHub authentication failed. Check your Personal Access Token scopes.`;
+          }
+          throw new Error(errDetail);
+        }
+        return { success: true, via: 'github' };
+      }
+    },
+
+    async handleShareTarget() {
       try {
         const search = window.location.search;
         if (!search) return false;
@@ -122,68 +382,30 @@
           if (fallback) {
             this.open(fallback);
             this.setFormat('m4a');
-            const toastFn = showToast || window.Trove.utils?.showToast;
-            if (toastFn) {
-              toastFn('Received shared link. Review before downloading.');
-            }
           }
           return true;
         }
 
         const targetUrls = urls.join('\n');
+        const songName = sharedTitle || (urls.length === 1 ? 'YouTube Track' : `${urls.length} YouTube Tracks`);
+
+        // Show instant Quick Ingest HUD without heavy modals or intro transitions
+        const hud = this.showQuickShareHud({ title: songName, targetUrls });
+
         const state = window.Trove.state || {};
-        const ghToken = localStorage.getItem(storage.ghTokenKey) || '';
-        const workerUrl = CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/ingest') : null;
-        const workerToken = CONFIG.getWorkerToken ? CONFIG.getWorkerToken() : (localStorage.getItem(storage.workerTokenKey) || '').trim();
-        const toastFn = showToast || window.Trove.utils?.showToast;
-
-        const hasHfToken = Boolean(state.token);
-        const hasGhToken = Boolean(ghToken);
-        const hasWorkerAuth = !workerUrl || Boolean(workerToken);
-
-        if (!hasHfToken) {
-          if (window.Trove.settings) {
-            window.Trove.settings.open('Please connect your Hugging Face Token in Settings before downloading.');
-          }
-          if (toastFn) {
-            toastFn('Hugging Face Token is required in Settings to download.', 4000);
-          }
+        if (!state.token) {
+          hud.setError('Please connect Hugging Face Token in Settings first.');
           return true;
         }
 
-        this.open(targetUrls);
-        this.setFormat('m4a');
-
-        if (!hasGhToken) {
-          if (toastFn) {
-            toastFn('GitHub Personal Access Token is required to download.', 4000);
-          }
-          if (this.showError) {
-            this.showError('GitHub Personal Access Token is required to dispatch ingestion. Open Settings to configure it.');
-          }
-          return true;
+        // Dispatch ingestion immediately (0ms wait, no modal transitions)
+        try {
+          await this.dispatchIngest({ targets: targetUrls, format: 'm4a' });
+          hud.setStatus('Queued for download! Sent to runner.', 'success');
+          hud.startCountdown(2);
+        } catch (dispatchErr) {
+          hud.setError(dispatchErr.message || 'Dispatch failed. Check Settings.');
         }
-
-        if (workerUrl && !hasWorkerAuth) {
-          if (toastFn) {
-            toastFn('Worker API Secret is required to download.', 4000);
-          }
-          if (this.showError) {
-            this.showError('Worker API Secret is required in Settings when Cloudflare Worker is configured.');
-          }
-          return true;
-        }
-
-        // Credentials present: Automatically trigger download as music!
-        const songName = sharedTitle || (urls.length === 1 ? 'YouTube track' : `${urls.length} YouTube tracks`);
-        if (toastFn) {
-          toastFn(`Auto-downloading "${songName}" as music...`, 3000);
-        }
-
-        // Delay slightly for modal mount and animation before submitting
-        setTimeout(() => {
-          this.handleSubmit();
-        }, 350);
 
         return true;
       } catch (err) {
@@ -273,93 +495,8 @@
         }
       };
 
-      const state = window.Trove.state || {};
-      const workerUrl = CONFIG.getWorkerEndpoint ? CONFIG.getWorkerEndpoint('/ingest') : null;
-      const workerToken = CONFIG.getWorkerToken ? CONFIG.getWorkerToken() : (localStorage.getItem(storage.workerTokenKey) || '').trim();
-
       try {
-        let currentJobId = null;
-
-        if (workerUrl) {
-          if (!workerToken) {
-            throw new Error('Worker API Secret is required in Settings when Cloudflare Worker URL is configured.');
-          }
-          if (this.elements.statusText) this.elements.statusText.innerText = 'Dispatching via Cloudflare Worker...';
-          const headers = CONFIG.getWorkerAuthHeaders
-            ? CONFIG.getWorkerAuthHeaders({ 'Content-Type': 'application/json' })
-            : {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${workerToken}`,
-                'X-API-Key': workerToken
-              };
-
-          const response = await fetch(`${workerUrl.replace(/\/+$/, '')}/dispatch`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({
-              targets: combinedTargets,
-              format: selectedFormat,
-              bucket_id: repo.id,
-              hf_token: state.token || '',
-              gh_token: ghToken,
-              owner: owner,
-              repo: repoName,
-              ref: CONFIG.github?.ref || 'main',
-              workflow: workflowFile
-            })
-          });
-
-          if (!response.ok) {
-            let errDetail = `Worker request failed with status ${response.status}`;
-            try {
-              const errData = await response.json();
-              errDetail = errData.error || errDetail;
-            } catch (_) {}
-            throw new Error(errDetail);
-          }
-
-          const resData = await response.json();
-          currentJobId = resData.run_id || resData.job_id;
-          if (currentJobId) {
-            sessionStorage.setItem('trove_current_run_id', currentJobId);
-            sessionStorage.setItem('trove_current_job_id', currentJobId);
-          }
-        } else {
-          // Fallback to direct GitHub API
-          const dispatchUrl = `https://api.github.com/repos/${owner}/${repoName}/actions/workflows/${workflowFile}/dispatches`;
-          const response = await fetch(dispatchUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${ghToken}`,
-              'Accept': 'application/vnd.github+json',
-              'X-GitHub-Api-Version': '2022-11-28',
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              ref: CONFIG.github?.ref || 'main',
-              inputs: {
-                targets: combinedTargets,
-                format: selectedFormat,
-                bucket_id: repo.id,
-                hf_token: state.token || ''
-              }
-            })
-          });
-
-          if (!response.ok) {
-            let errDetail = `GitHub API request failed with status ${response.status}`;
-            try {
-              const errData = await response.json();
-              errDetail = errData.message || errDetail;
-            } catch (_) {}
-            if (response.status === 404) {
-              errDetail = `Workflow '${workflowFile}' not found in repository ${owner}/${repoName}.`;
-            } else if (response.status === 401 || response.status === 403) {
-              errDetail = `GitHub authentication failed. Check your Personal Access Token scopes.`;
-            }
-            throw new Error(errDetail);
-          }
-        }
+        await this.dispatchIngest({ targets: combinedTargets, format: selectedFormat });
 
         if (this.elements.statusText) this.elements.statusText.innerText = 'Dispatched successfully!';
         if (this.elements.statusSubtext) this.elements.statusSubtext.innerText = 'Sent to runner.';
