@@ -43,10 +43,14 @@
     })();
   </script>
 
-  <!-- Google Fonts -->
+  <!-- Google Fonts (Preloaded & Non-render-blocking) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous">
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'" crossorigin="anonymous">
+  <noscript>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
+  </noscript>
 
   <!-- Tailwind CSS (Self-hosted for Offline Support) -->
   <script src="./assets/vendor/tailwindcss.js"></script>
@@ -72,15 +76,6 @@
       };
     }
   </script>
-
-  <!-- Lucide Icons (Self-hosted for Offline Support) -->
-  <script src="./assets/vendor/lucide.min.js"></script>
-
-  <!-- jsmediatags for Embedded ID3 Album Art extraction (Self-hosted) -->
-  <script src="./assets/vendor/jsmediatags.min.js"></script>
-
-  <!-- Motion Animation Engine (Self-hosted) -->
-  <script src="./assets/vendor/motion.js"></script>
 
   <!-- Minimal Style Overrides & Variables -->
   <link rel="stylesheet" href="./style.css">
@@ -1883,6 +1878,11 @@
   <div id="trove-exit-toast" class="fixed bottom-24 sm:bottom-20 left-1/2 -translate-x-1/2 z-[140] px-5 py-3 sm:px-6 sm:py-3.5 max-w-[90vw] sm:max-w-md bg-jet-black/95 dark:bg-[#1a1f2c]/95 backdrop-blur-md border border-stone-brown/30 dark:border-[#3a4459] text-white dark:text-[#f3f4f6] text-xs sm:text-sm font-semibold rounded-full shadow-[0_12px_36px_rgba(0,0,0,0.35)] dark:shadow-[0_12px_36px_rgba(0,0,0,0.7)] transition-all duration-300 pointer-events-none opacity-0 translate-y-4 select-none flex items-center gap-2.5 overflow-hidden">
     Press back again to exit
   </div>
+
+  <!-- Self-hosted Vendor Libraries -->
+  <script src="./assets/vendor/lucide.min.js"></script>
+  <script src="./assets/vendor/jsmediatags.min.js"></script>
+  <script src="./assets/vendor/motion.js"></script>
 
   <!-- Application Configuration & Modular Logic -->
   <script src="./config.js"></script>

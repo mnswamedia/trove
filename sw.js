@@ -1,5 +1,5 @@
 // Trove PWA Service Worker
-const CACHE_NAME = 'trove-pwa-v77';
+const CACHE_NAME = 'trove-pwa-v78';
 const CDN_CACHE_NAME = 'trove-cdn-v1';
 
 const GOOGLE_FONTS_CSS_URL = 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap';
@@ -208,35 +208,46 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 5. App Shell assets (HTML, CSS, JS, manifest): Network-First, fallback to Cache
-  // For HTML documents/navigations, ALWAYS fetch with cache: 'no-cache' so browser HTTP cache doesn't block updates
+  // 5. App Shell assets (HTML, CSS, JS, manifest): Stale-While-Revalidate
+  // Instant local launch (<150ms) from device CacheStorage with non-blocking background revalidation
   const isNavOrHtml = req.mode === 'navigate' ||
     url.pathname.endsWith('/') ||
     url.pathname.endsWith('index.html');
 
-  const fetchOptions = isNavOrHtml ? { cache: 'no-cache' } : {};
-
   event.respondWith(
-    fetch(new Request(req, fetchOptions))
-      .then((networkRes) => {
-        if (networkRes && networkRes.status === 200) {
-          // Do not pollute app shell cache with one-off share target queries
-          const isShareTarget = url.searchParams.has('title') || url.searchParams.has('text') || url.searchParams.has('url');
-          if (!isShareTarget) {
-            const clone = networkRes.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
+    caches.open(CACHE_NAME).then(async (cache) => {
+      let cached = await cache.match(req, { ignoreSearch: isNavOrHtml });
+      if (!cached && isNavOrHtml) {
+        cached = (await cache.match('./index.html')) || (await cache.match('./'));
+      }
+
+      // Non-blocking background revalidation fetch
+      const fetchPromise = fetch(new Request(req, isNavOrHtml ? { cache: 'no-cache' } : {}))
+        .then((networkRes) => {
+          if (networkRes && networkRes.status === 200) {
+            // Do not pollute app shell cache with one-off share target queries
+            const isShareTarget = url.searchParams.has('title') || url.searchParams.has('text') || url.searchParams.has('url');
+            if (!isShareTarget) {
+              cache.put(req, networkRes.clone());
+            }
           }
-        }
-        return networkRes;
-      })
-      .catch(async () => {
-        const cached = await caches.match(req, { ignoreSearch: isNavOrHtml });
-        if (cached) return cached;
-        if (isNavOrHtml) {
-          return caches.match('./index.html');
-        }
-        return Response.error();
-      })
+          return networkRes;
+        })
+        .catch(() => null);
+
+      // Return cached version immediately for 0ms startup!
+      if (cached) {
+        return cached;
+      }
+
+      // If not in cache yet (initial install before precache finishes), await network
+      const freshRes = await fetchPromise;
+      if (freshRes) {
+        return freshRes;
+      }
+
+      return Response.error();
+    })
   );
 });
 
