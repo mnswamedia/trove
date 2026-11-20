@@ -281,19 +281,148 @@
       return [];
     },
 
+    buildDownloadsMap(manifest) {
+      const map = new Map();
+      if (!Array.isArray(manifest)) return map;
+
+      manifest.forEach(entry => {
+        if (!entry) return;
+
+        if (entry.id) {
+          map.set(String(entry.id), entry);
+        }
+
+        if (entry.filename) {
+          const fn = String(entry.filename).trim();
+          map.set(fn, entry);
+          try {
+            const decoded = decodeURIComponent(fn);
+            if (decoded !== fn) map.set(decoded, entry);
+          } catch (_) {}
+          const base = fn.split('/').pop();
+          if (base && base !== fn) {
+            map.set(base, entry);
+            try {
+              const decodedBase = decodeURIComponent(base);
+              if (decodedBase !== base) map.set(decodedBase, entry);
+            } catch (_) {}
+          }
+        }
+
+        if (entry.path) {
+          const p = String(entry.path).replace(/^\/+|\/+$/g, '').trim();
+          map.set(p, entry);
+          try {
+            const decoded = decodeURIComponent(p);
+            if (decoded !== p) map.set(decoded, entry);
+          } catch (_) {}
+          const base = p.split('/').pop();
+          if (base) {
+            map.set(base, entry);
+            try {
+              const decodedBase = decodeURIComponent(base);
+              if (decodedBase !== base) map.set(decodedBase, entry);
+            } catch (_) {}
+          }
+        }
+      });
+
+      return map;
+    },
+
+    findManifestEntry(name, cleanPath, item) {
+      const state = window.Trove.state || {};
+      const map = state.downloadsMap;
+      if (!map || map.size === 0) return null;
+
+      if (map.has(name)) return map.get(name);
+      if (map.has(cleanPath)) return map.get(cleanPath);
+
+      try {
+        const decName = decodeURIComponent(name);
+        if (map.has(decName)) return map.get(decName);
+        const decPath = decodeURIComponent(cleanPath);
+        if (map.has(decPath)) return map.get(decPath);
+      } catch (_) {}
+
+      const idMatch = name.match(/\[([a-zA-Z0-9_-]{11})\]|\(([a-zA-Z0-9_-]{11})\)/);
+      if (idMatch) {
+        const vid = idMatch[1] || idMatch[2];
+        if (map.has(vid)) return map.get(vid);
+      }
+
+      if (item) {
+        if (item.id && map.has(String(item.id))) return map.get(String(item.id));
+        if (item.oid && map.has(String(item.oid))) return map.get(String(item.oid));
+      }
+
+      return null;
+    },
+
+    parseTimestamp(val) {
+      if (!val && val !== 0) return null;
+      if (typeof val === 'number') {
+        if (isNaN(val) || val <= 0) return null;
+        return val < 1e11 ? Math.floor(val * 1000) : Math.floor(val);
+      }
+      if (typeof val === 'string') {
+        const s = val.trim();
+        if (!s) return null;
+        if (/^\d+(\.\d+)?$/.test(s)) {
+          const num = parseFloat(s);
+          if (!isNaN(num) && num > 0) {
+            return num < 1e11 ? Math.floor(num * 1000) : Math.floor(num);
+          }
+        }
+        const parsed = Date.parse(s);
+        if (!isNaN(parsed) && parsed > 0) {
+          return parsed;
+        }
+      }
+      return null;
+    },
+
+    extractTimestamp(item, manifestEntry) {
+      if (manifestEntry) {
+        const mTime = this.parseTimestamp(manifestEntry.ingested_at)
+          || this.parseTimestamp(manifestEntry.ingested_at_iso)
+          || this.parseTimestamp(manifestEntry.trove_ingested_at)
+          || this.parseTimestamp(manifestEntry.trove_ingested_at_iso)
+          || this.parseTimestamp(manifestEntry.timestamp)
+          || this.parseTimestamp(manifestEntry.date)
+          || this.parseTimestamp(manifestEntry.upload_date);
+        if (mTime) return mTime;
+      }
+
+      if (item) {
+        const iTime = this.parseTimestamp(item.lastModified)
+          || this.parseTimestamp(item.last_modified)
+          || this.parseTimestamp(item.updatedAt)
+          || this.parseTimestamp(item.updated_at)
+          || this.parseTimestamp(item.mtime)
+          || this.parseTimestamp(item.date)
+          || this.parseTimestamp(item.timestamp)
+          || this.parseTimestamp(item.lastCommit?.date)
+          || this.parseTimestamp(item.lastCommit?.timestamp)
+          || this.parseTimestamp(item.lfs?.pointer?.timestamp);
+        if (iTime) return iTime;
+      }
+
+      return null;
+    },
+
     async fetchDownloadsManifest(token) {
-      if (this._workingManifestUrl === null) return []; // Checked previously and confirmed not present
       const isBucket = repo.isBucket !== false;
       const candidateUrls = this._workingManifestUrl ? [this._workingManifestUrl] : (isBucket ? [
-        `https://huggingface.co/buckets/${repo.id}/raw/downloads.json`,
-        `https://huggingface.co/buckets/${repo.id}/resolve/downloads.json`,
+        `https://huggingface.co/api/buckets/${repo.id}/raw/downloads.json`,
         `${api.bucketsBase}/${repo.id}/raw/downloads.json`,
-        `${api.bucketsBase}/${repo.id}/resolve/downloads.json`,
-        `https://huggingface.co/api/buckets/${repo.id}/raw/downloads.json`
+        `https://huggingface.co/buckets/${repo.id}/resolve/downloads.json`,
+        `https://huggingface.co/buckets/${repo.id}/raw/downloads.json`,
+        `${api.bucketsBase}/${repo.id}/resolve/downloads.json`
       ] : [
         `https://huggingface.co/datasets/${repo.id}/raw/${repo.branch || 'main'}/downloads.json`,
-        `https://huggingface.co/datasets/${repo.id}/resolve/${repo.branch || 'main'}/downloads.json`,
-        `${api.datasetsBase}/${repo.id}/raw/${repo.branch || 'main'}/downloads.json`
+        `${api.datasetsBase}/${repo.id}/raw/${repo.branch || 'main'}/downloads.json`,
+        `https://huggingface.co/datasets/${repo.id}/resolve/${repo.branch || 'main'}/downloads.json`
       ]);
 
       for (const url of candidateUrls) {
@@ -309,7 +438,6 @@
           }
         } catch (_) {}
       }
-      if (!this._workingManifestUrl) this._workingManifestUrl = null;
       return [];
     },
 
@@ -321,15 +449,7 @@
 
       const cachedManifest = (cached && cached.manifest) ? cached.manifest : [];
       state.downloadsManifest = cachedManifest;
-      state.downloadsMap = new Map();
-      if (Array.isArray(cachedManifest)) {
-        cachedManifest.forEach(entry => {
-          if (!entry) return;
-          if (entry.filename) state.downloadsMap.set(entry.filename, entry);
-          if (entry.path) state.downloadsMap.set(entry.path, entry);
-          if (entry.id) state.downloadsMap.set(entry.id, entry);
-        });
-      }
+      state.downloadsMap = this.buildDownloadsMap(cachedManifest);
 
       state.allItems = this.normalizeFileEntries(cachedItems);
       this.updateStats();
@@ -356,19 +476,17 @@
 
         const manifest = await manifestPromise;
         state.downloadsManifest = manifest;
-        state.downloadsMap = new Map();
-        if (Array.isArray(manifest)) {
-          manifest.forEach(entry => {
-            if (!entry) return;
-            if (entry.filename) state.downloadsMap.set(entry.filename, entry);
-            if (entry.path) state.downloadsMap.set(entry.path, entry);
-            if (entry.id) state.downloadsMap.set(entry.id, entry);
-          });
-        }
+        state.downloadsMap = this.buildDownloadsMap(manifest);
 
-        state.allItems = this.normalizeFileEntries(rawItems);
-        if (window.Trove.store) {
-          window.Trove.store.setCachedFSTree(rawItems, manifest);
+        const itemsToNormalize = (rawItems && rawItems.length > 0)
+          ? rawItems
+          : (window.Trove.store?.getCachedFSTree(true)?.items || state.allItems || []);
+
+        if (itemsToNormalize.length > 0) {
+          state.allItems = this.normalizeFileEntries(itemsToNormalize);
+          if (window.Trove.store && rawItems && rawItems.length > 0) {
+            window.Trove.store.setCachedFSTree(rawItems, manifest);
+          }
         }
 
         this.updateStats();
@@ -430,15 +548,7 @@
 
         const manifest = await manifestPromise;
         state.downloadsManifest = manifest;
-        state.downloadsMap = new Map();
-        if (Array.isArray(manifest)) {
-          manifest.forEach(entry => {
-            if (!entry) return;
-            if (entry.filename) state.downloadsMap.set(entry.filename, entry);
-            if (entry.path) state.downloadsMap.set(entry.path, entry);
-            if (entry.id) state.downloadsMap.set(entry.id, entry);
-          });
-        }
+        state.downloadsMap = this.buildDownloadsMap(manifest);
 
         state.allItems = this.normalizeFileEntries(rawItems);
         if (window.Trove.store) {
@@ -523,10 +633,10 @@
         const name = pathParts[pathParts.length - 1];
         const parentDir = pathParts.slice(0, -1).join('/');
 
-        const manifestEntry = state.downloadsMap?.get(name) || state.downloadsMap?.get(cleanPath);
-        const ingestedAt = manifestEntry?.ingested_at 
-          ? (manifestEntry.ingested_at < 1e11 ? manifestEntry.ingested_at * 1000 : manifestEntry.ingested_at) 
-          : null;
+        const manifestEntry = this.findManifestEntry(name, cleanPath, item);
+        const ingestedAt = this.extractTimestamp(item, manifestEntry);
+        const ingestedAtIso = manifestEntry?.ingested_at_iso 
+          || (item.lastModified || item.last_modified || (ingestedAt ? new Date(ingestedAt).toISOString() : null));
 
         itemsMap.set(cleanPath, {
           path: cleanPath,
@@ -539,7 +649,7 @@
           ext: fileInfo.ext,
           icon: fileInfo.icon,
           ingestedAt: ingestedAt,
-          ingestedAtIso: manifestEntry?.ingested_at_iso || null,
+          ingestedAtIso: ingestedAtIso,
           artist: manifestEntry?.artist || '',
           duration: manifestEntry?.duration || '',
           durationSeconds: manifestEntry?.duration_seconds || 0,
@@ -583,24 +693,47 @@
         if (state.viewMode === 'tree' && !state.searchQuery) {
           if (a.isDir && !b.isDir) return -1;
           if (!a.isDir && b.isDir) return 1;
-          if (a.isDir && b.isDir) return a.name.localeCompare(b.name);
+          if (a.isDir && b.isDir) {
+            return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+          }
         }
 
-        let diff = 0;
+        const nameCompare = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+
+        if (sortBy === 'name') {
+          return isDesc ? -nameCompare : nameCompare;
+        }
+
         if (sortBy === 'size') {
-          diff = (a.size || 0) - (b.size || 0);
-          if (diff === 0) diff = a.name.localeCompare(b.name);
-        } else if (sortBy === 'date') {
+          const aSize = a.size || 0;
+          const bSize = b.size || 0;
+          if (aSize !== bSize) {
+            return isDesc ? (bSize - aSize) : (aSize - bSize);
+          }
+          // Secondary tie-breaker: Alphabetical A-Z (never inverted)
+          return nameCompare;
+        }
+
+        if (sortBy === 'date') {
           const aTime = a.ingestedAt || 0;
           const bTime = b.ingestedAt || 0;
-          diff = aTime - bTime;
-          if (diff === 0) diff = a.name.localeCompare(b.name);
-        } else {
-          // Default: name
-          diff = a.name.localeCompare(b.name);
+
+          // If one item has a timestamp and the other does not:
+          // Items with known dates always rank higher than undated items
+          if (aTime && !bTime) return -1;
+          if (!aTime && bTime) return 1;
+
+          if (aTime !== bTime) {
+            // isDesc (Recently Added): newest (highest timestamp) first
+            // !isDesc (Oldest Added): oldest (lowest timestamp) first
+            return isDesc ? (bTime - aTime) : (aTime - bTime);
+          }
+
+          // Secondary tie-breaker: Alphabetical A-Z (never inverted)
+          return nameCompare;
         }
 
-        return isDesc ? -diff : diff;
+        return isDesc ? -nameCompare : nameCompare;
       });
     },
 
